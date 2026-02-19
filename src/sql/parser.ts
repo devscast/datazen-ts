@@ -1,0 +1,95 @@
+import { RegularExpressionError } from "./parser/exception/regular-expression-error";
+import type { SQLParser } from "./parser/sql-parser";
+import type { Visitor } from "./parser/visitor";
+
+const SPECIAL_CHARS = String.raw`:\?'"\[\-\/\``;
+
+const BACKTICK_IDENTIFIER = String.raw`\`[^\`]*\``;
+const BRACKET_IDENTIFIER = String.raw`(?<!\b[Aa][Rr][Rr][Aa][Yy])\[(?:[^\]])*\]`;
+const MULTICHAR = ":{2,}";
+const NAMED_PARAMETER = ":[a-zA-Z0-9_]+";
+const POSITIONAL_PARAMETER = String.raw`(?<!\?)\?(?!\?)`;
+const ONE_LINE_COMMENT = String.raw`--[^\r\n]*`;
+const MULTI_LINE_COMMENT = String.raw`/\*([^*]+|\*+[^/*])*\**\*/`;
+const SPECIAL = `[${SPECIAL_CHARS}]`;
+const OTHER = `[^${SPECIAL_CHARS}]+`;
+
+/**
+ * SQL parser focused on identifying prepared statement parameters.
+ * Ported from Doctrine DBAL's SQL parser approach.
+ */
+export class Parser implements SQLParser {
+  private readonly tokenExpression: RegExp;
+
+  constructor(mySQLStringEscaping = true) {
+    const stringPatterns = mySQLStringEscaping
+      ? [this.getMySQLStringLiteralPattern("'"), this.getMySQLStringLiteralPattern('"')]
+      : [this.getAnsiSQLStringLiteralPattern("'"), this.getAnsiSQLStringLiteralPattern('"')];
+
+    const sqlPattern = `(${[
+      ...stringPatterns,
+      BACKTICK_IDENTIFIER,
+      BRACKET_IDENTIFIER,
+      MULTICHAR,
+      ONE_LINE_COMMENT,
+      MULTI_LINE_COMMENT,
+      OTHER,
+    ].join("|")})`;
+
+    try {
+      this.tokenExpression = new RegExp(
+        `(?<named>${NAMED_PARAMETER})|(?<positional>${POSITIONAL_PARAMETER})|(?<other>${sqlPattern}|${SPECIAL})`,
+        "sy",
+      );
+    } catch (error) {
+      throw this.createRegexError(error);
+    }
+  }
+
+  public parse(sql: string, visitor: Visitor): void {
+    let offset = 0;
+
+    while (offset < sql.length) {
+      this.tokenExpression.lastIndex = offset;
+      const match = this.tokenExpression.exec(sql);
+      if (match === null) {
+        throw new RegularExpressionError(`Unable to parse SQL around offset ${offset}.`, offset);
+      }
+
+      const token = match[0] ?? "";
+      const groups = match.groups ?? {};
+      if ((groups.named ?? "") !== "") {
+        visitor.acceptNamedParameter(token);
+      } else if ((groups.positional ?? "") !== "") {
+        visitor.acceptPositionalParameter(token);
+      } else {
+        visitor.acceptOther(token);
+      }
+
+      offset += token.length;
+    }
+  }
+
+  private getMySQLStringLiteralPattern(delimiter: string): string {
+    const escapedDelimiter = delimiter === '"' ? '\\"' : delimiter;
+    return `${delimiter}((\\\\.)|(?![${escapedDelimiter}\\\\]).)*${delimiter}`;
+  }
+
+  private getAnsiSQLStringLiteralPattern(delimiter: string): string {
+    const escapedDelimiter = delimiter === '"' ? '\\"' : delimiter;
+    return `${delimiter}[^${escapedDelimiter}]*${delimiter}`;
+  }
+
+  private createRegexError(error: unknown): RegularExpressionError {
+    if (error instanceof Error) {
+      return new RegularExpressionError(error.message, 0);
+    }
+
+    return new RegularExpressionError("Regular expression parser failure.", 0);
+  }
+}
+
+export { Exception as ParserException } from "./parser/exception";
+export { RegularExpressionError } from "./parser/exception/regular-expression-error";
+export type { SQLParser } from "./parser/sql-parser";
+export type { Visitor } from "./parser/visitor";
