@@ -3,7 +3,7 @@ import { Connection } from "./connection";
 import type { Driver } from "./driver";
 import { MSSQLDriver } from "./driver/mssql/driver";
 import { MySQL2Driver } from "./driver/mysql2/driver";
-import { DriverRequiredError, UnknownDriverError } from "./exception/index";
+import { DriverRequiredException, UnknownDriverException } from "./exception/index";
 
 export type DriverName = "mysql2" | "mssql";
 
@@ -47,12 +47,12 @@ export class DriverManager {
     }
 
     if (params.driver === undefined) {
-      throw new DriverRequiredError();
+      throw new DriverRequiredException();
     }
 
     const DriverClass = DriverManager.DRIVER_MAP[params.driver];
     if (DriverClass === undefined) {
-      throw new UnknownDriverError(params.driver, Object.keys(DriverManager.DRIVER_MAP));
+      throw new UnknownDriverException(params.driver, Object.keys(DriverManager.DRIVER_MAP));
     }
 
     return new DriverClass();

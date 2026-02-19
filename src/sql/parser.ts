@@ -1,4 +1,4 @@
-import { RegularExpressionError } from "./parser/exception/regular-expression-error";
+import { RegularExpressionException } from "./parser/exception/regular-expression-exception";
 import type { SQLParser } from "./parser/sql-parser";
 import type { Visitor } from "./parser/visitor";
 
@@ -53,7 +53,10 @@ export class Parser implements SQLParser {
       this.tokenExpression.lastIndex = offset;
       const match = this.tokenExpression.exec(sql);
       if (match === null) {
-        throw new RegularExpressionError(`Unable to parse SQL around offset ${offset}.`, offset);
+        throw new RegularExpressionException(
+          `Unable to parse SQL around offset ${offset}.`,
+          offset,
+        );
       }
 
       const token = match[0] ?? "";
@@ -80,16 +83,16 @@ export class Parser implements SQLParser {
     return `${delimiter}[^${escapedDelimiter}]*${delimiter}`;
   }
 
-  private createRegexError(error: unknown): RegularExpressionError {
+  private createRegexError(error: unknown): RegularExpressionException {
     if (error instanceof Error) {
-      return new RegularExpressionError(error.message, 0);
+      return new RegularExpressionException(error.message, 0);
     }
 
-    return new RegularExpressionError("Regular expression parser failure.", 0);
+    return new RegularExpressionException("Regular expression parser failure.", 0);
   }
 }
 
 export { Exception as ParserException } from "./parser/exception";
-export { RegularExpressionError } from "./parser/exception/regular-expression-error";
+export { RegularExpressionException } from "./parser/exception/regular-expression-exception";
 export type { SQLParser } from "./parser/sql-parser";
 export type { Visitor } from "./parser/visitor";

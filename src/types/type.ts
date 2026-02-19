@@ -1,6 +1,6 @@
 import { ParameterType } from "../parameter-type";
 import { AbstractPlatform } from "../platforms/abstract-platform";
-import { TypeArgumentCountError } from "./exception/type-argument-count-error";
+import { TypeArgumentCountException } from "./exception/type-argument-count-exception";
 import { TypeRegistry } from "./type-registry";
 
 export abstract class Type {
@@ -85,7 +85,7 @@ export abstract class Type {
     try {
       return new type();
     } catch (error) {
-      throw TypeArgumentCountError.new(name, error);
+      throw TypeArgumentCountException.new(name, error);
     }
   }
 }

@@ -1,12 +1,12 @@
 import {
-  ConnectionError,
-  DeadlockError,
-  DriverError,
-  type DriverErrorDetails,
-  ForeignKeyConstraintViolationError,
-  NotNullConstraintViolationError,
-  SqlSyntaxError,
-  UniqueConstraintViolationError,
+  ConnectionException,
+  DeadlockException,
+  DriverException,
+  type DriverExceptionDetails,
+  ForeignKeyConstraintViolationException,
+  NotNullConstraintViolationException,
+  SqlSyntaxException,
+  UniqueConstraintViolationException,
 } from "../../../exception/index";
 import type {
   ExceptionConverterContext,
@@ -30,40 +30,40 @@ const CONNECTION_ERROR_STRINGS = new Set([
 const SQL_SYNTAX_CODES = new Set([102, 156, 207, 208, 209]);
 
 export class ExceptionConverter implements ExceptionConverterContract {
-  public convert(error: unknown, context: ExceptionConverterContext): DriverError {
+  public convert(error: unknown, context: ExceptionConverterContext): DriverException {
     const details = this.createDetails(error, context);
 
     if (details.code === 1205) {
-      return new DeadlockError(details.message, details);
+      return new DeadlockException(details.message, details);
     }
 
     if (details.code === 515) {
-      return new NotNullConstraintViolationError(details.message, details);
+      return new NotNullConstraintViolationException(details.message, details);
     }
 
     if (typeof details.code === "number" && FOREIGN_KEY_CONSTRAINT_CODES.has(details.code)) {
-      return new ForeignKeyConstraintViolationError(details.message, details);
+      return new ForeignKeyConstraintViolationException(details.message, details);
     }
 
     if (typeof details.code === "number" && UNIQUE_CONSTRAINT_CODES.has(details.code)) {
-      return new UniqueConstraintViolationError(details.message, details);
+      return new UniqueConstraintViolationException(details.message, details);
     }
 
     if (typeof details.code === "number" && SQL_SYNTAX_CODES.has(details.code)) {
-      return new SqlSyntaxError(details.message, details);
+      return new SqlSyntaxException(details.message, details);
     }
 
     if (this.isConnectionError(details.code)) {
-      return new ConnectionError(details.message, details);
+      return new ConnectionException(details.message, details);
     }
 
-    return new DriverError(details.message, details);
+    return new DriverException(details.message, details);
   }
 
   private createDetails(
     error: unknown,
     context: ExceptionConverterContext,
-  ): DriverErrorDetails & { message: string } {
+  ): DriverExceptionDetails & { message: string } {
     const errorRecord = this.asRecord(error);
     const code = this.extractCode(errorRecord);
     const message = this.extractMessage(error);

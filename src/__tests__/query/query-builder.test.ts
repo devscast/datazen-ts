@@ -13,7 +13,7 @@ import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import { DriverError } from "../../exception/index";
+import { DriverException } from "../../exception/index";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { PlaceHolder, QueryBuilder } from "../../query/query-builder";
@@ -23,8 +23,8 @@ import { Result } from "../../result";
 import type { CompiledQuery, QueryParameterTypes, QueryParameters } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
-  public convert(error: unknown, context: ExceptionConverterContext): DriverError {
-    return new DriverError("driver failure", {
+  public convert(error: unknown, context: ExceptionConverterContext): DriverException {
+    return new DriverException("driver failure", {
       cause: error,
       driverName: "query-builder-noop",
       operation: context.operation,

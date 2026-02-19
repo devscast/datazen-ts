@@ -3,11 +3,11 @@ import { Configuration } from "./configuration";
 import type { Driver, DriverConnection } from "./driver";
 import type { ExceptionConverter } from "./driver/api/exception-converter";
 import {
-  ConnectionError,
-  DbalError,
-  NestedTransactionsNotSupportedError,
-  NoActiveTransactionError,
-  RollbackOnlyError,
+  ConnectionException,
+  DbalException,
+  NestedTransactionsNotSupportedException,
+  NoActiveTransactionException,
+  RollbackOnlyException,
 } from "./exception/index";
 import { ParameterCompiler } from "./parameter-compiler";
 import { ParameterType } from "./parameter-type";
@@ -249,7 +249,7 @@ export class Connection implements StatementExecutor {
         this.transactionNestingLevel + 1,
       );
       if (connection.createSavepoint === undefined) {
-        throw new NestedTransactionsNotSupportedError(this.driver.name);
+        throw new NestedTransactionsNotSupportedException(this.driver.name);
       }
 
       await connection.createSavepoint(savepointName);
@@ -261,11 +261,11 @@ export class Connection implements StatementExecutor {
 
   public async commit(): Promise<void> {
     if (this.transactionNestingLevel === 0) {
-      throw new NoActiveTransactionError();
+      throw new NoActiveTransactionException();
     }
 
     if (this.rollbackOnly) {
-      throw new RollbackOnlyError();
+      throw new RollbackOnlyException();
     }
 
     try {
@@ -278,7 +278,7 @@ export class Connection implements StatementExecutor {
       }
 
       if (connection.releaseSavepoint === undefined) {
-        throw new NestedTransactionsNotSupportedError(this.driver.name);
+        throw new NestedTransactionsNotSupportedException(this.driver.name);
       }
 
       await connection.releaseSavepoint(
@@ -292,7 +292,7 @@ export class Connection implements StatementExecutor {
 
   public async rollBack(): Promise<void> {
     if (this.transactionNestingLevel === 0) {
-      throw new NoActiveTransactionError();
+      throw new NoActiveTransactionException();
     }
 
     try {
@@ -305,7 +305,7 @@ export class Connection implements StatementExecutor {
       }
 
       if (connection.rollbackSavepoint === undefined) {
-        throw new NestedTransactionsNotSupportedError(this.driver.name);
+        throw new NestedTransactionsNotSupportedException(this.driver.name);
       }
 
       await connection.rollbackSavepoint(
@@ -319,7 +319,7 @@ export class Connection implements StatementExecutor {
 
   public setRollbackOnly(): void {
     if (this.transactionNestingLevel === 0) {
-      throw new NoActiveTransactionError();
+      throw new NoActiveTransactionException();
     }
 
     this.rollbackOnly = true;
@@ -327,7 +327,7 @@ export class Connection implements StatementExecutor {
 
   public isRollbackOnly(): boolean {
     if (this.transactionNestingLevel === 0) {
-      throw new NoActiveTransactionError();
+      throw new NoActiveTransactionException();
     }
 
     return this.rollbackOnly;
@@ -426,7 +426,9 @@ export class Connection implements StatementExecutor {
       return this.databasePlatform;
     }
 
-    throw new DbalError(`No database platform could be resolved for driver "${this.driver.name}".`);
+    throw new DbalException(
+      `No database platform could be resolved for driver "${this.driver.name}".`,
+    );
   }
 
   private async connect(): Promise<DriverConnection> {
@@ -442,15 +444,15 @@ export class Connection implements StatementExecutor {
     }
   }
 
-  private convertException(error: unknown, operation: string, query?: Query): DbalError {
-    if (error instanceof DbalError) {
+  private convertException(error: unknown, operation: string, query?: Query): DbalException {
+    if (error instanceof DbalException) {
       return error;
     }
 
     this.exceptionConverter ??= this.driver.getExceptionConverter();
     const converted = this.exceptionConverter.convert(error, { operation, query });
 
-    if (converted instanceof ConnectionError) {
+    if (converted instanceof ConnectionException) {
       this.driverConnection = null;
       this.transactionNestingLevel = 0;
       this.rollbackOnly = false;

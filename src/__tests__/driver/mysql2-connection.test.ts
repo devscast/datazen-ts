@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MySQL2Connection } from "../../driver/mysql2/connection";
-import { DbalError, InvalidParameterError } from "../../exception/index";
+import { DbalException, InvalidParameterException } from "../../exception/index";
 
 describe("MySQL2Connection", () => {
   it("executes query using execute() and normalizes rows", async () => {
@@ -80,7 +80,7 @@ describe("MySQL2Connection", () => {
         sql: "SELECT id FROM users WHERE id = :id",
         types: {},
       }),
-    ).rejects.toThrow(InvalidParameterError);
+    ).rejects.toThrow(InvalidParameterException);
   });
 
   it("throws when client has neither execute() nor query()", async () => {
@@ -92,7 +92,7 @@ describe("MySQL2Connection", () => {
         sql: "SELECT 1",
         types: [],
       }),
-    ).rejects.toThrow(DbalError);
+    ).rejects.toThrow(DbalException);
   });
 
   it("begins and commits transactions on acquired pooled connections", async () => {
@@ -164,8 +164,8 @@ describe("MySQL2Connection", () => {
   it("throws for invalid transaction transitions", async () => {
     const connection = new MySQL2Connection({ query: async () => [] }, false);
 
-    await expect(connection.commit()).rejects.toThrow(DbalError);
-    await expect(connection.rollBack()).rejects.toThrow(DbalError);
+    await expect(connection.commit()).rejects.toThrow(DbalException);
+    await expect(connection.rollBack()).rejects.toThrow(DbalException);
   });
 
   it("issues savepoint SQL", async () => {

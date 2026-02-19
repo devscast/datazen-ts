@@ -99,7 +99,7 @@ export {
   InvalidType,
   SerializationFailed,
   TypeAlreadyRegistered,
-  TypeArgumentCountError,
+  TypeArgumentCountException,
   TypeNotFound,
   TypeNotRegistered,
   TypesAlreadyExists,

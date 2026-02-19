@@ -1,6 +1,6 @@
-import { DbalError } from "./dbal-error";
+import { DbalException } from "./dbal-exception";
 
-export class RollbackOnlyError extends DbalError {
+export class RollbackOnlyException extends DbalException {
   constructor() {
     super("The current transaction is marked rollback-only and cannot be committed.");
   }

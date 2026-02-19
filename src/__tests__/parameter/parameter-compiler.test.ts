@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { ArrayParameterType } from "../../array-parameter-type";
 import { ParameterBindingStyle } from "../../driver";
 import {
-  InvalidParameterError,
-  MissingNamedParameterError,
-  MissingPositionalParameterError,
-  MixedParameterStyleError,
+  InvalidParameterException,
+  MissingNamedParameterException,
+  MissingPositionalParameterException,
+  MixedParameterStyleException,
 } from "../../exception/index";
 import { ParameterCompiler } from "../../parameter-compiler";
 import { ParameterType } from "../../parameter-type";
@@ -148,7 +148,7 @@ describe("ParameterCompiler", () => {
         { id: ParameterType.INTEGER },
         ParameterBindingStyle.POSITIONAL,
       ),
-    ).toThrow(MixedParameterStyleError);
+    ).toThrow(MixedParameterStyleException);
   });
 
   it("throws for missing named parameters", () => {
@@ -161,7 +161,7 @@ describe("ParameterCompiler", () => {
         {},
         ParameterBindingStyle.POSITIONAL,
       ),
-    ).toThrow(MissingNamedParameterError);
+    ).toThrow(MissingNamedParameterException);
   });
 
   it("throws for missing positional parameters", () => {
@@ -174,7 +174,7 @@ describe("ParameterCompiler", () => {
         [],
         ParameterBindingStyle.POSITIONAL,
       ),
-    ).toThrow(MissingPositionalParameterError);
+    ).toThrow(MissingPositionalParameterException);
   });
 
   it("throws when array values are used without array parameter types", () => {
@@ -187,7 +187,7 @@ describe("ParameterCompiler", () => {
         { ids: ParameterType.INTEGER },
         ParameterBindingStyle.POSITIONAL,
       ),
-    ).toThrow(InvalidParameterError);
+    ).toThrow(InvalidParameterException);
   });
 
   it("expands empty arrays to NULL without bound values", () => {

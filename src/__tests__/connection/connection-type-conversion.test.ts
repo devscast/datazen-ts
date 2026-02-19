@@ -13,7 +13,7 @@ import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import { DriverError } from "../../exception/driver-error";
+import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import type { CompiledQuery } from "../../types";
@@ -21,8 +21,8 @@ import { DateType } from "../../types/date-type";
 import { Types } from "../../types/types";
 
 class NoopExceptionConverter implements ExceptionConverter {
-  public convert(error: unknown, context: ExceptionConverterContext): DriverError {
-    return new DriverError("driver error", {
+  public convert(error: unknown, context: ExceptionConverterContext): DriverException {
+    return new DriverException("driver error", {
       cause: error,
       driverName: "spy",
       operation: context.operation,

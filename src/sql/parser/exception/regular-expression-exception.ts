@@ -1,9 +1,9 @@
 import { Exception } from "../exception";
 
-export class RegularExpressionError extends Exception {
+export class RegularExpressionException extends Exception {
   constructor(message: string, code: number) {
     super(message);
-    this.name = "RegularExpressionError";
+    this.name = "RegularExpressionException";
     Object.defineProperty(this, "code", {
       configurable: true,
       enumerable: false,

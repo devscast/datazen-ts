@@ -1,5 +1,5 @@
 import type { DriverQueryResult } from "./driver";
-import { NoKeyValueError } from "./exception/index";
+import { NoKeyValueException } from "./exception/index";
 
 type AssociativeRow = Record<string, unknown>;
 type NumericRow = unknown[];
@@ -169,7 +169,7 @@ export class Result {
     const columnCount = this.columnCount();
 
     if (columnCount < 2) {
-      throw new NoKeyValueError(columnCount);
+      throw new NoKeyValueException(columnCount);
     }
   }
 }

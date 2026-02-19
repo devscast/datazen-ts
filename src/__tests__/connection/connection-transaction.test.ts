@@ -13,16 +13,16 @@ import type {
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import {
-  DriverError,
-  NestedTransactionsNotSupportedError,
-  NoActiveTransactionError,
-  RollbackOnlyError,
+  DriverException,
+  NestedTransactionsNotSupportedException,
+  NoActiveTransactionException,
+  RollbackOnlyException,
 } from "../../exception/index";
 import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
-  public convert(error: unknown, context: ExceptionConverterContext): DriverError {
-    return new DriverError("driver failure", {
+  public convert(error: unknown, context: ExceptionConverterContext): DriverException {
+    return new DriverException("driver failure", {
       cause: error,
       driverName: "spy",
       operation: context.operation,
@@ -205,7 +205,7 @@ describe("Connection transactions and state", () => {
 
     await connection.beginTransaction();
     await expect(connection.beginTransaction()).rejects.toThrow(
-      NestedTransactionsNotSupportedError,
+      NestedTransactionsNotSupportedException,
     );
   });
 
@@ -219,7 +219,7 @@ describe("Connection transactions and state", () => {
 
     await connection.beginTransaction();
     await connection.beginTransaction();
-    await expect(connection.commit()).rejects.toThrow(NestedTransactionsNotSupportedError);
+    await expect(connection.commit()).rejects.toThrow(NestedTransactionsNotSupportedException);
   });
 
   it("throws when rollback savepoints are not supported", async () => {
@@ -232,14 +232,14 @@ describe("Connection transactions and state", () => {
 
     await connection.beginTransaction();
     await connection.beginTransaction();
-    await expect(connection.rollBack()).rejects.toThrow(NestedTransactionsNotSupportedError);
+    await expect(connection.rollBack()).rejects.toThrow(NestedTransactionsNotSupportedException);
   });
 
   it("throws for commit/rollback when there is no active transaction", async () => {
     const connection = new Connection({}, new SpyDriver(new SpyDriverConnection()));
 
-    await expect(connection.commit()).rejects.toThrow(NoActiveTransactionError);
-    await expect(connection.rollBack()).rejects.toThrow(NoActiveTransactionError);
+    await expect(connection.commit()).rejects.toThrow(NoActiveTransactionException);
+    await expect(connection.rollBack()).rejects.toThrow(NoActiveTransactionException);
   });
 
   it("supports rollback-only state and blocks commit", async () => {
@@ -248,15 +248,15 @@ describe("Connection transactions and state", () => {
     await connection.beginTransaction();
     connection.setRollbackOnly();
     expect(connection.isRollbackOnly()).toBe(true);
-    await expect(connection.commit()).rejects.toThrow(RollbackOnlyError);
+    await expect(connection.commit()).rejects.toThrow(RollbackOnlyException);
     await connection.rollBack();
   });
 
   it("throws rollback-only checks when not in a transaction", () => {
     const connection = new Connection({}, new SpyDriver(new SpyDriverConnection()));
 
-    expect(() => connection.setRollbackOnly()).toThrow(NoActiveTransactionError);
-    expect(() => connection.isRollbackOnly()).toThrow(NoActiveTransactionError);
+    expect(() => connection.setRollbackOnly()).toThrow(NoActiveTransactionException);
+    expect(() => connection.isRollbackOnly()).toThrow(NoActiveTransactionException);
   });
 
   it("commits or rolls back through transactional()", async () => {

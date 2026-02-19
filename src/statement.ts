@@ -1,4 +1,4 @@
-import { MixedParameterStyleError } from "./exception/index";
+import { MixedParameterStyleException } from "./exception/index";
 import { ParameterType } from "./parameter-type";
 import type { Result } from "./result";
 import type { QueryParameterType, QueryParameterTypes, QueryParameters } from "./types";
@@ -79,7 +79,7 @@ export class Statement {
     const hasPositional = this.positionalParams.length > 0;
 
     if (hasNamed && hasPositional) {
-      throw new MixedParameterStyleError();
+      throw new MixedParameterStyleException();
     }
 
     if (hasNamed) {

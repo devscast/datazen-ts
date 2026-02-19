@@ -1,10 +1,10 @@
 import { ArrayParameterType } from "./array-parameter-type";
 import { ParameterBindingStyle } from "./driver";
 import {
-  InvalidParameterError,
-  MissingNamedParameterError,
-  MissingPositionalParameterError,
-  MixedParameterStyleError,
+  InvalidParameterException,
+  MissingNamedParameterException,
+  MissingPositionalParameterException,
+  MixedParameterStyleException,
 } from "./exception/index";
 import { ParameterType } from "./parameter-type";
 import { Query } from "./query";
@@ -53,7 +53,7 @@ export class ParameterCompiler {
     this.compileSQL(sql, params, types, bindingStyle, context);
 
     if (context.usedNamedParameter && context.usedPositionalParameter) {
-      throw new MixedParameterStyleError();
+      throw new MixedParameterStyleException();
     }
 
     if (bindingStyle === ParameterBindingStyle.NAMED) {
@@ -120,7 +120,7 @@ export class ParameterCompiler {
 
     if (Array.isArray(value)) {
       if (!this.isArrayParameterType(parameterType)) {
-        throw new InvalidParameterError("Array values require an ArrayParameterType binding.");
+        throw new InvalidParameterException("Array values require an ArrayParameterType binding.");
       }
 
       if (value.length === 0) {
@@ -161,7 +161,7 @@ export class ParameterCompiler {
 
   private readNamedValue(name: string, params: QueryParameters): unknown {
     if (Array.isArray(params)) {
-      throw new MixedParameterStyleError();
+      throw new MixedParameterStyleException();
     }
 
     if (Object.hasOwn(params, name)) {
@@ -173,7 +173,7 @@ export class ParameterCompiler {
       return params[prefixedName];
     }
 
-    throw new MissingNamedParameterError(name);
+    throw new MissingNamedParameterException(name);
   }
 
   private readNamedType(name: string, types: QueryParameterTypes): QueryParameterType | undefined {
@@ -195,11 +195,11 @@ export class ParameterCompiler {
 
   private readPositionalValue(index: number, params: QueryParameters): unknown {
     if (!Array.isArray(params)) {
-      throw new MixedParameterStyleError();
+      throw new MixedParameterStyleException();
     }
 
     if (!Object.hasOwn(params, index)) {
-      throw new MissingPositionalParameterError(index);
+      throw new MissingPositionalParameterException(index);
     }
 
     return params[index];

@@ -1,8 +1,8 @@
 import { TypesException } from "./types-exception";
 
-export class TypeArgumentCountError extends TypesException {
-  public static new(name: string, previous?: unknown): TypeArgumentCountError {
-    return new TypeArgumentCountError(
+export class TypeArgumentCountException extends TypesException {
+  public static new(name: string, previous?: unknown): TypeArgumentCountException {
+    return new TypeArgumentCountException(
       `Type "${name}" could not be instantiated without constructor arguments.`,
       previous,
     );

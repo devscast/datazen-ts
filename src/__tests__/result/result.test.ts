@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { NoKeyValueError } from "../../exception/index";
+import { NoKeyValueException } from "../../exception/index";
 import { Result } from "../../result";
 
 describe("Result", () => {
@@ -96,7 +96,7 @@ describe("Result", () => {
       rows: [{ id: 1 }],
     });
 
-    expect(() => result.fetchAllKeyValue()).toThrow(NoKeyValueError);
+    expect(() => result.fetchAllKeyValue()).toThrow(NoKeyValueException);
   });
 
   it("fetches associative rows indexed by first column", () => {

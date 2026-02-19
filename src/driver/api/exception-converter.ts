@@ -1,4 +1,4 @@
-import type { DriverError } from "../../exception/driver-error";
+import type { DriverException } from "../../exception/driver-exception";
 import type { Query } from "../../query";
 
 export interface ExceptionConverterContext {
@@ -7,5 +7,5 @@ export interface ExceptionConverterContext {
 }
 
 export interface ExceptionConverter {
-  convert(error: unknown, context: ExceptionConverterContext): DriverError;
+  convert(error: unknown, context: ExceptionConverterContext): DriverException;
 }

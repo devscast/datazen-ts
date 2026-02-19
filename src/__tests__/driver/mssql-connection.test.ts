@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MSSQLConnection } from "../../driver/mssql/connection";
-import { DbalError, InvalidParameterError } from "../../exception/index";
+import { DbalException, InvalidParameterException } from "../../exception/index";
 
 interface QueryPayload {
   recordset?: Array<Record<string, unknown>>;
@@ -127,7 +127,7 @@ describe("MSSQLConnection", () => {
         sql: "SELECT * FROM users WHERE id = ?",
         types: [],
       }),
-    ).rejects.toThrow(InvalidParameterError);
+    ).rejects.toThrow(InvalidParameterException);
   });
 
   it("serializes requests to respect single-flight behavior", async () => {
@@ -205,8 +205,8 @@ describe("MSSQLConnection", () => {
     const pool = new FakePool(async () => ({ rowsAffected: [1] }));
     const connection = new MSSQLConnection(pool, false);
 
-    await expect(connection.createSavepoint("sp1")).rejects.toThrow(DbalError);
-    await expect(connection.rollbackSavepoint("sp1")).rejects.toThrow(DbalError);
+    await expect(connection.createSavepoint("sp1")).rejects.toThrow(DbalException);
+    await expect(connection.rollbackSavepoint("sp1")).rejects.toThrow(DbalException);
   });
 
   it("quotes values and reads server version", async () => {

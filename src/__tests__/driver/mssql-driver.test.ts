@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ParameterBindingStyle } from "../../driver";
 import { MSSQLDriver } from "../../driver/mssql/driver";
-import { DbalError } from "../../exception/index";
+import { DbalException } from "../../exception/index";
 
 describe("MSSQLDriver", () => {
   it("exposes expected metadata", () => {
@@ -15,7 +15,7 @@ describe("MSSQLDriver", () => {
   it("throws when no client object is provided", async () => {
     const driver = new MSSQLDriver();
 
-    await expect(driver.connect({})).rejects.toThrow(DbalError);
+    await expect(driver.connect({})).rejects.toThrow(DbalException);
   });
 
   it("prefers pool over connection/client in params", async () => {

@@ -3,18 +3,18 @@ import { describe, expect, it } from "vitest";
 import { ExceptionConverter as MySQLExceptionConverter } from "../../driver/api/mysql/exception-converter";
 import { ExceptionConverter as SQLSrvExceptionConverter } from "../../driver/api/sqlsrv/exception-converter";
 import {
-  ConnectionError,
-  DeadlockError,
-  DriverError,
-  ForeignKeyConstraintViolationError,
-  NotNullConstraintViolationError,
-  SqlSyntaxError,
-  UniqueConstraintViolationError,
+  ConnectionException,
+  DeadlockException,
+  DriverException,
+  ForeignKeyConstraintViolationException,
+  NotNullConstraintViolationException,
+  SqlSyntaxException,
+  UniqueConstraintViolationException,
 } from "../../exception/index";
 import { Query } from "../../query";
 
 describe("Driver exception converters", () => {
-  it("maps mysql duplicate key to UniqueConstraintViolationError", () => {
+  it("maps mysql duplicate key to UniqueConstraintViolationException", () => {
     const converter = new MySQLExceptionConverter();
     const error = Object.assign(new Error("Duplicate entry '1' for key 'PRIMARY'"), {
       code: "ER_DUP_ENTRY",
@@ -27,7 +27,7 @@ describe("Driver exception converters", () => {
       query: new Query("INSERT INTO users (id) VALUES (?)", [1]),
     });
 
-    expect(converted).toBeInstanceOf(UniqueConstraintViolationError);
+    expect(converted).toBeInstanceOf(UniqueConstraintViolationException);
     expect(converted.code).toBe(1062);
     expect(converted.sqlState).toBe("23000");
     expect(converted.sql).toBe("INSERT INTO users (id) VALUES (?)");
@@ -42,7 +42,7 @@ describe("Driver exception converters", () => {
 
     const converted = converter.convert(error, { operation: "executeQuery" });
 
-    expect(converted).toBeInstanceOf(DeadlockError);
+    expect(converted).toBeInstanceOf(DeadlockException);
     expect(converted.operation).toBe("executeQuery");
   });
 
@@ -54,7 +54,7 @@ describe("Driver exception converters", () => {
 
     const converted = converter.convert(error, { operation: "connect" });
 
-    expect(converted).toBeInstanceOf(ConnectionError);
+    expect(converted).toBeInstanceOf(ConnectionException);
     expect(converted.code).toBe("ECONNREFUSED");
   });
 
@@ -67,7 +67,7 @@ describe("Driver exception converters", () => {
 
     const converted = converter.convert(error, { operation: "executeStatement" });
 
-    expect(converted).toBeInstanceOf(NotNullConstraintViolationError);
+    expect(converted).toBeInstanceOf(NotNullConstraintViolationException);
     expect(converted.code).toBe(515);
   });
 
@@ -79,7 +79,7 @@ describe("Driver exception converters", () => {
 
     const converted = converter.convert(error, { operation: "executeStatement" });
 
-    expect(converted).toBeInstanceOf(ForeignKeyConstraintViolationError);
+    expect(converted).toBeInstanceOf(ForeignKeyConstraintViolationException);
   });
 
   it("maps mssql syntax and unique violations", () => {
@@ -90,20 +90,20 @@ describe("Driver exception converters", () => {
     });
 
     expect(converter.convert(syntaxError, { operation: "executeQuery" })).toBeInstanceOf(
-      SqlSyntaxError,
+      SqlSyntaxException,
     );
     expect(converter.convert(uniqueError, { operation: "executeStatement" })).toBeInstanceOf(
-      UniqueConstraintViolationError,
+      UniqueConstraintViolationException,
     );
   });
 
-  it("falls back to DriverError for unmapped driver exceptions", () => {
+  it("falls back to DriverException for unmapped driver exceptions", () => {
     const converter = new SQLSrvExceptionConverter();
     const error = Object.assign(new Error("Unknown driver failure"), { code: "EREQUEST" });
 
     const converted = converter.convert(error, { operation: "executeQuery" });
 
-    expect(converted).toBeInstanceOf(DriverError);
-    expect(converted).not.toBeInstanceOf(ConnectionError);
+    expect(converted).toBeInstanceOf(DriverException);
+    expect(converted).not.toBeInstanceOf(ConnectionException);
   });
 });

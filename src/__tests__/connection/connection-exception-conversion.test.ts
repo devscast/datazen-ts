@@ -12,18 +12,18 @@ import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import { ConnectionError, DbalError, DriverError } from "../../exception/index";
+import { ConnectionException, DbalException, DriverException } from "../../exception/index";
 import type { CompiledQuery } from "../../types";
 
 class SpyExceptionConverter implements ExceptionConverter {
   public lastContext: ExceptionConverterContext | undefined;
   public lastError: unknown;
 
-  public convert(error: unknown, context: ExceptionConverterContext): DriverError {
+  public convert(error: unknown, context: ExceptionConverterContext): DriverException {
     this.lastError = error;
     this.lastContext = context;
 
-    return new DriverError("converted", {
+    return new DriverException("converted", {
       cause: error,
       code: "TEST_CODE",
       driverName: "spy",
@@ -69,27 +69,27 @@ class ThrowingConnection implements DriverConnection {
 
 class PassThroughConnection implements DriverConnection {
   public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
-    throw new DbalError("already normalized");
+    throw new DbalException("already normalized");
   }
 
   public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    throw new DbalError("already normalized");
+    throw new DbalException("already normalized");
   }
 
   public async beginTransaction(): Promise<void> {
-    throw new DbalError("already normalized");
+    throw new DbalException("already normalized");
   }
 
   public async commit(): Promise<void> {
-    throw new DbalError("already normalized");
+    throw new DbalException("already normalized");
   }
 
   public async rollBack(): Promise<void> {
-    throw new DbalError("already normalized");
+    throw new DbalException("already normalized");
   }
 
   public async getServerVersion(): Promise<string> {
-    throw new DbalError("already normalized");
+    throw new DbalException("already normalized");
   }
 
   public async close(): Promise<void> {}
@@ -124,7 +124,7 @@ describe("Connection exception conversion", () => {
 
     await expect(
       connection.executeStatement("UPDATE users SET active = ? WHERE id = ?", [true, 1]),
-    ).rejects.toBeInstanceOf(DriverError);
+    ).rejects.toBeInstanceOf(DriverException);
 
     expect(converter.lastContext?.operation).toBe("executeStatement");
     expect(converter.lastContext?.query?.sql).toBe("UPDATE users SET active = ? WHERE id = ?");
@@ -135,7 +135,9 @@ describe("Connection exception conversion", () => {
   it("does not reconvert already normalized DBAL errors", async () => {
     const connection = new Connection({}, new SpyDriver(new PassThroughConnection()));
 
-    await expect(connection.executeQuery("SELECT 1")).rejects.toBeInstanceOf(DbalError);
-    await expect(connection.executeQuery("SELECT 1")).rejects.not.toBeInstanceOf(ConnectionError);
+    await expect(connection.executeQuery("SELECT 1")).rejects.toBeInstanceOf(DbalException);
+    await expect(connection.executeQuery("SELECT 1")).rejects.not.toBeInstanceOf(
+      ConnectionException,
+    );
   });
 });

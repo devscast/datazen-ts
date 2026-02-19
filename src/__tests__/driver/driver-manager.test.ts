@@ -14,12 +14,16 @@ import type {
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { DriverManager } from "../../driver-manager";
-import { DriverError, DriverRequiredError, UnknownDriverError } from "../../exception/index";
+import {
+  DriverException,
+  DriverRequiredException,
+  UnknownDriverException,
+} from "../../exception/index";
 import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
-  public convert(error: unknown, context: ExceptionConverterContext): DriverError {
-    return new DriverError("driver error", {
+  public convert(error: unknown, context: ExceptionConverterContext): DriverException {
+    return new DriverException("driver error", {
       cause: error,
       driverName: "spy",
       operation: context.operation,
@@ -100,7 +104,7 @@ describe("DriverManager", () => {
   });
 
   it("throws when no driver is configured", () => {
-    expect(() => DriverManager.getConnection({})).toThrow(DriverRequiredError);
+    expect(() => DriverManager.getConnection({})).toThrow(DriverRequiredException);
   });
 
   it("throws for unknown driver name", () => {
@@ -108,7 +112,7 @@ describe("DriverManager", () => {
       DriverManager.getConnection({
         driver: "invalid" as unknown as "mysql2",
       }),
-    ).toThrow(UnknownDriverError);
+    ).toThrow(UnknownDriverException);
   });
 
   it("uses driverClass when provided", () => {

@@ -1,3 +1,3 @@
-import { DbalError } from "../../exception/index";
+import { DbalException } from "../../exception/index";
 
-export class Exception extends DbalError {}
+export class Exception extends DbalException {}

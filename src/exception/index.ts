@@ -1,19 +1,22 @@
-export { ConnectionError } from "./connection-error";
-export { ConstraintViolationError } from "./constraint-violation-error";
-export { DbalError } from "./dbal-error";
-export { DeadlockError } from "./deadlock-error";
-export { DriverError, type DriverErrorDetails } from "./driver-error";
-export { DriverRequiredError } from "./driver-required-error";
-export { ForeignKeyConstraintViolationError } from "./foreign-key-constraint-violation-error";
-export { InvalidParameterError } from "./invalid-parameter-error";
-export { MissingNamedParameterError } from "./missing-named-parameter-error";
-export { MissingPositionalParameterError } from "./missing-positional-parameter-error";
-export { MixedParameterStyleError } from "./mixed-parameter-style-error";
-export { NestedTransactionsNotSupportedError } from "./nested-transactions-not-supported-error";
-export { NoActiveTransactionError } from "./no-active-transaction-error";
-export { NoKeyValueError } from "./no-key-value-error";
-export { NotNullConstraintViolationError } from "./not-null-constraint-violation-error";
-export { RollbackOnlyError } from "./rollback-only-error";
-export { SqlSyntaxError } from "./sql-syntax-error";
-export { UniqueConstraintViolationError } from "./unique-constraint-violation-error";
-export { UnknownDriverError } from "./unknown-driver-error";
+export { ConnectionException } from "./connection-exception";
+export { ConstraintViolationException } from "./constraint-violation-exception";
+export { DbalException } from "./dbal-exception";
+export { DeadlockException } from "./deadlock-exception";
+export {
+  DriverException,
+  type DriverExceptionDetails,
+} from "./driver-exception";
+export { DriverRequiredException } from "./driver-required-exception";
+export { ForeignKeyConstraintViolationException } from "./foreign-key-constraint-violation-exception";
+export { InvalidParameterException } from "./invalid-parameter-exception";
+export { MissingNamedParameterException } from "./missing-named-parameter-exception";
+export { MissingPositionalParameterException } from "./missing-positional-parameter-exception";
+export { MixedParameterStyleException } from "./mixed-parameter-style-exception";
+export { NestedTransactionsNotSupportedException } from "./nested-transactions-not-supported-exception";
+export { NoActiveTransactionException } from "./no-active-transaction-exception";
+export { NoKeyValueException } from "./no-key-value-exception";
+export { NotNullConstraintViolationException } from "./not-null-constraint-violation-exception";
+export { RollbackOnlyException } from "./rollback-only-exception";
+export { SqlSyntaxException } from "./sql-syntax-exception";
+export { UniqueConstraintViolationException } from "./unique-constraint-violation-exception";
+export { UnknownDriverException } from "./unknown-driver-exception";

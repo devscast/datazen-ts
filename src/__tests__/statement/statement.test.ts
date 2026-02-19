@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MixedParameterStyleError } from "../../exception/index";
+import { MixedParameterStyleException } from "../../exception/index";
 import { ParameterType } from "../../parameter-type";
 import { Result } from "../../result";
 import { Statement, type StatementExecutor } from "../../statement";
@@ -106,7 +106,7 @@ describe("Statement", () => {
 
     statement.bindValue(1, 10).bindValue("id", 10);
 
-    await expect(statement.executeQuery()).rejects.toThrow(MixedParameterStyleError);
+    await expect(statement.executeQuery()).rejects.toThrow(MixedParameterStyleException);
   });
 
   it("executes statement calls through executor", async () => {

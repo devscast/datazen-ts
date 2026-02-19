@@ -1,5 +1,5 @@
 import type { DriverConnection, DriverExecutionResult, DriverQueryResult } from "../../driver";
-import { DbalError, InvalidParameterError } from "../../exception/index";
+import { DbalException, InvalidParameterException } from "../../exception/index";
 import type { CompiledQuery } from "../../types";
 import type { MySQL2ConnectionLike, MySQL2PoolLike } from "./types";
 
@@ -38,12 +38,14 @@ export class MySQL2Connection implements DriverConnection {
 
   public async beginTransaction(): Promise<void> {
     if (this.transactionConnection !== null) {
-      throw new DbalError("A transaction is already active on this connection.");
+      throw new DbalException("A transaction is already active on this connection.");
     }
 
     const connection = await this.acquireTransactionConnection();
     if (connection.beginTransaction === undefined) {
-      throw new DbalError("The provided mysql2 connection does not support beginTransaction().");
+      throw new DbalException(
+        "The provided mysql2 connection does not support beginTransaction().",
+      );
     }
 
     await connection.beginTransaction();
@@ -53,11 +55,11 @@ export class MySQL2Connection implements DriverConnection {
   public async commit(): Promise<void> {
     const connection = this.transactionConnection;
     if (connection === null) {
-      throw new DbalError("No active transaction to commit.");
+      throw new DbalException("No active transaction to commit.");
     }
 
     if (connection.commit === undefined) {
-      throw new DbalError("The provided mysql2 connection does not support commit().");
+      throw new DbalException("The provided mysql2 connection does not support commit().");
     }
 
     try {
@@ -71,11 +73,11 @@ export class MySQL2Connection implements DriverConnection {
   public async rollBack(): Promise<void> {
     const connection = this.transactionConnection;
     if (connection === null) {
-      throw new DbalError("No active transaction to roll back.");
+      throw new DbalException("No active transaction to roll back.");
     }
 
     if (connection.rollback === undefined) {
-      throw new DbalError("The provided mysql2 connection does not support rollback().");
+      throw new DbalException("The provided mysql2 connection does not support rollback().");
     }
 
     try {
@@ -153,7 +155,7 @@ export class MySQL2Connection implements DriverConnection {
       return this.unwrapDriverResult(result);
     }
 
-    throw new DbalError("The provided mysql2 client does not expose query() or execute().");
+    throw new DbalException("The provided mysql2 client does not expose query() or execute().");
   }
 
   private unwrapDriverResult(result: unknown): unknown {
@@ -211,7 +213,7 @@ export class MySQL2Connection implements DriverConnection {
       return parameters;
     }
 
-    throw new InvalidParameterError(
+    throw new InvalidParameterException(
       "The mysql2 driver expects positional parameters after SQL compilation.",
     );
   }

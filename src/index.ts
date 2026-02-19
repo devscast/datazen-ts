@@ -17,25 +17,25 @@ export { MSSQLDriver } from "./driver/mssql/driver";
 export { MySQL2Driver } from "./driver/mysql2/driver";
 export { DriverManager } from "./driver-manager";
 export {
-  ConnectionError,
-  ConstraintViolationError,
-  DbalError,
-  DeadlockError,
-  DriverError,
-  DriverRequiredError,
-  ForeignKeyConstraintViolationError,
-  InvalidParameterError,
-  MissingNamedParameterError,
-  MissingPositionalParameterError,
-  MixedParameterStyleError,
-  NestedTransactionsNotSupportedError,
-  NoActiveTransactionError,
-  NoKeyValueError,
-  NotNullConstraintViolationError,
-  RollbackOnlyError,
-  SqlSyntaxError,
-  UniqueConstraintViolationError,
-  UnknownDriverError,
+  ConnectionException,
+  ConstraintViolationException,
+  DbalException,
+  DeadlockException,
+  DriverException,
+  DriverRequiredException,
+  ForeignKeyConstraintViolationException,
+  InvalidParameterException,
+  MissingNamedParameterException,
+  MissingPositionalParameterException,
+  MixedParameterStyleException,
+  NestedTransactionsNotSupportedException,
+  NoActiveTransactionException,
+  NoKeyValueException,
+  NotNullConstraintViolationException,
+  RollbackOnlyException,
+  SqlSyntaxException,
+  UniqueConstraintViolationException,
+  UnknownDriverException,
 } from "./exception/index";
 export type { LockMode } from "./lock-mode";
 export { ParameterCompiler } from "./parameter-compiler";
@@ -57,7 +57,7 @@ export { UnionType } from "./query/union-type";
 export { Result } from "./result";
 export type { ServerVersionProvider } from "./server-version-provider";
 export type { SQLParser, Visitor as SQLParserVisitor } from "./sql/parser";
-export { Parser, ParserException, RegularExpressionError } from "./sql/parser";
+export { Parser, ParserException, RegularExpressionException } from "./sql/parser";
 export { Statement } from "./statement";
 export { TransactionIsolationLevel } from "./transaction-isolation-level";
 export type {
@@ -103,7 +103,7 @@ export {
   TimeType,
   Type,
   TypeAlreadyRegistered,
-  TypeArgumentCountError,
+  TypeArgumentCountException,
   TypeNotFound,
   TypeNotRegistered,
   TypeRegistry,

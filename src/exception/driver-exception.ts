@@ -1,6 +1,6 @@
-import { DbalError } from "./dbal-error";
+import { DbalException } from "./dbal-exception";
 
-export interface DriverErrorDetails {
+export interface DriverExceptionDetails {
   driverName: string;
   operation: string;
   sql?: string;
@@ -10,7 +10,7 @@ export interface DriverErrorDetails {
   cause?: unknown;
 }
 
-export class DriverError extends DbalError {
+export class DriverException extends DbalException {
   public readonly driverName: string;
   public readonly operation: string;
   public readonly sql?: string;
@@ -18,7 +18,7 @@ export class DriverError extends DbalError {
   public readonly code?: number | string;
   public readonly sqlState?: string;
 
-  constructor(message: string, details: DriverErrorDetails) {
+  constructor(message: string, details: DriverExceptionDetails) {
     super(message);
     this.driverName = details.driverName;
     this.operation = details.operation;

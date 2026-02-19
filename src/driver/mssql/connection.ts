@@ -1,5 +1,5 @@
 import type { DriverConnection, DriverExecutionResult, DriverQueryResult } from "../../driver";
-import { DbalError, InvalidParameterError } from "../../exception/index";
+import { DbalException, InvalidParameterException } from "../../exception/index";
 import type { CompiledQuery } from "../../types";
 import type { MSSQLPoolLike, MSSQLRequestLike, MSSQLTransactionLike } from "./types";
 
@@ -48,7 +48,7 @@ export class MSSQLConnection implements DriverConnection {
 
   public async beginTransaction(): Promise<void> {
     if (this.transaction !== null) {
-      throw new DbalError("A transaction is already active on this connection.");
+      throw new DbalException("A transaction is already active on this connection.");
     }
 
     const transaction = this.pool.transaction();
@@ -59,7 +59,7 @@ export class MSSQLConnection implements DriverConnection {
   public async commit(): Promise<void> {
     const transaction = this.transaction;
     if (transaction === null) {
-      throw new DbalError("No active transaction to commit.");
+      throw new DbalException("No active transaction to commit.");
     }
 
     await transaction.commit();
@@ -69,7 +69,7 @@ export class MSSQLConnection implements DriverConnection {
   public async rollBack(): Promise<void> {
     const transaction = this.transaction;
     if (transaction === null) {
-      throw new DbalError("No active transaction to roll back.");
+      throw new DbalException("No active transaction to roll back.");
     }
 
     await transaction.rollback();
@@ -78,7 +78,7 @@ export class MSSQLConnection implements DriverConnection {
 
   public async createSavepoint(name: string): Promise<void> {
     if (this.transaction === null) {
-      throw new DbalError("Cannot create a savepoint without an active transaction.");
+      throw new DbalException("Cannot create a savepoint without an active transaction.");
     }
 
     await this.transaction.request().query(`SAVE TRANSACTION ${name}`);
@@ -90,7 +90,7 @@ export class MSSQLConnection implements DriverConnection {
 
   public async rollbackSavepoint(name: string): Promise<void> {
     if (this.transaction === null) {
-      throw new DbalError("Cannot roll back a savepoint without an active transaction.");
+      throw new DbalException("Cannot roll back a savepoint without an active transaction.");
     }
 
     await this.transaction.request().query(`ROLLBACK TRANSACTION ${name}`);
@@ -147,7 +147,7 @@ export class MSSQLConnection implements DriverConnection {
       return parameters;
     }
 
-    throw new InvalidParameterError(
+    throw new InvalidParameterException(
       "The mssql driver expects named parameters after SQL compilation.",
     );
   }
