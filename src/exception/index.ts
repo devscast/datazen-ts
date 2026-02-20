@@ -9,6 +9,7 @@ export {
 export { DriverRequiredException } from "./driver-required-exception";
 export { ForeignKeyConstraintViolationException } from "./foreign-key-constraint-violation-exception";
 export { InvalidParameterException } from "./invalid-parameter-exception";
+export { MalformedDsnException } from "./malformed-dsn-exception";
 export { MissingNamedParameterException } from "./missing-named-parameter-exception";
 export { MissingPositionalParameterException } from "./missing-positional-parameter-exception";
 export { MixedParameterStyleException } from "./mixed-parameter-style-exception";

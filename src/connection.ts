@@ -1,15 +1,17 @@
 import { ArrayParameterType } from "./array-parameter-type";
 import { Configuration } from "./configuration";
-import type { Driver, DriverConnection } from "./driver";
+import { type Driver, type DriverConnection, ParameterBindingStyle } from "./driver";
 import type { ExceptionConverter } from "./driver/api/exception-converter";
 import {
   ConnectionException,
   DbalException,
+  MissingPositionalParameterException,
+  MixedParameterStyleException,
   NestedTransactionsNotSupportedException,
   NoActiveTransactionException,
   RollbackOnlyException,
 } from "./exception/index";
-import { ParameterCompiler } from "./parameter-compiler";
+import { ExpandArrayParameters } from "./expand-array-parameters";
 import { ParameterType } from "./parameter-type";
 import { AbstractPlatform } from "./platforms/abstract-platform";
 import { MySQLPlatform } from "./platforms/mysql-platform";
@@ -18,8 +20,10 @@ import { Query } from "./query";
 import { ExpressionBuilder } from "./query/expression/expression-builder";
 import { QueryBuilder } from "./query/query-builder";
 import { Result } from "./result";
+import { Parser, type SQLParser, type Visitor } from "./sql/parser";
 import { Statement, type StatementExecutor } from "./statement";
 import type {
+  CompiledQuery,
   QueryParameterType,
   QueryParameterTypes,
   QueryParameters,
@@ -27,14 +31,20 @@ import type {
 } from "./types";
 import { Type } from "./types/index";
 
+interface CompiledPositionalQuery {
+  sql: string;
+  parameters: unknown[];
+  types: QueryScalarParameterType[];
+}
+
 export class Connection implements StatementExecutor {
-  private readonly compiler = new ParameterCompiler();
   private driverConnection: DriverConnection | null = null;
   private transactionNestingLevel = 0;
   private rollbackOnly = false;
   private latestInsertId: number | string | null = null;
   private exceptionConverter: ExceptionConverter | null = null;
   private databasePlatform: AbstractPlatform | null = null;
+  private parser: SQLParser | null = null;
 
   constructor(
     private readonly params: Record<string, unknown>,
@@ -97,12 +107,7 @@ export class Connection implements StatementExecutor {
     types: QueryParameterTypes = [],
   ): Promise<Result> {
     const [boundParams, boundTypes] = this.normalizeParameters(params, types);
-    const compiledQuery = this.compiler.compile(
-      sql,
-      boundParams,
-      boundTypes,
-      this.driver.bindingStyle,
-    );
+    const compiledQuery = this.compileQuery(sql, boundParams, boundTypes);
     const query = new Query(sql, params, types);
 
     try {
@@ -115,12 +120,7 @@ export class Connection implements StatementExecutor {
 
   public async executeQueryObject(query: Query): Promise<Result> {
     const [boundParams, boundTypes] = this.normalizeParameters(query.parameters, query.types);
-    const compiledQuery = this.compiler.compile(
-      query.sql,
-      boundParams,
-      boundTypes,
-      this.driver.bindingStyle,
-    );
+    const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
 
     try {
       const result = await (await this.connect()).executeQuery(compiledQuery);
@@ -136,12 +136,7 @@ export class Connection implements StatementExecutor {
     types: QueryParameterTypes = [],
   ): Promise<number> {
     const [boundParams, boundTypes] = this.normalizeParameters(params, types);
-    const compiledQuery = this.compiler.compile(
-      sql,
-      boundParams,
-      boundTypes,
-      this.driver.bindingStyle,
-    );
+    const compiledQuery = this.compileQuery(sql, boundParams, boundTypes);
     const query = new Query(sql, params, types);
 
     try {
@@ -155,12 +150,7 @@ export class Connection implements StatementExecutor {
 
   public async executeStatementObject(query: Query): Promise<number> {
     const [boundParams, boundTypes] = this.normalizeParameters(query.parameters, query.types);
-    const compiledQuery = this.compiler.compile(
-      query.sql,
-      boundParams,
-      boundTypes,
-      this.driver.bindingStyle,
-    );
+    const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
 
     try {
       const result = await (await this.connect()).executeStatement(compiledQuery);
@@ -389,6 +379,119 @@ export class Connection implements StatementExecutor {
 
   private getNestedTransactionSavePointName(level: number): string {
     return `DATAZEN_${level}`;
+  }
+
+  private compileQuery(
+    sql: string,
+    params: QueryParameters,
+    types: QueryParameterTypes,
+  ): CompiledQuery {
+    const expanded = this.expandArrayParameters(sql, params, types);
+
+    if (this.driver.bindingStyle === ParameterBindingStyle.POSITIONAL) {
+      return expanded;
+    }
+
+    return this.convertPositionalToNamedBindings(expanded.sql, expanded.parameters, expanded.types);
+  }
+
+  private expandArrayParameters(
+    sql: string,
+    params: QueryParameters,
+    types: QueryParameterTypes,
+  ): CompiledPositionalQuery {
+    const needsExpansion =
+      !Array.isArray(params) ||
+      (Array.isArray(types) && types.some((type) => this.isArrayParameterType(type)));
+
+    if (!needsExpansion) {
+      if (!Array.isArray(params)) {
+        throw new MixedParameterStyleException();
+      }
+
+      return {
+        parameters: [...params],
+        sql,
+        types: this.normalizePositionalTypes(params, types),
+      };
+    }
+
+    const visitor = new ExpandArrayParameters(params, types);
+    this.getParser().parse(sql, visitor);
+
+    return {
+      parameters: visitor.getParameters(),
+      sql: visitor.getSQL(),
+      types: visitor.getTypes(),
+    };
+  }
+
+  private convertPositionalToNamedBindings(
+    sql: string,
+    parameters: unknown[],
+    types: QueryScalarParameterType[],
+  ): CompiledQuery {
+    const sqlParts: string[] = [];
+    const namedParameters: Record<string, unknown> = {};
+    const namedTypes: Record<string, QueryScalarParameterType> = {};
+    let parameterIndex = 0;
+    let bindCounter = 0;
+
+    const visitor: Visitor = {
+      acceptNamedParameter: (): void => {
+        throw new MixedParameterStyleException();
+      },
+      acceptOther: (fragment: string): void => {
+        sqlParts.push(fragment);
+      },
+      acceptPositionalParameter: (): void => {
+        if (!Object.hasOwn(parameters, parameterIndex)) {
+          throw new MissingPositionalParameterException(parameterIndex);
+        }
+
+        bindCounter += 1;
+        const name = `p${bindCounter}`;
+        sqlParts.push(`@${name}`);
+        namedParameters[name] = parameters[parameterIndex];
+        namedTypes[name] = types[parameterIndex] ?? ParameterType.STRING;
+        parameterIndex += 1;
+      },
+    };
+
+    this.getParser().parse(sql, visitor);
+
+    return {
+      parameters: namedParameters,
+      sql: sqlParts.join(""),
+      types: namedTypes,
+    };
+  }
+
+  private normalizePositionalTypes(
+    params: unknown[],
+    types: QueryParameterTypes,
+  ): QueryScalarParameterType[] {
+    if (!Array.isArray(types)) {
+      return params.map(() => ParameterType.STRING);
+    }
+
+    return params.map((_, index) => {
+      const type = types[index];
+      if (type === undefined) {
+        return ParameterType.STRING;
+      }
+
+      if (this.isArrayParameterType(type)) {
+        return ArrayParameterType.toElementParameterType(type);
+      }
+
+      return type;
+    });
+  }
+
+  private getParser(): SQLParser {
+    this.parser ??= new Parser(true);
+    return this.parser;
   }
 
   public convertToDatabaseValue(value: unknown, type: string): unknown {

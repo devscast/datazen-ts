@@ -1,4 +1,5 @@
 export { ArrayParameterType } from "./array-parameter-type";
+export { ColumnCase } from "./column-case";
 export { Configuration } from "./configuration";
 export { Connection } from "./connection";
 export type {
@@ -25,6 +26,7 @@ export {
   DriverRequiredException,
   ForeignKeyConstraintViolationException,
   InvalidParameterException,
+  MalformedDsnException,
   MissingNamedParameterException,
   MissingPositionalParameterException,
   MixedParameterStyleException,
@@ -37,8 +39,9 @@ export {
   UniqueConstraintViolationException,
   UnknownDriverException,
 } from "./exception/index";
+export { ExpandArrayParameters } from "./expand-array-parameters";
 export type { LockMode } from "./lock-mode";
-export { ParameterCompiler } from "./parameter-compiler";
+export * as Logging from "./logging/index";
 export { ParameterType } from "./parameter-type";
 export {
   AbstractMySQLPlatform,
@@ -50,6 +53,7 @@ export {
   SQLServerPlatform,
   TrimMode,
 } from "./platforms";
+export * as Portability from "./portability/index";
 export { Query } from "./query";
 export { ConflictResolutionMode } from "./query/for-update";
 export { PlaceHolder, QueryBuilder } from "./query/query-builder";
@@ -59,6 +63,7 @@ export type { ServerVersionProvider } from "./server-version-provider";
 export type { SQLParser, Visitor as SQLParserVisitor } from "./sql/parser";
 export { Parser, ParserException, RegularExpressionException } from "./sql/parser";
 export { Statement } from "./statement";
+export { DsnParser } from "./tools/dsn-parser";
 export { TransactionIsolationLevel } from "./transaction-isolation-level";
 export type {
   CompiledQuery,
