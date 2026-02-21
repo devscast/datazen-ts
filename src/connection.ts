@@ -38,6 +38,7 @@ interface CompiledPositionalQuery {
 }
 
 export class Connection implements StatementExecutor {
+  private autoCommit: boolean;
   private driverConnection: DriverConnection | null = null;
   private transactionNestingLevel = 0;
   private rollbackOnly = false;
@@ -50,7 +51,9 @@ export class Connection implements StatementExecutor {
     private readonly params: Record<string, unknown>,
     private readonly driver: Driver,
     private readonly configuration: Configuration = new Configuration(),
-  ) {}
+  ) {
+    this.autoCommit = this.configuration.getAutoCommit();
+  }
 
   public getParams(): Record<string, unknown> {
     return this.params;
@@ -62,6 +65,24 @@ export class Connection implements StatementExecutor {
 
   public getConfiguration(): Configuration {
     return this.configuration;
+  }
+
+  public isAutoCommit(): boolean {
+    return this.autoCommit;
+  }
+
+  public async setAutoCommit(autoCommit: boolean): Promise<void> {
+    if (autoCommit === this.autoCommit) {
+      return;
+    }
+
+    this.autoCommit = autoCommit;
+
+    if (this.driverConnection === null || this.transactionNestingLevel === 0) {
+      return;
+    }
+
+    await this.commitAll();
   }
 
   public createExpressionBuilder(): ExpressionBuilder {
@@ -258,25 +279,24 @@ export class Connection implements StatementExecutor {
       throw new RollbackOnlyException();
     }
 
+    const connection = await this.connect();
+
     try {
-      const connection = await this.connect();
       if (this.transactionNestingLevel === 1) {
         await connection.commit();
-        this.transactionNestingLevel = 0;
-        this.rollbackOnly = false;
-        return;
-      }
+      } else {
+        if (connection.releaseSavepoint === undefined) {
+          throw new NestedTransactionsNotSupportedException(this.driver.name);
+        }
 
-      if (connection.releaseSavepoint === undefined) {
-        throw new NestedTransactionsNotSupportedException(this.driver.name);
+        await connection.releaseSavepoint(
+          this.getNestedTransactionSavePointName(this.transactionNestingLevel),
+        );
       }
-
-      await connection.releaseSavepoint(
-        this.getNestedTransactionSavePointName(this.transactionNestingLevel),
-      );
-      this.transactionNestingLevel -= 1;
     } catch (error) {
       throw this.convertException(error, "commit");
+    } finally {
+      await this.updateTransactionStateAfterCommit();
     }
   }
 
@@ -288,9 +308,18 @@ export class Connection implements StatementExecutor {
     try {
       const connection = await this.connect();
       if (this.transactionNestingLevel === 1) {
-        await connection.rollBack();
         this.transactionNestingLevel = 0;
-        this.rollbackOnly = false;
+
+        try {
+          await connection.rollBack();
+        } finally {
+          this.rollbackOnly = false;
+
+          if (!this.autoCommit) {
+            await this.beginTransaction();
+          }
+        }
+
         return;
       }
 
@@ -379,6 +408,30 @@ export class Connection implements StatementExecutor {
 
   private getNestedTransactionSavePointName(level: number): string {
     return `DATAZEN_${level}`;
+  }
+
+  private async updateTransactionStateAfterCommit(): Promise<void> {
+    if (this.transactionNestingLevel !== 0) {
+      this.transactionNestingLevel -= 1;
+    }
+
+    if (this.autoCommit || this.transactionNestingLevel !== 0) {
+      return;
+    }
+
+    this.rollbackOnly = false;
+    await this.beginTransaction();
+  }
+
+  private async commitAll(): Promise<void> {
+    while (this.transactionNestingLevel !== 0) {
+      if (!this.autoCommit && this.transactionNestingLevel === 1) {
+        await this.commit();
+        return;
+      }
+
+      await this.commit();
+    }
   }
 
   private compileQuery(
@@ -534,13 +587,18 @@ export class Connection implements StatementExecutor {
     );
   }
 
-  private async connect(): Promise<DriverConnection> {
+  public async connect(): Promise<DriverConnection> {
     if (this.driverConnection !== null) {
       return this.driverConnection;
     }
 
     try {
       this.driverConnection = await this.driver.connect(this.params);
+
+      if (!this.autoCommit) {
+        await this.beginTransaction();
+      }
+
       return this.driverConnection;
     } catch (error) {
       throw this.convertException(error, "connect");

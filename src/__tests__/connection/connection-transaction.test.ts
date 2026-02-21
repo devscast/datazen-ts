@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { Configuration } from "../../configuration";
 import { Connection } from "../../connection";
 import {
   type Driver,
@@ -148,6 +149,32 @@ class SpyDriver implements Driver {
 }
 
 describe("Connection transactions and state", () => {
+  it("uses auto-commit enabled by default and can inherit disabled mode from configuration", () => {
+    const defaultConnection = new Connection({}, new SpyDriver(new SpyDriverConnection()));
+    expect(defaultConnection.isAutoCommit()).toBe(true);
+
+    const nonAutoCommitConnection = new Connection(
+      {},
+      new SpyDriver(new SpyDriverConnection()),
+      new Configuration({ autoCommit: false }),
+    );
+    expect(nonAutoCommitConnection.isAutoCommit()).toBe(false);
+  });
+
+  it("starts a transaction automatically on connect when auto-commit is disabled", async () => {
+    const driverConnection = new SpyDriverConnection();
+    const connection = new Connection(
+      {},
+      new SpyDriver(driverConnection),
+      new Configuration({ autoCommit: false }),
+    );
+
+    await connection.connect();
+    expect(connection.isTransactionActive()).toBe(true);
+    expect(connection.getTransactionNestingLevel()).toBe(1);
+    expect(driverConnection.beginCalls).toBe(1);
+  });
+
   it("starts and commits a root transaction", async () => {
     const driverConnection = new SpyDriverConnection();
     const connection = new Connection({}, new SpyDriver(driverConnection));
@@ -274,6 +301,89 @@ describe("Connection transactions and state", () => {
       }),
     ).rejects.toThrow("boom");
     expect(driverConnection.rollbackCalls).toBe(1);
+  });
+
+  it("restarts the root transaction on commit when auto-commit is disabled", async () => {
+    const driverConnection = new SpyDriverConnection();
+    const connection = new Connection(
+      {},
+      new SpyDriver(driverConnection),
+      new Configuration({ autoCommit: false }),
+    );
+
+    await connection.connect();
+    await connection.commit();
+
+    expect(connection.isTransactionActive()).toBe(true);
+    expect(connection.getTransactionNestingLevel()).toBe(1);
+    expect(driverConnection.commitCalls).toBe(1);
+    expect(driverConnection.beginCalls).toBe(2);
+  });
+
+  it("does not restart a transaction on nested commit when auto-commit is disabled", async () => {
+    const driverConnection = new SpyDriverConnection();
+    const connection = new Connection(
+      {},
+      new SpyDriver(driverConnection),
+      new Configuration({ autoCommit: false }),
+    );
+
+    await connection.connect();
+    await connection.beginTransaction();
+    await connection.commit();
+
+    expect(connection.getTransactionNestingLevel()).toBe(1);
+    expect(driverConnection.beginCalls).toBe(1);
+    expect(driverConnection.releaseSavepointCalls).toEqual(["DATAZEN_2"]);
+  });
+
+  it("restarts the root transaction on rollback when auto-commit is disabled", async () => {
+    const driverConnection = new SpyDriverConnection();
+    const connection = new Connection(
+      {},
+      new SpyDriver(driverConnection),
+      new Configuration({ autoCommit: false }),
+    );
+
+    await connection.connect();
+    await connection.rollBack();
+
+    expect(connection.isTransactionActive()).toBe(true);
+    expect(connection.getTransactionNestingLevel()).toBe(1);
+    expect(driverConnection.rollbackCalls).toBe(1);
+    expect(driverConnection.beginCalls).toBe(2);
+  });
+
+  it("commits active transactions when enabling auto-commit during a transaction", async () => {
+    const driverConnection = new SpyDriverConnection();
+    const connection = new Connection(
+      {},
+      new SpyDriver(driverConnection),
+      new Configuration({ autoCommit: false }),
+    );
+
+    await connection.connect();
+    await connection.setAutoCommit(true);
+
+    expect(connection.isAutoCommit()).toBe(true);
+    expect(connection.isTransactionActive()).toBe(false);
+    expect(connection.getTransactionNestingLevel()).toBe(0);
+    expect(driverConnection.commitCalls).toBe(1);
+    expect(driverConnection.beginCalls).toBe(1);
+  });
+
+  it("commits and starts a new transaction when disabling auto-commit during a transaction", async () => {
+    const driverConnection = new SpyDriverConnection();
+    const connection = new Connection({}, new SpyDriver(driverConnection));
+
+    await connection.beginTransaction();
+    await connection.setAutoCommit(false);
+
+    expect(connection.isAutoCommit()).toBe(false);
+    expect(connection.isTransactionActive()).toBe(true);
+    expect(connection.getTransactionNestingLevel()).toBe(1);
+    expect(driverConnection.commitCalls).toBe(1);
+    expect(driverConnection.beginCalls).toBe(2);
   });
 
   it("tracks last insert id after executeStatement", async () => {

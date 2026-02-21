@@ -175,6 +175,21 @@ Supported built-in middlewares:
 - Logging (`src/logging/*`)
 - Portability (`src/portability/*`)
 
+Auto-commit Default
+-------------------
+
+`Configuration` can set the default connection auto-commit mode:
+
+```ts
+import { Configuration, DriverManager } from "@devscast/datazen";
+
+const configuration = new Configuration({ autoCommit: false });
+const conn = DriverManager.getConnection({ driver: "mysql2", pool }, configuration);
+```
+
+When `autoCommit` is `false`, connecting opens a transaction immediately, and
+committing/rolling back the outermost transaction starts a new one.
+
 Platform Selection
 ------------------
 
