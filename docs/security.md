@@ -22,6 +22,9 @@ The following are safe for user-provided scalar values when used as designed:
 
 - `Connection#executeQuery(sql, params, types)` values in `params`
 - `Connection#executeStatement(sql, params, types)` values in `params`
+- `Connection#insert(table, data, types)` values in `data`
+- `Connection#update(table, data, criteria, types)` values in `data` and `criteria`
+- `Connection#delete(table, criteria, types)` values in `criteria`
 - `Statement#bindValue()` values
 - `QueryBuilder#setParameter()` values
 - `QueryBuilder#createNamedParameter()` value
@@ -137,9 +140,9 @@ Security Checklist
 - Prefer explicit parameter types for non-trivial values.
 - Keep `setFirstResult`/`setMaxResults` inputs numeric.
 
-Not Implemented
----------------
+Note
+----
 
-Doctrine methods like `Connection#insert()`, `Connection#update()`, and
-`Connection#delete()` are not part of this port currently, so this document
-focuses on the implemented Datazen APIs.
+In `insert/update/delete`, only values are parameterized. Table names and
+column keys are SQL fragments and must not come from untrusted input without
+strict allow-listing.

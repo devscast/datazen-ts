@@ -246,6 +246,70 @@ export class Connection implements StatementExecutor {
     return (await this.executeQuery(sql, params, types)).fetchFirstColumn();
   }
 
+  public async delete(
+    table: string,
+    criteria: Record<string, unknown> = {},
+    types: QueryParameterTypes = [],
+  ): Promise<number> {
+    const [columns, values, conditions] = this.getCriteriaCondition(criteria);
+
+    let sql = `DELETE FROM ${table}`;
+    if (conditions.length > 0) {
+      sql += ` WHERE ${conditions.join(" AND ")}`;
+    }
+
+    const orderedTypes = this.extractTypeValues(columns, types);
+    return this.executeStatement(sql, values, orderedTypes);
+  }
+
+  public async update(
+    table: string,
+    data: Record<string, unknown>,
+    criteria: Record<string, unknown> = {},
+    types: QueryParameterTypes = [],
+  ): Promise<number> {
+    const columns: string[] = [];
+    const values: unknown[] = [];
+    const set: string[] = [];
+
+    for (const [columnName, value] of Object.entries(data)) {
+      columns.push(columnName);
+      values.push(value);
+      set.push(`${columnName} = ?`);
+    }
+
+    const [criteriaColumns, criteriaValues, criteriaConditions] =
+      this.getCriteriaCondition(criteria);
+    columns.push(...criteriaColumns);
+    values.push(...criteriaValues);
+
+    let sql = `UPDATE ${table} SET ${set.join(", ")}`;
+    if (criteriaConditions.length > 0) {
+      sql += ` WHERE ${criteriaConditions.join(" AND ")}`;
+    }
+
+    const orderedTypes = this.extractTypeValues(columns, types);
+    return this.executeStatement(sql, values, orderedTypes);
+  }
+
+  public async insert(
+    table: string,
+    data: Record<string, unknown>,
+    types: QueryParameterTypes = [],
+  ): Promise<number> {
+    const columns = Object.keys(data);
+    if (columns.length === 0) {
+      return this.executeStatement(`INSERT INTO ${table} () VALUES ()`);
+    }
+
+    const values = columns.map((column) => data[column]);
+    const placeholders = columns.map(() => "?");
+    const sql = `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`;
+    const orderedTypes = this.extractTypeValues(columns, types);
+
+    return this.executeStatement(sql, values, orderedTypes);
+  }
+
   public async beginTransaction(): Promise<void> {
     try {
       const connection = await this.connect();
@@ -408,6 +472,33 @@ export class Connection implements StatementExecutor {
 
   private getNestedTransactionSavePointName(level: number): string {
     return `DATAZEN_${level}`;
+  }
+
+  private getCriteriaCondition(criteria: Record<string, unknown>): [string[], unknown[], string[]] {
+    const columns: string[] = [];
+    const values: unknown[] = [];
+    const conditions: string[] = [];
+
+    for (const [columnName, value] of Object.entries(criteria)) {
+      if (value === null) {
+        conditions.push(`${columnName} IS NULL`);
+        continue;
+      }
+
+      columns.push(columnName);
+      values.push(value);
+      conditions.push(`${columnName} = ?`);
+    }
+
+    return [columns, values, conditions];
+  }
+
+  private extractTypeValues(columns: string[], types: QueryParameterTypes): QueryParameterTypes {
+    if (Array.isArray(types)) {
+      return types;
+    }
+
+    return columns.map((columnName) => types[columnName] ?? ParameterType.STRING);
   }
 
   private async updateTransactionStateAfterCommit(): Promise<void> {

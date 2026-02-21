@@ -1,5 +1,18 @@
 # @devscast/datazen
 
+# 1.0.1 - Convenience DML Parity
+- Implemented Doctrine-style convenience data manipulation methods on `Connection`:
+  - `insert(table, data, types?)`
+  - `update(table, data, criteria, types?)`
+  - `delete(table, criteria, types?)`
+- Added Doctrine-parity-focused tests for the new convenience methods in `src/__tests__/connection/connection-data-manipulation.test.ts`, including keyed type maps, null criteria handling, and named-binding compilation paths.
+- Aligned convenience DML tests with Doctrine `tests/ConnectionTest.php` parity patterns:
+  - empty insert
+  - update with different data/criteria columns
+  - update with shared column in data and criteria
+  - update/delete with `IS NULL` criteria
+- Updated documentation to reflect implementation status in `docs/data-retrieval-and-manipulation.md` and `docs/security.md`.
+
 # 1.0.0 - Initial Stable Release
 - Added QueryBuilder documentation (`docs/query-builder.md`) aligned with the current ported API and feature set.
 - Added portability documentation (`docs/portability.md`) describing middleware flags, configuration, and portability boundaries.
@@ -21,4 +34,3 @@
 - Added Doctrine-inspired `DsnParser` (`src/tools/dsn-parser.ts`) for parsing DSN URLs into connection params with scheme mapping, sqlite path handling, and malformed DSN exceptions.
 - Replaced `ParameterCompiler` with Doctrine-style `ExpandArrayParameters` (`src/expand-array-parameters.ts`) and moved query compilation flow into `Connection`, including SQL Server named-binding conversion.
 - Added and updated docs for architecture, configuration, and data retrieval/manipulation to reflect current DataZen DBAL parity and current non-implemented scope.
-

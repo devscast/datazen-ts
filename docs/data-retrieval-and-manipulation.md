@@ -170,7 +170,11 @@ Currently implemented data manipulation primitives are:
 
 - `executeStatement()`
 - prepared statement `executeStatement()`
+- `insert(table, data, types?)`
+- `update(table, data, criteria, types?)`
+- `delete(table, criteria, types?)`
 
-Doctrine convenience methods like `insert()`, `update()`, `delete()`,
-`iterateKeyValue()`, and `iterateAssociativeIndexed()` are not yet implemented
-in this port.
+Still not implemented in this port:
+
+- `iterateKeyValue()`
+- `iterateAssociativeIndexed()`
