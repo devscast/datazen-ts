@@ -31,6 +31,8 @@ import type {
 } from "./types";
 import { Type } from "./types/index";
 
+type DataMap = Record<string, unknown>;
+
 interface CompiledPositionalQuery {
   sql: string;
   parameters: unknown[];
@@ -48,14 +50,14 @@ export class Connection implements StatementExecutor {
   private parser: SQLParser | null = null;
 
   constructor(
-    private readonly params: Record<string, unknown>,
+    private readonly params: DataMap,
     private readonly driver: Driver,
     private readonly configuration: Configuration = new Configuration(),
   ) {
     this.autoCommit = this.configuration.getAutoCommit();
   }
 
-  public getParams(): Record<string, unknown> {
+  public getParams(): DataMap {
     return this.params;
   }
 
@@ -124,6 +126,16 @@ export class Connection implements StatementExecutor {
 
   public async executeQuery(
     sql: string,
+    params?: QueryParameters,
+    types?: QueryParameterTypes,
+  ): Promise<Result>;
+  public async executeQuery<T extends DataMap>(
+    sql: string,
+    params?: QueryParameters,
+    types?: QueryParameterTypes,
+  ): Promise<Result<T>>;
+  public async executeQuery(
+    sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
   ): Promise<Result> {
@@ -139,6 +151,8 @@ export class Connection implements StatementExecutor {
     }
   }
 
+  public async executeQueryObject(query: Query): Promise<Result>;
+  public async executeQueryObject<T extends DataMap>(query: Query): Promise<Result<T>>;
   public async executeQueryObject(query: Query): Promise<Result> {
     const [boundParams, boundTypes] = this.normalizeParameters(query.parameters, query.types);
     const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
@@ -182,73 +196,73 @@ export class Connection implements StatementExecutor {
     }
   }
 
-  public async fetchAssociative(
+  public async fetchAssociative<T extends DataMap = DataMap>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<Record<string, unknown> | false> {
-    return (await this.executeQuery(sql, params, types)).fetchAssociative();
+  ): Promise<T | false> {
+    return (await this.executeQuery<T>(sql, params, types)).fetchAssociative<T>();
   }
 
-  public async fetchNumeric(
+  public async fetchNumeric<T extends unknown[] = unknown[]>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<unknown[] | false> {
-    return (await this.executeQuery(sql, params, types)).fetchNumeric();
+  ): Promise<T | false> {
+    return (await this.executeQuery(sql, params, types)).fetchNumeric<T>();
   }
 
-  public async fetchOne(
+  public async fetchOne<T = unknown>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<unknown | false> {
-    return (await this.executeQuery(sql, params, types)).fetchOne();
+  ): Promise<T | false> {
+    return (await this.executeQuery(sql, params, types)).fetchOne<T>();
   }
 
-  public async fetchAllAssociative(
+  public async fetchAllAssociative<T extends DataMap = DataMap>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<Array<Record<string, unknown>>> {
-    return (await this.executeQuery(sql, params, types)).fetchAllAssociative();
+  ): Promise<T[]> {
+    return (await this.executeQuery<T>(sql, params, types)).fetchAllAssociative<T>();
   }
 
-  public async fetchAllNumeric(
+  public async fetchAllNumeric<T extends unknown[] = unknown[]>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<unknown[][]> {
-    return (await this.executeQuery(sql, params, types)).fetchAllNumeric();
+  ): Promise<T[]> {
+    return (await this.executeQuery(sql, params, types)).fetchAllNumeric<T>();
   }
 
-  public async fetchAllKeyValue(
+  public async fetchAllKeyValue<T = unknown>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<Record<string, unknown>> {
-    return (await this.executeQuery(sql, params, types)).fetchAllKeyValue();
+  ): Promise<Record<string, T>> {
+    return (await this.executeQuery(sql, params, types)).fetchAllKeyValue<T>();
   }
 
-  public async fetchAllAssociativeIndexed(
+  public async fetchAllAssociativeIndexed<T extends DataMap = DataMap>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<Record<string, Record<string, unknown>>> {
-    return (await this.executeQuery(sql, params, types)).fetchAllAssociativeIndexed();
+  ): Promise<Record<string, T>> {
+    return (await this.executeQuery(sql, params, types)).fetchAllAssociativeIndexed<T>();
   }
 
-  public async fetchFirstColumn(
+  public async fetchFirstColumn<T = unknown>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<unknown[]> {
-    return (await this.executeQuery(sql, params, types)).fetchFirstColumn();
+  ): Promise<T[]> {
+    return (await this.executeQuery(sql, params, types)).fetchFirstColumn<T>();
   }
 
   public async delete(
     table: string,
-    criteria: Record<string, unknown> = {},
+    criteria: DataMap = {},
     types: QueryParameterTypes = [],
   ): Promise<number> {
     const [columns, values, conditions] = this.getCriteriaCondition(criteria);
@@ -264,8 +278,8 @@ export class Connection implements StatementExecutor {
 
   public async update(
     table: string,
-    data: Record<string, unknown>,
-    criteria: Record<string, unknown> = {},
+    data: DataMap,
+    criteria: DataMap = {},
     types: QueryParameterTypes = [],
   ): Promise<number> {
     const columns: string[] = [];
@@ -294,7 +308,7 @@ export class Connection implements StatementExecutor {
 
   public async insert(
     table: string,
-    data: Record<string, unknown>,
+    data: DataMap,
     types: QueryParameterTypes = [],
   ): Promise<number> {
     const columns = Object.keys(data);
@@ -474,7 +488,7 @@ export class Connection implements StatementExecutor {
     return `DATAZEN_${level}`;
   }
 
-  private getCriteriaCondition(criteria: Record<string, unknown>): [string[], unknown[], string[]] {
+  private getCriteriaCondition(criteria: DataMap): [string[], unknown[], string[]] {
     const columns: string[] = [];
     const values: unknown[] = [];
     const conditions: string[] = [];
@@ -576,7 +590,7 @@ export class Connection implements StatementExecutor {
     types: QueryScalarParameterType[],
   ): CompiledQuery {
     const sqlParts: string[] = [];
-    const namedParameters: Record<string, unknown> = {};
+    const namedParameters: DataMap = {};
     const namedTypes: Record<string, QueryScalarParameterType> = {};
     let parameterIndex = 0;
     let bindCounter = 0;
@@ -741,7 +755,7 @@ export class Connection implements StatementExecutor {
     }
 
     if (!Array.isArray(params) && !Array.isArray(types)) {
-      const normalizedParams: Record<string, unknown> = { ...params };
+      const normalizedParams: DataMap = { ...params };
       const normalizedTypes: Record<string, QueryParameterType> = { ...types };
 
       for (const [name, value] of Object.entries(normalizedParams)) {

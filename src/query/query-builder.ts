@@ -19,6 +19,7 @@ import { Union } from "./union";
 import { UnionQuery } from "./union-query";
 import { UnionType } from "./union-type";
 
+type DataMap = Record<string, unknown>;
 type ParamType = string | ParameterType | ArrayParameterType;
 
 export enum PlaceHolder {
@@ -83,8 +84,8 @@ export class QueryBuilder {
   /**
    * Executes an SQL query (SELECT) and returns a Result.
    */
-  public executeQuery(): Promise<Result> {
-    return this.connection.executeQuery(this.getSQL(), this.params, this.types);
+  public executeQuery<T extends DataMap = DataMap>(): Promise<Result<T>> {
+    return this.connection.executeQuery<T>(this.getSQL(), this.params, this.types);
   }
 
   /**
@@ -94,9 +95,7 @@ export class QueryBuilder {
     return this.connection.executeStatement(this.getSQL(), this.params, this.types);
   }
 
-  public async fetchAssociative<
-    T extends Record<string, unknown> = Record<string, unknown>,
-  >(): Promise<T | false> {
+  public async fetchAssociative<T extends DataMap = DataMap>(): Promise<T | false> {
     return (await this.executeQuery()).fetchAssociative<T>();
   }
 
@@ -112,9 +111,7 @@ export class QueryBuilder {
     return (await this.executeQuery()).fetchAllNumeric<T>();
   }
 
-  public async fetchAllAssociative<
-    T extends Record<string, unknown> = Record<string, unknown>,
-  >(): Promise<T[]> {
+  public async fetchAllAssociative<T extends DataMap = DataMap>(): Promise<T[]> {
     return (await this.executeQuery()).fetchAllAssociative<T>();
   }
 
@@ -122,9 +119,9 @@ export class QueryBuilder {
     return (await this.executeQuery()).fetchAllKeyValue<T>();
   }
 
-  public async fetchAllAssociativeIndexed<
-    T extends Record<string, unknown> = Record<string, unknown>,
-  >(): Promise<Record<string, T>> {
+  public async fetchAllAssociativeIndexed<T extends DataMap = DataMap>(): Promise<
+    Record<string, T>
+  > {
     return (await this.executeQuery()).fetchAllAssociativeIndexed<T>();
   }
 
@@ -391,7 +388,7 @@ export class QueryBuilder {
    */
   public insertWith(
     table: string,
-    data: Record<string, any>,
+    data: DataMap,
     placeHolder: PlaceHolder = PlaceHolder.POSITIONAL,
   ): this {
     if (!data || Object.keys(data).length === 0) {
@@ -421,7 +418,7 @@ export class QueryBuilder {
    */
   public updateWith(
     table: string,
-    data: Record<string, any>,
+    data: DataMap,
     placeHolder: PlaceHolder = PlaceHolder.POSITIONAL,
   ): this {
     if (!data || Object.keys(data).length === 0) {
@@ -749,7 +746,7 @@ export class QueryBuilder {
    * @link http://www.zetacomponents.org
    */
   public createNamedParameter(
-    value: any,
+    value: unknown,
     type: ParamType = ParameterType.STRING,
     placeHolder: string | null = null,
   ): string {
@@ -773,7 +770,7 @@ export class QueryBuilder {
    * statement , otherwise they get bound in the wrong order which can lead to serious
    * bugs in your code.
    */
-  public createPositionalParameter(value: any, type: ParamType = ParameterType.STRING): string {
+  public createPositionalParameter(value: unknown, type: ParamType = ParameterType.STRING): string {
     this.setParameter(this.boundCounter, value, type);
     this.boundCounter++;
 
@@ -991,7 +988,7 @@ export class QueryBuilder {
     return this.types as ParamType[];
   }
 
-  private ensureNamedParams(): Record<string, unknown> {
+  private ensureNamedParams(): DataMap {
     if (Array.isArray(this.params)) {
       this.params = {};
     }

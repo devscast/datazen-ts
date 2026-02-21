@@ -4,14 +4,14 @@ import { NoKeyValueException } from "./exception/index";
 type AssociativeRow = Record<string, unknown>;
 type NumericRow = unknown[];
 
-export class Result {
-  private rows: AssociativeRow[];
+export class Result<TRow extends AssociativeRow = AssociativeRow> {
+  private rows: TRow[];
   private cursor = 0;
   private readonly explicitColumns: string[];
   private readonly explicitRowCount?: number;
 
   constructor(result: DriverQueryResult) {
-    this.rows = [...result.rows];
+    this.rows = [...result.rows] as TRow[];
     this.explicitColumns = result.columns ?? [];
     this.explicitRowCount = result.rowCount;
   }
@@ -26,14 +26,14 @@ export class Result {
     return columns.map((column) => row[column]) as T;
   }
 
-  public fetchAssociative<T extends AssociativeRow = AssociativeRow>(): T | false {
+  public fetchAssociative<T extends AssociativeRow = TRow>(): T | false {
     const row = this.rows[this.cursor];
     if (row === undefined) {
       return false;
     }
 
     this.cursor += 1;
-    return { ...row } as T;
+    return { ...row } as unknown as T;
   }
 
   public fetchOne<T = unknown>(): T | false {
@@ -58,7 +58,7 @@ export class Result {
     return rows;
   }
 
-  public fetchAllAssociative<T extends AssociativeRow = AssociativeRow>(): T[] {
+  public fetchAllAssociative<T extends AssociativeRow = TRow>(): T[] {
     const rows: T[] = [];
     let row = this.fetchAssociative<T>();
 
@@ -92,7 +92,7 @@ export class Result {
     string,
     T
   > {
-    const rows = this.fetchAllAssociative();
+    const rows = this.fetchAllAssociative<AssociativeRow>();
     const indexed: Record<string, T> = {};
 
     for (const row of rows) {

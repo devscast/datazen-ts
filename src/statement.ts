@@ -60,9 +60,11 @@ export class Statement {
     return this;
   }
 
-  public async executeQuery(): Promise<Result> {
+  public async executeQuery<
+    TRow extends Record<string, unknown> = Record<string, unknown>,
+  >(): Promise<Result<TRow>> {
     const [params, types] = this.getBoundParameters();
-    return this.executor.executeQuery(this.sql, params, types);
+    return (await this.executor.executeQuery(this.sql, params, types)) as Result<TRow>;
   }
 
   public async executeStatement(): Promise<number> {

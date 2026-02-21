@@ -3,7 +3,19 @@ import { describe, expect, it } from "vitest";
 import { NoKeyValueException } from "../../exception/index";
 import { Result } from "../../result";
 
+function expectUserRow(_row: { id: number; name: string } | false): void {}
+
 describe("Result", () => {
+  it("uses class-level row type for fetchAssociative() by default", () => {
+    const result = new Result<{ id: number; name: string }>({
+      rows: [{ id: 1, name: "Alice" }],
+    });
+
+    const row = result.fetchAssociative();
+    expectUserRow(row);
+    expect(row).toEqual({ id: 1, name: "Alice" });
+  });
+
   it("fetches associative rows sequentially", () => {
     const result = new Result({
       rows: [
