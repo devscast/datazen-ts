@@ -1,10 +1,5 @@
-import { AbstractPlatform } from "../../platforms/abstract-platform";
-import { MySQLPlatform } from "../../platforms/mysql-platform";
+import { Connection } from "../../connection";
 import { CompositeExpression } from "../expression/composite-expression";
-
-interface ExpressionBuilderConnection {
-  getDatabasePlatform(): AbstractPlatform;
-}
 
 export class ExpressionBuilder {
   static readonly EQ = "=";
@@ -14,21 +9,7 @@ export class ExpressionBuilder {
   static readonly GT = ">";
   static readonly GTE = ">=";
 
-  private readonly platform: AbstractPlatform;
-
-  constructor(connectionOrPlatform?: ExpressionBuilderConnection | AbstractPlatform) {
-    if (connectionOrPlatform === undefined) {
-      this.platform = new MySQLPlatform();
-      return;
-    }
-
-    if (connectionOrPlatform instanceof AbstractPlatform) {
-      this.platform = connectionOrPlatform;
-      return;
-    }
-
-    this.platform = connectionOrPlatform.getDatabasePlatform();
-  }
+  constructor(private readonly connection: Connection) {}
 
   /**
    * Creates a conjunction of the given expressions.
@@ -178,7 +159,7 @@ export class ExpressionBuilder {
    *
    * The usage of this method is discouraged. Use prepared statements
    */
-  literal(input: string): string {
-    return this.platform.quoteStringLiteral(input);
+  async literal(input: string): Promise<string> {
+    return await this.connection.quote(input);
   }
 }

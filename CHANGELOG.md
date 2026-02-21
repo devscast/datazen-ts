@@ -1,6 +1,14 @@
 # @devscast/datazen
 
 # 1.0.1 - Convenience DML Parity
+- Added phase 1 TypeScript-friendly typed row propagation:
+  - `Result<TRow>` now carries a default row shape for associative fetch methods.
+  - `Connection.executeQuery<T>()` and `Connection.executeQueryObject<T>()` now return `Result<T>`.
+  - `Connection` fetch helpers now expose generic return types (`fetchAssociative<T>()`, `fetchAllAssociative<T>()`, etc.).
+  - `Statement.executeQuery<T>()` and `QueryBuilder.executeQuery<T>()` now propagate typed row results.
+- Added typed-row coverage tests:
+  - `src/__tests__/connection/connection-typed-fetch.test.ts`
+  - `src/__tests__/result/result.test.ts`
 - Implemented Doctrine-style convenience data manipulation methods on `Connection`:
   - `insert(table, data, types?)`
   - `update(table, data, criteria, types?)`
