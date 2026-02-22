@@ -1,4 +1,7 @@
+import type { Connection } from "../connection";
 import { LockMode } from "../lock-mode";
+import type { AbstractSchemaManager } from "../schema/abstract-schema-manager";
+import { UnquotedIdentifierFolding } from "../schema/name/unquoted-identifier-folding";
 import { DefaultSelectSQLBuilder } from "../sql/builder/default-select-sql-builder";
 import { DefaultUnionSQLBuilder } from "../sql/builder/default-union-sql-builder";
 import { SelectSQLBuilder } from "../sql/builder/select-sql-builder";
@@ -7,10 +10,12 @@ import { WithSQLBuilder } from "../sql/builder/with-sql-builder";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { DateIntervalUnit } from "./date-interval-unit";
 import { NotSupported } from "./exception/not-supported";
+import { EmptyKeywords, KeywordList } from "./keywords";
 import { TrimMode } from "./trim-mode";
 
 export abstract class AbstractPlatform {
   private datazenTypeMapping: Record<string, string> | null = null;
+  private reservedKeywords: KeywordList | null = null;
 
   /**
    * Quotes an identifier preserving dotted qualification.
@@ -27,6 +32,10 @@ export abstract class AbstractPlatform {
    */
   public quoteSingleIdentifier(str: string): string {
     return `"${str.replace(/"/g, `""`)}"`;
+  }
+
+  public getUnquotedIdentifierFolding(): UnquotedIdentifierFolding {
+    return UnquotedIdentifierFolding.NONE;
   }
 
   /**
@@ -450,6 +459,15 @@ export abstract class AbstractPlatform {
     return `ROLLBACK TO SAVEPOINT ${savepoint}`;
   }
 
+  public getReservedKeywordsList(): KeywordList {
+    this.reservedKeywords ??= this.createReservedKeywordsList();
+    return this.reservedKeywords;
+  }
+
+  protected createReservedKeywordsList(): KeywordList {
+    return new EmptyKeywords();
+  }
+
   public getDummySelectSQL(expression = "1"): string {
     return `SELECT ${expression}`;
   }
@@ -549,6 +567,10 @@ export abstract class AbstractPlatform {
 
   public createWithSQLBuilder(): WithSQLBuilder {
     return new WithSQLBuilder();
+  }
+
+  public createSchemaManager(_connection: Connection): AbstractSchemaManager {
+    throw NotSupported.new("createSchemaManager");
   }
 
   private readLength(column: Record<string, unknown>): number | undefined {

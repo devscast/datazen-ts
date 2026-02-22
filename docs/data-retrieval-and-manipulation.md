@@ -114,7 +114,7 @@ Binding Types
 You can bind:
 
 - `ParameterType` values (scalar DB binding types)
-- DataZen type names / type instances (`src/types/*`) for value conversion
+- DataZen type names / type instances (`@devscast/datazen/types`) for value conversion
 - `ArrayParameterType` values for list expansion
 
 Type conversion for scalar values is applied by `Connection` before execution.

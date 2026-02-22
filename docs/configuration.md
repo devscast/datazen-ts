@@ -32,7 +32,8 @@ You can parse a DSN first, then pass the result to `DriverManager`.
 
 ```ts
 import mysql from "mysql2/promise";
-import { DriverManager, DsnParser } from "@devscast/datazen";
+import { DriverManager } from "@devscast/datazen";
+import { DsnParser } from "@devscast/datazen/tools";
 
 const parser = new DsnParser();
 const params = parser.parse("mysql2://user:secret@localhost/mydb?charset=utf8mb4");
@@ -130,7 +131,7 @@ Connecting using a URL (DSN)
 Examples:
 
 ```ts
-import { DsnParser } from "@devscast/datazen";
+import { DsnParser } from "@devscast/datazen/tools";
 
 const parser = new DsnParser({
   custom: CustomDriver, // driverClass mapping
@@ -153,10 +154,12 @@ import {
   ColumnCase,
   Configuration,
   DriverManager,
-  LoggingMiddleware,
-  PortabilityConnection,
-  PortabilityMiddleware,
 } from "@devscast/datazen";
+import { Middleware as LoggingMiddleware } from "@devscast/datazen/logging";
+import {
+  Connection as PortabilityConnection,
+  Middleware as PortabilityMiddleware,
+} from "@devscast/datazen/portability";
 
 const configuration = new Configuration()
   .addMiddleware(new LoggingMiddleware())
@@ -172,8 +175,8 @@ const conn = DriverManager.getConnection({ driver: "mssql", pool }, configuratio
 
 Supported built-in middlewares:
 
-- Logging (`src/logging/*`)
-- Portability (`src/portability/*`)
+- Logging (`@devscast/datazen/logging`)
+- Portability (`@devscast/datazen/portability`)
 
 Auto-commit Default
 -------------------

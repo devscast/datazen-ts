@@ -1,7 +1,11 @@
+import type { Connection } from "../connection";
+import { OracleSchemaManager } from "../schema/oracle-schema-manager";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
+import type { KeywordList } from "./keywords/keyword-list";
+import { OracleKeywords } from "./keywords/oracle-keywords";
 
 export class OraclePlatform extends AbstractPlatform {
   protected initializeDatazenTypeMappings(): Record<string, string> {
@@ -110,6 +114,14 @@ export class OraclePlatform extends AbstractPlatform {
 
   public supportsReleaseSavepoints(): boolean {
     return false;
+  }
+
+  protected createReservedKeywordsList(): KeywordList {
+    return new OracleKeywords();
+  }
+
+  public createSchemaManager(connection: Connection): OracleSchemaManager {
+    return new OracleSchemaManager(connection, this);
   }
 
   public releaseSavePoint(_savepoint: string): string {

@@ -1,0 +1,126 @@
+import { InvalidIndexDefinition } from "./exception/index";
+import { Index } from "./index";
+import { IndexType } from "./index/index-type";
+import { IndexedColumn } from "./index/indexed-column";
+
+export class IndexEditor {
+  private name: string | null = null;
+  private columns: string[] = [];
+  private unique = false;
+  private primary = false;
+  private flags: string[] = [];
+  private options: Record<string, unknown> = {};
+  private type: IndexType | null = null;
+
+  public setName(name: string | null): this {
+    this.name = name;
+    return this;
+  }
+
+  public setColumns(...columnNames: string[]): this {
+    this.columns = [...columnNames];
+    return this;
+  }
+
+  public setIsUnique(unique: boolean): this {
+    this.unique = unique;
+    return this;
+  }
+
+  public setIsPrimary(primary: boolean): this {
+    this.primary = primary;
+    return this;
+  }
+
+  public setType(type: IndexType): this {
+    this.type = type;
+    return this;
+  }
+
+  public setIsClustered(clustered: boolean): this {
+    return this.setOptions({ ...this.options, clustered });
+  }
+
+  public setPredicate(predicate: string | null): this {
+    const options = { ...this.options };
+    if (predicate === null) {
+      delete options.where;
+    } else {
+      options.where = predicate;
+    }
+
+    return this.setOptions(options);
+  }
+
+  public setFlags(...flags: string[]): this {
+    this.flags = [...flags];
+    return this;
+  }
+
+  public setOptions(options: Record<string, unknown>): this {
+    this.options = { ...options };
+    return this;
+  }
+
+  public addColumn(column: IndexedColumn | string): this {
+    const indexed = typeof column === "string" ? new IndexedColumn(column) : column;
+
+    this.columns.push(indexed.getColumnName().toString());
+
+    const length = indexed.getLength();
+    if (length !== null) {
+      const lengths = Array.isArray(this.options.lengths) ? [...this.options.lengths] : [];
+      lengths.push(length);
+      this.options = { ...this.options, lengths };
+    }
+
+    return this;
+  }
+
+  public create(): Index {
+    if (this.name === null || this.name.length === 0) {
+      throw InvalidIndexDefinition.nameNotSet();
+    }
+
+    if (this.columns.length === 0) {
+      throw InvalidIndexDefinition.columnsNotSet(this.name);
+    }
+
+    const lengths = this.options.lengths;
+    if (Array.isArray(lengths)) {
+      for (let index = 0; index < lengths.length; index += 1) {
+        const length = lengths[index];
+        if (typeof length === "number" && length <= 0) {
+          throw InvalidIndexDefinition.fromNonPositiveColumnLength(
+            this.columns[index] ?? "<unknown>",
+            length,
+          );
+        }
+      }
+    }
+
+    const flags = [...this.flags];
+    let unique = this.unique;
+
+    switch (this.type) {
+      case IndexType.UNIQUE:
+        unique = true;
+        break;
+      case IndexType.FULLTEXT:
+        if (!flags.some((flag) => flag.toLowerCase() === "fulltext")) {
+          flags.push("fulltext");
+        }
+        break;
+      case IndexType.SPATIAL:
+        if (!flags.some((flag) => flag.toLowerCase() === "spatial")) {
+          flags.push("spatial");
+        }
+        break;
+      case IndexType.REGULAR:
+      case null:
+        break;
+    }
+
+    return new Index(this.name, this.columns, unique, this.primary, flags, this.options);
+  }
+}

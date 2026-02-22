@@ -1,7 +1,7 @@
 SQL Query Builder
 =================
 
-DataZen provides a Doctrine-inspired SQL Query Builder in `src/query/*`.
+DataZen provides a Doctrine-inspired SQL Query Builder in `@devscast/datazen/query`.
 It builds SQL incrementally and executes through the `Connection` it belongs to.
 
 ```ts
@@ -180,7 +180,7 @@ UNION
 -----
 
 ```ts
-import { UnionType } from "@devscast/datazen";
+import { UnionType } from "@devscast/datazen/query";
 
 qb
   .union("SELECT 1 AS field")

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { LockMode } from "../../lock-mode";
 import { DB2Platform } from "../../platforms/db2-platform";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { OraclePlatform } from "../../platforms/oracle-platform";
@@ -32,10 +33,10 @@ describe("Platform parity", () => {
   it("sql server applies lock hints", () => {
     const platform = new SQLServerPlatform();
 
-    expect(platform.appendLockHint("users u", "pessimistic_read")).toBe(
+    expect(platform.appendLockHint("users u", LockMode.PESSIMISTIC_READ)).toBe(
       "users u WITH (HOLDLOCK, ROWLOCK)",
     );
-    expect(platform.appendLockHint("users u", "pessimistic_write")).toBe(
+    expect(platform.appendLockHint("users u", LockMode.PESSIMISTIC_WRITE)).toBe(
       "users u WITH (UPDLOCK, ROWLOCK)",
     );
   });

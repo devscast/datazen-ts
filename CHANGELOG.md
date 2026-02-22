@@ -1,5 +1,62 @@
 # @devscast/datazen
 
+# Unreleased
+- Added package subpath namespace exports so consumers can import grouped APIs from:
+  - `@devscast/datazen/driver`
+  - `@devscast/datazen/exception`
+  - `@devscast/datazen/logging`
+  - `@devscast/datazen/platforms`
+  - `@devscast/datazen/portability`
+  - `@devscast/datazen/query`
+  - `@devscast/datazen/schema`
+  - `@devscast/datazen/sql`
+  - `@devscast/datazen/tools`
+  - `@devscast/datazen/types`
+- Added namespace barrel entry points for `driver`, `query`, `sql`, and `tools`.
+- Updated build configuration to emit multi-entry bundles/types for subpath exports.
+- Added coverage test for namespace barrels and `package.json` subpath export declarations.
+- Breaking: reduced root `@devscast/datazen` exports to modules backed by files directly under `src/`; grouped APIs now require subpath imports (for example `@devscast/datazen/query`, `@devscast/datazen/types`, `@devscast/datazen/platforms`).
+
+# 1.0.2 - Schema Foundation Parity
+- Ported a Doctrine-inspired schema foundation under `src/schema/*`:
+  - schema assets: `AbstractAsset`, `Identifier`, `Column`, `Index`, `ForeignKeyConstraint`, `Table`, `Sequence`, `View`, `Schema`, `SchemaConfig`
+  - schema management: `AbstractSchemaManager`, `MySQLSchemaManager`, `SQLServerSchemaManager`, `OracleSchemaManager`, `DB2SchemaManager`
+  - schema-manager factories: `SchemaManagerFactory`, `DefaultSchemaManagerFactory`
+- Added best-effort file-by-file Schema namespace parity with Doctrine reference layout:
+  - created missing files/sub-namespaces under `src/schema/*` (`collections`, `default-expression`, `exception`, `foreign-key-constraint`, `index`, `introspection`, `metadata`, `name`)
+  - added `src/schema/module.ts` as a stable schema-module export surface
+  - exposed schema module namespace from top-level API as `SchemaModule`
+- Added parity scaffolding and practical implementations for schema diffing/building APIs:
+  - `Comparator`, `ComparatorConfig`, `ColumnDiff`, `TableDiff`, `SchemaDiff`
+  - editor builders (`ColumnEditor`, `TableEditor`, `IndexEditor`, `ForeignKeyConstraintEditor`, `PrimaryKeyConstraintEditor`, `UniqueConstraintEditor`, `SequenceEditor`, `ViewEditor`)
+  - constraint and table-configuration objects (`PrimaryKeyConstraint`, `UniqueConstraint`, `TableConfiguration`)
+- Added `Connection.createSchemaManager()` and `Configuration` support for:
+  - `schemaManagerFactory` override injection
+  - `schemaAssetsFilter` hook (default pass-through)
+- Ported Doctrine keyword-list support in `src/platforms/keywords/*`, including MySQL/MariaDB versioned lists and PostgreSQL/SQLite keyword classes.
+- Extended platform integration to expose:
+  - `getReservedKeywordsList()`
+  - dialect-specific schema manager creation via `createSchemaManager(connection)`
+- Added coverage tests:
+  - `src/__tests__/platforms/keywords.test.ts`
+  - `src/__tests__/schema/schema-assets.test.ts`
+  - `src/__tests__/schema/schema-manager.test.ts`
+  - `src/__tests__/schema/schema-comparator-editor.test.ts`
+  - `src/__tests__/schema/schema-file-parity.test.ts`
+- Expanded Doctrine parity coverage for schema exceptions in `src/__tests__/schema/schema-exception-parity.test.ts`:
+  - added message assertions for previously untested schema exception factories (`IncomparableNames`, `IndexNameInvalid`, `InvalidIdentifier`, `InvalidName`, `InvalidTableName`, `NotImplemented`, `UniqueConstraintDoesNotExist`, `UnsupportedName`)
+  - added full `InvalidState` factory message coverage and additional `InvalidTableModification` factory/cause assertions
+- Ported additional Doctrine schema internals beyond scaffolding:
+  - `src/schema/index/indexed-column.ts` now validates and exposes indexed-column metadata (name + optional positive length)
+  - `src/schema/name/*` and `src/schema/name/parser/*` now implement Doctrine-style name value objects, identifier folding, and SQL-like parser behavior
+  - `src/schema/metadata/*` row classes now carry Doctrine-style metadata DTO state/getters
+  - `src/schema/introspection/metadata-processor/*` now combine metadata rows into schema editors/objects (indexes, PK/FK constraints, sequences, views)
+  - added editor compatibility helpers used by metadata processors (`IndexEditor`, `ForeignKeyConstraintEditor`, `PrimaryKeyConstraintEditor`, `SequenceEditor`, `ViewEditor`)
+- Added schema parity behavior tests in `src/__tests__/schema/schema-name-introspection-parity.test.ts` covering:
+  - name objects/parsers (`GenericName`, `Identifier`, `UnqualifiedName`, `OptionallyQualifiedName`, parser registry)
+  - `IndexedColumn`
+  - metadata rows and metadata processors
+
 # 1.0.1 - Convenience DML Parity
 - Added phase 1 TypeScript-friendly typed row propagation:
   - `Result<TRow>` now carries a default row shape for associative fetch methods.

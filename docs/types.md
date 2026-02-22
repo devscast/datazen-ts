@@ -17,7 +17,7 @@ Type Registry and Flyweights
 Types are resolved through `Type` static APIs:
 
 ```ts
-import { Type, Types } from "@devscast/datazen";
+import { Type, Types } from "@devscast/datazen/types";
 
 const integerType = Type.getType(Types.INTEGER);
 ```
@@ -38,7 +38,7 @@ The registry enforces invariants:
 Built-in Types
 --------------
 
-Built-ins are registered from `src/types/index.ts` and available via `Types` constants.
+Built-ins are registered from the `@devscast/datazen/types` namespace and available via `Types` constants.
 
 Numeric:
 
@@ -147,7 +147,8 @@ Custom Types
 Create a custom type by extending `Type` and registering it.
 
 ```ts
-import { AbstractPlatform, Type } from "@devscast/datazen";
+import { AbstractPlatform } from "@devscast/datazen/platforms";
+import { Type } from "@devscast/datazen/types";
 
 class MoneyType extends Type {
   public getSQLDeclaration(
@@ -187,7 +188,7 @@ platform.registerDatazenTypeMapping("mymoney", "money");
 Error Model
 -----------
 
-Type and conversion failures throw typed exceptions under `src/types/exception/*`,
+Type and conversion failures throw typed exceptions from `@devscast/datazen/types`,
 including:
 
 - `UnknownColumnType`

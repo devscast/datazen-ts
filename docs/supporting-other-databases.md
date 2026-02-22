@@ -53,7 +53,7 @@ Implementation paths
 --------------------
 
 Path A: New driver, existing platform
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------------------
 
 1. Add a new folder under `src/driver/<your-driver>/`.
 2. Implement:
@@ -67,7 +67,7 @@ Path A: New driver, existing platform
    - `DRIVER_MAP` entry in `src/driver-manager.ts`
 
 Path B: New vendor/platform
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------
 
 1. Create `src/platforms/<vendor>-platform.ts` extending `AbstractPlatform`.
 2. Implement vendor SQL behavior:

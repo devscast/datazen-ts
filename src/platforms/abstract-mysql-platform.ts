@@ -1,9 +1,13 @@
+import type { Connection } from "../connection";
+import { MySQLSchemaManager } from "../schema/mysql-schema-manager";
 import { DefaultSelectSQLBuilder } from "../sql/builder/default-select-sql-builder";
 import { SelectSQLBuilder } from "../sql/builder/select-sql-builder";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
+import type { KeywordList } from "./keywords/keyword-list";
+import { MySQLKeywords } from "./keywords/mysql-keywords";
 
 export abstract class AbstractMySQLPlatform extends AbstractPlatform {
   protected initializeDatazenTypeMappings(): Record<string, string> {
@@ -126,6 +130,14 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
 
   public supportsColumnCollation(): boolean {
     return true;
+  }
+
+  protected createReservedKeywordsList(): KeywordList {
+    return new MySQLKeywords();
+  }
+
+  public createSchemaManager(connection: Connection): MySQLSchemaManager {
+    return new MySQLSchemaManager(connection, this);
   }
 
   public createSelectSQLBuilder(): SelectSQLBuilder {
