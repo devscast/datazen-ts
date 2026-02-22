@@ -20,6 +20,9 @@ import { Query } from "./query";
 import { ExpressionBuilder } from "./query/expression/expression-builder";
 import { QueryBuilder } from "./query/query-builder";
 import { Result } from "./result";
+import type { AbstractSchemaManager } from "./schema/abstract-schema-manager";
+import { DefaultSchemaManagerFactory } from "./schema/default-schema-manager-factory";
+import type { SchemaManagerFactory } from "./schema/schema-manager-factory";
 import { Parser, type SQLParser, type Visitor } from "./sql/parser";
 import { Statement, type StatementExecutor } from "./statement";
 import type {
@@ -48,6 +51,7 @@ export class Connection implements StatementExecutor {
   private exceptionConverter: ExceptionConverter | null = null;
   private databasePlatform: AbstractPlatform | null = null;
   private parser: SQLParser | null = null;
+  private readonly schemaManagerFactory: SchemaManagerFactory;
 
   constructor(
     private readonly params: DataMap,
@@ -55,6 +59,8 @@ export class Connection implements StatementExecutor {
     private readonly configuration: Configuration = new Configuration(),
   ) {
     this.autoCommit = this.configuration.getAutoCommit();
+    this.schemaManagerFactory =
+      this.configuration.getSchemaManagerFactory() ?? new DefaultSchemaManagerFactory();
   }
 
   public getParams(): DataMap {
@@ -482,6 +488,10 @@ export class Connection implements StatementExecutor {
     } catch (error) {
       throw this.convertException(error, "getNativeConnection");
     }
+  }
+
+  public createSchemaManager(): AbstractSchemaManager {
+    return this.schemaManagerFactory.createSchemaManager(this);
   }
 
   private getNestedTransactionSavePointName(level: number): string {

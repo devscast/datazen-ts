@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { LockMode } from "../../lock-mode";
 import { AbstractPlatform } from "../../platforms/abstract-platform";
 import { DB2Platform } from "../../platforms/db2-platform";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
@@ -90,10 +91,10 @@ describe("Platform parity extensions", () => {
   it("applies SQL Server lock hints and identifier quoting", () => {
     const platform = new SQLServerPlatform();
 
-    expect(platform.appendLockHint("users u", "pessimistic_read")).toBe(
+    expect(platform.appendLockHint("users u", LockMode.PESSIMISTIC_READ)).toBe(
       "users u WITH (HOLDLOCK, ROWLOCK)",
     );
-    expect(platform.appendLockHint("users u", "pessimistic_write")).toBe(
+    expect(platform.appendLockHint("users u", LockMode.PESSIMISTIC_WRITE)).toBe(
       "users u WITH (UPDLOCK, ROWLOCK)",
     );
     expect(platform.quoteSingleIdentifier("a]b")).toBe("[a]]b]");

@@ -1,11 +1,17 @@
+import type { Connection } from "../connection";
 import { LockMode } from "../lock-mode";
+import { SQLServerSchemaManager } from "../schema/sql-server-schema-manager";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
+import type { KeywordList } from "./keywords/keyword-list";
+import { SQLServerKeywords } from "./keywords/sql-server-keywords";
 import { TrimMode } from "./trim-mode";
 
 export class SQLServerPlatform extends AbstractPlatform {
+  public static readonly OPTION_DEFAULT_CONSTRAINT_NAME = "default_constraint_name";
+
   protected initializeDatazenTypeMappings(): Record<string, string> {
     return {
       bigint: Types.BIGINT,
@@ -83,6 +89,14 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   public supportsSequences(): boolean {
     return true;
+  }
+
+  protected createReservedKeywordsList(): KeywordList {
+    return new SQLServerKeywords();
+  }
+
+  public createSchemaManager(connection: Connection): SQLServerSchemaManager {
+    return new SQLServerSchemaManager(connection, this);
   }
 
   public getLocateExpression(
@@ -196,12 +210,12 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   public appendLockHint(fromClause: string, lockMode: LockMode): string {
     switch (lockMode) {
-      case "none":
-      case "optimistic":
+      case LockMode.NONE:
+      case LockMode.OPTIMISTIC:
         return fromClause;
-      case "pessimistic_read":
+      case LockMode.PESSIMISTIC_READ:
         return `${fromClause} WITH (HOLDLOCK, ROWLOCK)`;
-      case "pessimistic_write":
+      case LockMode.PESSIMISTIC_WRITE:
         return `${fromClause} WITH (UPDLOCK, ROWLOCK)`;
     }
   }

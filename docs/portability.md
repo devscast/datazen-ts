@@ -16,12 +16,7 @@ The portability middleware currently targets result normalization concerns:
 - Right-trim of string values
 - Column name case normalization (lower/upper)
 
-Implemented in:
-
-- `src/portability/middleware.ts`
-- `src/portability/driver.ts`
-- `src/portability/connection.ts`
-- `src/portability/converter.ts`
+Exposed via the `@devscast/datazen/portability` namespace (`Middleware`, `Driver`, `Connection`, `Converter`).
 
 Connection Wrapper
 ------------------
@@ -33,8 +28,8 @@ import {
   ColumnCase,
   Configuration,
   DriverManager,
-  Portability,
 } from "@devscast/datazen";
+import * as Portability from "@devscast/datazen/portability";
 
 const configuration = new Configuration().addMiddleware(
   new Portability.Middleware(
@@ -66,7 +61,7 @@ Enable only the flags you need.
 Platform Layer
 --------------
 
-SQL portability is handled separately by platform classes (`src/platforms/*`):
+SQL portability is handled separately by platform classes (`@devscast/datazen/platforms`):
 
 - SQL function and expression generation
 - limit/offset adaptation
@@ -79,7 +74,7 @@ matters.
 Platform Optimizations
 ----------------------
 
-`src/portability/optimize-flags.ts` applies vendor-specific optimization masks.
+`OptimizeFlags` from `@devscast/datazen/portability` applies vendor-specific optimization masks.
 Example: Oracle already treats empty strings specially, so the
 `EMPTY_TO_NULL` portability flag is masked out for Oracle.
 
@@ -92,6 +87,6 @@ In this port, schema/keyword-list modules are not implemented yet.
 Related Modules
 ---------------
 
-- Types portability/conversion: `src/types/*`
-- Parameter style and list expansion portability: `src/expand-array-parameters.ts`
-- SQL parsing support: `src/sql/parser.ts`
+- Types portability/conversion: `@devscast/datazen/types`
+- Parameter style and list expansion portability: `ExpandArrayParameters` from `@devscast/datazen`
+- SQL parsing support: `@devscast/datazen/sql`

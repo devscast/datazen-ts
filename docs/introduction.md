@@ -23,7 +23,7 @@ Platform abstractions currently shipped:
 - Oracle (platform-only)
 - Db2 (platform-only)
 
-For runtime caveats and scope notes, see `docs/known-vendor-issues.md`.
+For runtime caveats and scope notes, see [Known Vendor Issues](./known-vendor-issues.md).
 
 DBAL-first, ORM-independent
 ---------------------------

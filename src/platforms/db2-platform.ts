@@ -1,3 +1,5 @@
+import type { Connection } from "../connection";
+import { DB2SchemaManager } from "../schema/db2-schema-manager";
 import { DefaultSelectSQLBuilder } from "../sql/builder/default-select-sql-builder";
 import { SelectSQLBuilder } from "../sql/builder/select-sql-builder";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
@@ -5,6 +7,8 @@ import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
 import { NotSupported } from "./exception/not-supported";
+import { DB2Keywords } from "./keywords/db2-keywords";
+import type { KeywordList } from "./keywords/keyword-list";
 
 export class DB2Platform extends AbstractPlatform {
   protected initializeDatazenTypeMappings(): Record<string, string> {
@@ -105,6 +109,14 @@ export class DB2Platform extends AbstractPlatform {
 
   public supportsSavepoints(): boolean {
     return false;
+  }
+
+  protected createReservedKeywordsList(): KeywordList {
+    return new DB2Keywords();
+  }
+
+  public createSchemaManager(connection: Connection): DB2SchemaManager {
+    return new DB2SchemaManager(connection, this);
   }
 
   public getDummySelectSQL(expression = "1"): string {
