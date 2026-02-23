@@ -11,12 +11,17 @@ Runtime drivers currently implemented:
 
 - MySQL (`mysql2`)
 - Microsoft SQL Server (`mssql`)
+- PostgreSQL (`pg`)
+- SQLite (`sqlite3`)
+
+MariaDB runtime support uses the `mysql2` adapter and selects MariaDB platform
+variants when `serverVersion` is configured.
 
 Platform classes also exist for Oracle and Db2, but runtime drivers for those
 vendors are not implemented yet in this port.
 
-MySQL (mysql2)
---------------
+MySQL / MariaDB (mysql2)
+------------------------
 
 DateTimeTz behavior
 -------------------
@@ -121,12 +126,48 @@ Runtime support note
 No Db2 runtime driver adapter is currently shipped in this port, so behavior
 here applies to platform SQL/type logic only.
 
-PostgreSQL, MariaDB, SQLite
----------------------------
+MariaDB variant selection
+-------------------------
 
-The current Datazen port does not ship runtime drivers/platform classes for
-these vendors yet, so Doctrine-specific issues for these databases are not
-applicable to current runtime support.
+When `serverVersion` (or `primary.serverVersion`) is provided and identifies a
+MariaDB server, the `mysql2` driver selects a MariaDB platform variant class.
+
+Practical impact:
+
+- SQL/type behavior can differ from MySQL-specific defaults when version info is configured;
+- without configured version info, Datazen may fall back to a base MySQL platform class.
+
+PostgreSQL (pg)
+---------------
+
+Runtime support note
+--------------------
+
+The `pg` adapter and PostgreSQL platform classes are shipped in this port,
+including best-effort PostgreSQL major-version platform selection when
+`serverVersion` is configured.
+
+Coverage note
+-------------
+
+This page does not yet catalog PostgreSQL-specific runtime caveats as
+comprehensively as MySQL/MSSQL. Validate vendor-specific behavior in integration
+tests against your target PostgreSQL version.
+
+SQLite (sqlite3)
+----------------
+
+Runtime support note
+--------------------
+
+The `sqlite3` adapter and `SQLitePlatform` are shipped in this port.
+
+Coverage note
+-------------
+
+This page does not yet catalog SQLite-specific runtime caveats comprehensively.
+Validate schema/DDL and type behavior in integration tests against your target
+SQLite build/version.
 
 Workarounds and Recommendations
 -------------------------------

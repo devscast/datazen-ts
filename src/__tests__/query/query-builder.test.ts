@@ -2,25 +2,21 @@ import { describe, expect, it } from "vitest";
 
 import { ArrayParameterType } from "../../array-parameter-type";
 import { Connection } from "../../connection";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import { DriverException } from "../../exception/index";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
+import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { PlaceHolder, QueryBuilder } from "../../query/query-builder";
 import { QueryException } from "../../query/query-exception";
 import { UnionType } from "../../query/union-type";
 import { Result } from "../../result";
-import type { CompiledQuery, QueryParameterTypes, QueryParameters } from "../../types";
+import type { QueryParameterTypes, QueryParameters } from "./query";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -35,12 +31,27 @@ class NoopExceptionConverter implements ExceptionConverter {
 }
 
 class NoopDriverConnection implements DriverConnection {
-  public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
-    return { rows: [] };
+  public async prepare(_sql: string) {
+    return {
+      bindValue: () => undefined,
+      execute: async () => new ArrayResult([], [], 0),
+    };
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    return { affectedRows: 0 };
+  public async query(_sql: string) {
+    return new ArrayResult([], [], 0);
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(_sql: string): Promise<number | string> {
+    return 0;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 0;
   }
 
   public async beginTransaction(): Promise<void> {}
@@ -109,9 +120,7 @@ class SpyExecutionConnection extends Connection {
     types: QueryParameterTypes = [],
   ): Promise<Result> {
     this.queryCalls.push({ params, sql, types });
-    return new Result({
-      rows: [...this.queryRows],
-    });
+    return new Result(new ArrayResult([...this.queryRows]));
   }
 
   public override async executeStatement(

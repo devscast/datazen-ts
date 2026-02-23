@@ -1,5 +1,5 @@
 import type { AbstractPlatform } from "../platforms/abstract-platform";
-import { InvalidUniqueConstraintDefinition } from "./exception/index";
+import { InvalidUniqueConstraintDefinition } from "./exception/invalid-unique-constraint-definition";
 import { Identifier } from "./identifier";
 import { UniqueConstraintEditor } from "./unique-constraint-editor";
 

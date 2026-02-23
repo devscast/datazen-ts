@@ -1,51 +1,57 @@
-import type { DriverConnection, DriverExecutionResult, DriverQueryResult } from "../../driver";
-import { DbalException, InvalidParameterException } from "../../exception/index";
-import type { CompiledQuery } from "../../types";
+import { ArrayResult } from "../array-result";
+import type { Connection as DriverConnection } from "../connection";
+import { NoIdentityValue } from "../exception/no-identity-value";
+import type { Result as DriverResult } from "../result";
+import type { Statement as DriverStatement } from "../statement";
+import { MySQL2Statement } from "./statement";
 import type { MySQL2ConnectionLike, MySQL2PoolLike } from "./types";
 
 export class MySQL2Connection implements DriverConnection {
   private transactionConnection: MySQL2ConnectionLike | null = null;
+  private lastInsertIdValue: number | string | null = null;
 
   constructor(
     private readonly client: MySQL2PoolLike | MySQL2ConnectionLike,
     private readonly ownsClient: boolean,
   ) {}
 
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
-    const parameters = this.toPositionalParameters(query.parameters);
-    const payload = await this.executeRaw(query.sql, parameters);
-
-    const rows = this.toRows(payload);
-    const firstRow = rows[0];
-
-    return {
-      columns: firstRow === undefined ? [] : Object.keys(firstRow),
-      rowCount: rows.length,
-      rows,
-    };
+  public async prepare(sql: string): Promise<DriverStatement> {
+    return new MySQL2Statement(this, sql);
   }
 
-  public async executeStatement(query: CompiledQuery): Promise<DriverExecutionResult> {
-    const parameters = this.toPositionalParameters(query.parameters);
-    const payload = await this.executeRaw(query.sql, parameters);
-    const metadata = this.toMetadata(payload);
+  public async query(sql: string): Promise<DriverResult> {
+    const payload = await this.executeRaw(sql, []);
+    return this.toDriverResult(payload);
+  }
 
-    return {
-      affectedRows: metadata.affectedRows,
-      insertId: metadata.insertId,
-    };
+  public quote(value: string): string {
+    return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
+    const payload = await this.executeRaw(sql, []);
+    const metadata = this.toMetadata(payload);
+    this.lastInsertIdValue = metadata.insertId;
+
+    return metadata.affectedRows;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    if (this.lastInsertIdValue === null) {
+      throw NoIdentityValue.new();
+    }
+
+    return this.lastInsertIdValue;
   }
 
   public async beginTransaction(): Promise<void> {
     if (this.transactionConnection !== null) {
-      throw new DbalException("A transaction is already active on this connection.");
+      throw new Error("A transaction is already active on this connection.");
     }
 
     const connection = await this.acquireTransactionConnection();
     if (connection.beginTransaction === undefined) {
-      throw new DbalException(
-        "The provided mysql2 connection does not support beginTransaction().",
-      );
+      throw new Error("The provided mysql2 connection does not support beginTransaction().");
     }
 
     await connection.beginTransaction();
@@ -55,11 +61,11 @@ export class MySQL2Connection implements DriverConnection {
   public async commit(): Promise<void> {
     const connection = this.transactionConnection;
     if (connection === null) {
-      throw new DbalException("No active transaction to commit.");
+      throw new Error("No active transaction to commit.");
     }
 
     if (connection.commit === undefined) {
-      throw new DbalException("The provided mysql2 connection does not support commit().");
+      throw new Error("The provided mysql2 connection does not support commit().");
     }
 
     try {
@@ -73,11 +79,11 @@ export class MySQL2Connection implements DriverConnection {
   public async rollBack(): Promise<void> {
     const connection = this.transactionConnection;
     if (connection === null) {
-      throw new DbalException("No active transaction to roll back.");
+      throw new Error("No active transaction to roll back.");
     }
 
     if (connection.rollback === undefined) {
-      throw new DbalException("The provided mysql2 connection does not support rollback().");
+      throw new Error("The provided mysql2 connection does not support rollback().");
     }
 
     try {
@@ -88,29 +94,12 @@ export class MySQL2Connection implements DriverConnection {
     }
   }
 
-  public async createSavepoint(name: string): Promise<void> {
-    await this.executeRaw(`SAVEPOINT ${name}`, []);
-  }
-
-  public async releaseSavepoint(name: string): Promise<void> {
-    await this.executeRaw(`RELEASE SAVEPOINT ${name}`, []);
-  }
-
-  public async rollbackSavepoint(name: string): Promise<void> {
-    await this.executeRaw(`ROLLBACK TO SAVEPOINT ${name}`, []);
-  }
-
-  public quote(value: string): string {
-    return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "''")}'`;
-  }
-
   public async getServerVersion(): Promise<string> {
-    const payload = await this.executeRaw("SELECT VERSION() AS version", []);
-    const rows = this.toRows(payload);
-    const firstRow = rows[0];
-    const version = firstRow?.version;
+    const result = await this.query("SELECT VERSION() AS version");
+    const version = result.fetchOne() ?? "unknown";
+    result.free();
 
-    return typeof version === "string" ? version : String(version ?? "unknown");
+    return typeof version === "string" ? version : String(version);
   }
 
   public async close(): Promise<void> {
@@ -126,6 +115,11 @@ export class MySQL2Connection implements DriverConnection {
 
   public getNativeConnection(): unknown {
     return this.transactionConnection ?? this.client;
+  }
+
+  public async executePrepared(sql: string, parameters: unknown[]): Promise<DriverResult> {
+    const payload = await this.executeRaw(sql, parameters);
+    return this.toDriverResult(payload);
   }
 
   private async acquireTransactionConnection(): Promise<MySQL2ConnectionLike> {
@@ -155,7 +149,7 @@ export class MySQL2Connection implements DriverConnection {
       return this.unwrapDriverResult(result);
     }
 
-    throw new DbalException("The provided mysql2 client does not expose query() or execute().");
+    throw new Error("The provided mysql2 client does not expose query() or execute().");
   }
 
   private unwrapDriverResult(result: unknown): unknown {
@@ -164,6 +158,24 @@ export class MySQL2Connection implements DriverConnection {
     }
 
     return result[0];
+  }
+
+  private toDriverResult(result: unknown): DriverResult {
+    const rows = this.toRows(result);
+    if (rows.length > 0) {
+      const firstRow = rows[0];
+
+      return new ArrayResult(
+        rows,
+        firstRow === undefined ? [] : Object.keys(firstRow),
+        rows.length,
+      );
+    }
+
+    const metadata = this.toMetadata(result);
+    this.lastInsertIdValue = metadata.insertId;
+
+    return new ArrayResult([], [], metadata.affectedRows);
   }
 
   private toRows(result: unknown): Array<Record<string, unknown>> {
@@ -206,15 +218,5 @@ export class MySQL2Connection implements DriverConnection {
       affectedRows: 0,
       insertId: null,
     };
-  }
-
-  private toPositionalParameters(parameters: CompiledQuery["parameters"]): unknown[] {
-    if (Array.isArray(parameters)) {
-      return parameters;
-    }
-
-    throw new InvalidParameterException(
-      "The mysql2 driver expects positional parameters after SQL compilation.",
-    );
   }
 }

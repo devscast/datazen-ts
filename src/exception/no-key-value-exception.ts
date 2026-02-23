@@ -1,7 +1,3 @@
-import { DbalException } from "./dbal-exception";
+import { NoKeyValue } from "./no-key-value";
 
-export class NoKeyValueException extends DbalException {
-  constructor(columnCount: number) {
-    super(`Cannot build key/value result from ${columnCount} column(s). At least 2 are required.`);
-  }
-}
+export class NoKeyValueException extends NoKeyValue {}

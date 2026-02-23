@@ -24,7 +24,10 @@ For SQL Server projects:
 bun add @devscast/datazen mssql
 ```
 
-`mysql2` and `mssql` are peer dependencies so applications control driver versions.
+Other supported runtime drivers include `pg` and `sqlite3`.
+
+`mysql2`, `mssql`, `pg`, and `sqlite3` are peer dependencies so applications
+control driver versions.
 
 ## Documentation
 

@@ -1,61 +1,36 @@
-import type { DriverConnection, DriverExecutionResult, DriverQueryResult } from "../driver";
-import type { CompiledQuery } from "../types";
+import type { Connection as DriverConnection } from "../driver/connection";
 import type { Logger } from "./logger";
+import { DriverStatementWrapper } from "./statement";
 
 export class Connection implements DriverConnection {
-  public readonly createSavepoint?: (name: string) => Promise<void>;
-  public readonly releaseSavepoint?: (name: string) => Promise<void>;
-  public readonly rollbackSavepoint?: (name: string) => Promise<void>;
-  public readonly quote?: (value: string) => string;
-
   constructor(
     private readonly connection: DriverConnection,
     private readonly logger: Logger,
-  ) {
-    if (this.connection.createSavepoint !== undefined) {
-      this.createSavepoint = async (name: string): Promise<void> => {
-        this.logger.debug("Creating savepoint {name}", { name });
-        await this.connection.createSavepoint?.(name);
-      };
-    }
+  ) {}
 
-    if (this.connection.releaseSavepoint !== undefined) {
-      this.releaseSavepoint = async (name: string): Promise<void> => {
-        this.logger.debug("Releasing savepoint {name}", { name });
-        await this.connection.releaseSavepoint?.(name);
-      };
-    }
+  public async prepare(sql: string): Promise<Awaited<ReturnType<DriverConnection["prepare"]>>> {
+    this.logger.debug("Preparing statement: {sql}", { sql });
 
-    if (this.connection.rollbackSavepoint !== undefined) {
-      this.rollbackSavepoint = async (name: string): Promise<void> => {
-        this.logger.debug("Rolling back savepoint {name}", { name });
-        await this.connection.rollbackSavepoint?.(name);
-      };
-    }
-
-    if (this.connection.quote !== undefined) {
-      this.quote = (value: string): string => this.connection.quote!(value);
-    }
+    const statement = await this.connection.prepare(sql);
+    return new DriverStatementWrapper(statement, this.logger, sql);
   }
 
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
-    this.logger.debug("Executing query: {sql} (parameters: {params}, types: {types})", {
-      params: query.parameters,
-      sql: query.sql,
-      types: query.types,
-    });
-
-    return this.connection.executeQuery(query);
+  public async query(sql: string): Promise<Awaited<ReturnType<DriverConnection["query"]>>> {
+    this.logger.debug("Executing query: {sql}", { sql });
+    return this.connection.query(sql);
   }
 
-  public async executeStatement(query: CompiledQuery): Promise<DriverExecutionResult> {
-    this.logger.debug("Executing statement: {sql} (parameters: {params}, types: {types})", {
-      params: query.parameters,
-      sql: query.sql,
-      types: query.types,
-    });
+  public quote(value: string): string {
+    return this.connection.quote(value);
+  }
 
-    return this.connection.executeStatement(query);
+  public async exec(sql: string): Promise<number | string> {
+    this.logger.debug("Executing statement: {sql}", { sql });
+    return this.connection.exec(sql);
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return this.connection.lastInsertId();
   }
 
   public async beginTransaction(): Promise<void> {
@@ -79,7 +54,8 @@ export class Connection implements DriverConnection {
 
   public async close(): Promise<void> {
     this.logger.info("Disconnecting");
-    await this.connection.close();
+    const closable = this.connection as DriverConnection & { close?: () => Promise<void> };
+    await closable.close?.();
   }
 
   public getNativeConnection(): unknown {

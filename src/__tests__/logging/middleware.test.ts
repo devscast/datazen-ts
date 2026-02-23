@@ -1,24 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
 import { DriverManager } from "../../driver-manager";
-import { DriverException } from "../../exception/index";
+import { DriverException } from "../../exception/driver-exception";
 import type { Logger } from "../../logging/logger";
 import { Middleware } from "../../logging/middleware";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import type { CompiledQuery } from "../../types";
+import type { CompiledQuery } from "./query";
 
 interface LogEntry {
   level: "debug" | "error" | "info" | "warn";
@@ -59,24 +55,55 @@ class NoopExceptionConverter implements ExceptionConverter {
 }
 
 class SpyConnection implements DriverConnection {
-  public readonly executedQueries: CompiledQuery[] = [];
-  public readonly executedStatements: CompiledQuery[] = [];
-  public readonly releasedSavepoints: string[] = [];
-  public readonly rolledBackSavepoints: string[] = [];
-  public readonly savepoints: string[] = [];
+  public readonly queriedSql: string[] = [];
+  public readonly execSql: string[] = [];
+  public readonly preparedExecutions: CompiledQuery[] = [];
   public beginCalls = 0;
   public closeCalls = 0;
   public commitCalls = 0;
   public rollBackCalls = 0;
 
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
-    this.executedQueries.push(query);
-    return { rows: [{ id: 1 }] };
+  public async prepare(sql: string) {
+    const boundValues = new Map<string | number, unknown>();
+    const boundTypes = new Map<string | number, unknown>();
+
+    return {
+      bindValue: (param: string | number, value: unknown, type?: unknown) => {
+        boundValues.set(param, value);
+        boundTypes.set(param, type);
+      },
+      execute: async () => {
+        const numericKeys = [...boundValues.keys()]
+          .filter((key): key is number => typeof key === "number")
+          .sort((a, b) => a - b);
+
+        this.preparedExecutions.push({
+          parameters: numericKeys.map((key) => boundValues.get(key)),
+          sql,
+          types: numericKeys.map((key) => boundTypes.get(key)),
+        });
+
+        return new ArrayResult([{ id: 1 }], ["id"], 1);
+      },
+    };
   }
 
-  public async executeStatement(query: CompiledQuery): Promise<DriverExecutionResult> {
-    this.executedStatements.push(query);
-    return { affectedRows: 1, insertId: 2 };
+  public async query(sql: string) {
+    this.queriedSql.push(sql);
+    return new ArrayResult([{ id: 1 }], ["id"], 1);
+  }
+
+  public quote(value: string): string {
+    return `<${value}>`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
+    this.execSql.push(sql);
+    return 1;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 2;
   }
 
   public async beginTransaction(): Promise<void> {
@@ -89,22 +116,6 @@ class SpyConnection implements DriverConnection {
 
   public async rollBack(): Promise<void> {
     this.rollBackCalls += 1;
-  }
-
-  public async createSavepoint(name: string): Promise<void> {
-    this.savepoints.push(name);
-  }
-
-  public async releaseSavepoint(name: string): Promise<void> {
-    this.releasedSavepoints.push(name);
-  }
-
-  public async rollbackSavepoint(name: string): Promise<void> {
-    this.rolledBackSavepoints.push(name);
-  }
-
-  public quote(value: string): string {
-    return `<${value}>`;
   }
 
   public async getServerVersion(): Promise<string> {
@@ -188,12 +199,12 @@ describe("Logging Middleware", () => {
       { id: ParameterType.INTEGER, name: ParameterType.STRING },
     );
 
-    expect(nativeConnection.executedQueries[0]).toEqual({
+    expect(nativeConnection.preparedExecutions[0]).toEqual({
       parameters: [1],
       sql: "SELECT ? AS id",
       types: [ParameterType.INTEGER],
     });
-    expect(nativeConnection.executedStatements[0]).toEqual({
+    expect(nativeConnection.preparedExecutions[1]).toEqual({
       parameters: ["alice", 1],
       sql: "UPDATE users SET name = ? WHERE id = ?",
       types: [ParameterType.STRING, ParameterType.INTEGER],
@@ -202,7 +213,9 @@ describe("Logging Middleware", () => {
     const queryLog = logger.entries.find(
       (entry) =>
         entry.level === "debug" &&
-        entry.message === "Executing query: {sql} (parameters: {params}, types: {types})",
+        entry.message ===
+          "Executing prepared statement: {sql} (parameters: {params}, types: {types})" &&
+        entry.context?.sql === "SELECT ? AS id",
     );
     expect(queryLog?.context).toEqual({
       params: [1],
@@ -213,7 +226,9 @@ describe("Logging Middleware", () => {
     const statementLog = logger.entries.find(
       (entry) =>
         entry.level === "debug" &&
-        entry.message === "Executing statement: {sql} (parameters: {params}, types: {types})",
+        entry.message ===
+          "Executing prepared statement: {sql} (parameters: {params}, types: {types})" &&
+        entry.context?.sql === "UPDATE users SET name = ? WHERE id = ?",
     );
     expect(statementLog?.context).toEqual({
       params: ["alice", 1],
@@ -243,9 +258,10 @@ describe("Logging Middleware", () => {
     expect(nativeConnection.beginCalls).toBe(1);
     expect(nativeConnection.commitCalls).toBe(1);
     expect(nativeConnection.rollBackCalls).toBe(0);
-    expect(nativeConnection.savepoints).toEqual(["DATAZEN_2"]);
-    expect(nativeConnection.rolledBackSavepoints).toEqual(["DATAZEN_2"]);
-    expect(nativeConnection.releasedSavepoints).toEqual([]);
+    expect(nativeConnection.execSql).toEqual([
+      "SAVEPOINT DATAZEN_2",
+      "ROLLBACK TO SAVEPOINT DATAZEN_2",
+    ]);
     expect(quoted).toBe("<value>");
     expect(nativeConnection.closeCalls).toBe(1);
 
@@ -255,9 +271,14 @@ describe("Logging Middleware", () => {
       message: "Beginning transaction",
     });
     expect(logger.entries).toContainEqual({
-      context: { name: "DATAZEN_2" },
+      context: { sql: "SAVEPOINT DATAZEN_2" },
       level: "debug",
-      message: "Rolling back savepoint {name}",
+      message: "Executing statement: {sql}",
+    });
+    expect(logger.entries).toContainEqual({
+      context: { sql: "ROLLBACK TO SAVEPOINT DATAZEN_2" },
+      level: "debug",
+      message: "Executing statement: {sql}",
     });
     expect(logger.entries).toContainEqual({
       context: undefined,

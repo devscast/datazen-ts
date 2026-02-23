@@ -1,0 +1,38 @@
+import type { Driver } from "../driver";
+import { InvalidPlatformVersion } from "../platforms/exception/invalid-platform-version";
+import { PostgreSQLPlatform } from "../platforms/postgre-sql-platform";
+import { PostgreSQL120Platform } from "../platforms/postgre-sql120-platform";
+import type { ServerVersionProvider } from "../server-version-provider";
+import type { ExceptionConverter as DriverExceptionConverter } from "./api/exception-converter";
+import { ExceptionConverter } from "./api/pgsql/exception-converter";
+
+export abstract class AbstractPostgreSQLDriver implements Driver {
+  public getDatabasePlatform(versionProvider: ServerVersionProvider): PostgreSQLPlatform {
+    const version = versionProvider.getServerVersion();
+    if (typeof version !== "string") {
+      return new PostgreSQLPlatform();
+    }
+
+    const match = /^(?<major>\d+)(?:\.(?<minor>\d+)(?:\.(?<patch>\d+))?)?/.exec(version);
+    if (match?.groups === undefined) {
+      throw InvalidPlatformVersion.new(version, "<major_version>.<minor_version>.<patch_version>");
+    }
+
+    const major = Number.parseInt(match.groups.major ?? "0", 10);
+    if (Number.isNaN(major)) {
+      throw InvalidPlatformVersion.new(version, "<major_version>.<minor_version>.<patch_version>");
+    }
+
+    if (major >= 12) {
+      return new PostgreSQL120Platform();
+    }
+
+    return new PostgreSQLPlatform();
+  }
+
+  public getExceptionConverter(): DriverExceptionConverter {
+    return new ExceptionConverter();
+  }
+
+  public abstract connect(params: Record<string, unknown>): ReturnType<Driver["connect"]>;
+}

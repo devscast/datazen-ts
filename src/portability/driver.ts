@@ -1,9 +1,5 @@
 import { ColumnCase } from "../column-case";
-import {
-  type DriverConnection,
-  type Driver as DriverInterface,
-  ParameterBindingStyle,
-} from "../driver";
+import { type DriverConnection, type Driver as DriverInterface } from "../driver";
 import type { ExceptionConverter } from "../driver/api/exception-converter";
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 import type { ServerVersionProvider } from "../server-version-provider";
@@ -22,14 +18,6 @@ export class Driver implements DriverInterface {
   ) {
     this.getDatabasePlatform = (versionProvider: ServerVersionProvider): AbstractPlatform =>
       this.driver.getDatabasePlatform(versionProvider);
-  }
-
-  public get name(): string {
-    return this.driver.name;
-  }
-
-  public get bindingStyle(): ParameterBindingStyle {
-    return this.driver.bindingStyle;
   }
 
   public async connect(params: Record<string, unknown>): Promise<DriverConnection> {

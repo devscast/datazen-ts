@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { PgConnection } from "../../driver/pg/connection";
 import type { PgQueryResultLike } from "../../driver/pg/types";
-import { DbalException, InvalidParameterException } from "../../exception/index";
+import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
 
 interface LoggedCall {
   parameters?: unknown[];
@@ -51,7 +51,7 @@ class FakePgPool {
 }
 
 describe("PgConnection", () => {
-  it("rewrites positional placeholders and normalizes query results", async () => {
+  it("rewrites positional placeholders in prepared statements and normalizes query results", async () => {
     const connection = new PgConnection(
       new FakePgClient(async (_sql, _params) => ({
         fields: [{ name: "id" }, { name: "name" }],
@@ -60,18 +60,15 @@ describe("PgConnection", () => {
       })),
       false,
     );
+    const statement = await connection.prepare(
+      "SELECT id, name FROM users WHERE id = ? AND status = ?",
+    );
+    statement.bindValue(1, 1);
+    statement.bindValue(2, "active");
 
-    const result = await connection.executeQuery({
-      parameters: [1, "active"],
-      sql: "SELECT id, name FROM users WHERE id = ? AND status = ?",
-      types: [],
-    });
-
-    expect(result).toEqual({
-      columns: ["id", "name"],
-      rowCount: 1,
-      rows: [{ id: 1, name: "Alice" }],
-    });
+    const result = await statement.execute();
+    expect(result.fetchAllAssociative()).toEqual([{ id: 1, name: "Alice" }]);
+    expect(result.rowCount()).toBe(1);
     const native = connection.getNativeConnection() as FakePgClient;
     expect(native.calls[0]).toEqual({
       parameters: [1, "active"],
@@ -79,16 +76,11 @@ describe("PgConnection", () => {
     });
   });
 
-  it("rejects named parameter payloads after compilation", async () => {
+  it("rejects named parameter binding", async () => {
     const connection = new PgConnection(new FakePgClient(async () => ({ rows: [] })), false);
+    const statement = await connection.prepare("SELECT * FROM users WHERE id = ?");
 
-    await expect(
-      connection.executeQuery({
-        parameters: { id: 1 },
-        sql: "SELECT * FROM users WHERE id = :id",
-        types: {},
-      }),
-    ).rejects.toThrow(InvalidParameterException);
+    expect(() => statement.bindValue("id", 1)).toThrow(InvalidParameterException);
   });
 
   it("uses a dedicated pooled client for transactions and releases it", async () => {
@@ -97,11 +89,10 @@ describe("PgConnection", () => {
     const connection = new PgConnection(pool, false);
 
     await connection.beginTransaction();
-    await connection.executeStatement({
-      parameters: [1],
-      sql: "UPDATE users SET active = ?",
-      types: [],
-    });
+    const statement = await connection.prepare("UPDATE users SET active = ?");
+    statement.bindValue(1, 1);
+    const result = await statement.execute();
+    expect(result.rowCount()).toBe(0);
     await connection.commit();
 
     expect(txClient.calls.map((call) => call.sql)).toEqual([
@@ -112,7 +103,7 @@ describe("PgConnection", () => {
     expect(txClient.released).toBe(1);
   });
 
-  it("supports savepoints, quoting and server version lookup", async () => {
+  it("supports query(), exec(), quoting and server version lookup", async () => {
     const client = new FakePgClient(async (sql) => {
       if (sql === "SHOW server_version") {
         return { rows: [{ server_version: "16.2" }] };
@@ -122,14 +113,12 @@ describe("PgConnection", () => {
     });
     const connection = new PgConnection(client, false);
 
-    await connection.createSavepoint("sp1");
-    await connection.releaseSavepoint("sp1");
-    await connection.rollbackSavepoint("sp1");
+    await connection.query("SELECT 1");
+    await connection.exec("UPDATE users SET active = TRUE");
 
-    expect(client.calls.slice(0, 3).map((call) => call.sql)).toEqual([
-      "SAVEPOINT sp1",
-      "RELEASE SAVEPOINT sp1",
-      "ROLLBACK TO SAVEPOINT sp1",
+    expect(client.calls.slice(0, 2).map((call) => call.sql)).toEqual([
+      "SELECT 1",
+      "UPDATE users SET active = TRUE",
     ]);
     expect(connection.quote("O'Reilly")).toBe("'O''Reilly'");
     await expect(connection.getServerVersion()).resolves.toBe("16.2");
@@ -141,7 +130,7 @@ describe("PgConnection", () => {
       false,
     );
 
-    await expect(connection.commit()).rejects.toThrow(DbalException);
-    await expect(connection.rollBack()).rejects.toThrow(DbalException);
+    await expect(connection.commit()).rejects.toThrow(Error);
+    await expect(connection.rollBack()).rejects.toThrow(Error);
   });
 });

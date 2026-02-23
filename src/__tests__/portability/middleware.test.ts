@@ -2,24 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { ColumnCase } from "../../column-case";
 import { Configuration } from "../../configuration";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
 import { DriverManager } from "../../driver-manager";
-import { DriverException } from "../../exception/index";
+import { DriverException } from "../../exception/driver-exception";
 import { OraclePlatform } from "../../platforms/oracle-platform";
 import { SQLServerPlatform } from "../../platforms/sql-server-platform";
 import { Connection } from "../../portability/connection";
 import { Middleware } from "../../portability/middleware";
-import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -34,18 +29,42 @@ class NoopExceptionConverter implements ExceptionConverter {
 }
 
 class SpyConnection implements DriverConnection {
-  public queryResult: DriverQueryResult;
+  public queryResult: { columns?: string[]; rows: Array<Record<string, unknown>> };
 
-  constructor(queryResult: DriverQueryResult) {
+  constructor(queryResult: { columns?: string[]; rows: Array<Record<string, unknown>> }) {
     this.queryResult = queryResult;
   }
 
-  public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
-    return this.queryResult;
+  public async prepare(_sql: string) {
+    return {
+      bindValue: () => undefined,
+      execute: async () =>
+        new ArrayResult(
+          this.queryResult.rows,
+          this.queryResult.columns ?? [],
+          this.queryResult.rows.length,
+        ),
+    };
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    return { affectedRows: 1 };
+  public async query(_sql: string) {
+    return new ArrayResult(
+      this.queryResult.rows,
+      this.queryResult.columns ?? [],
+      this.queryResult.rows.length,
+    );
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(_sql: string): Promise<number | string> {
+    return 1;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 1;
   }
 
   public async beginTransaction(): Promise<void> {}

@@ -2,23 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import { ArrayParameterType } from "../../array-parameter-type";
 import { Connection } from "../../connection";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
 import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import type { CompiledQuery } from "../../types";
 import { DateType } from "../../types/date-type";
+import { registerBuiltInTypes } from "../../types/register-built-in-types";
 import { Types } from "../../types/types";
+import type { CompiledQuery } from "./query";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -36,14 +33,67 @@ class CaptureConnection implements DriverConnection {
   public latestQuery: CompiledQuery | null = null;
   public latestStatement: CompiledQuery | null = null;
 
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
-    this.latestQuery = query;
-    return { rows: [{ ok: true }] };
+  public async prepare(sql: string) {
+    const boundValues = new Map<string | number, unknown>();
+    const boundTypes = new Map<string | number, ParameterType | undefined>();
+
+    return {
+      bindValue: (param: string | number, value: unknown, type?: ParameterType) => {
+        boundValues.set(param, value);
+        boundTypes.set(param, type);
+      },
+      execute: async () => {
+        const numericKeys = [...boundValues.keys()]
+          .filter((key): key is number => typeof key === "number")
+          .sort((a, b) => a - b);
+        const stringKeys = [...boundValues.keys()].filter(
+          (key): key is string => typeof key === "string",
+        );
+
+        const compiled =
+          stringKeys.length > 0
+            ? {
+                sql,
+                parameters: Object.fromEntries(
+                  stringKeys.map((key) => [key, boundValues.get(key)]),
+                ),
+                types: Object.fromEntries(
+                  stringKeys.map((key) => [key, boundTypes.get(key) ?? ParameterType.STRING]),
+                ),
+              }
+            : {
+                sql,
+                parameters: numericKeys.map((key) => boundValues.get(key)),
+                types: numericKeys.map((key) => boundTypes.get(key) ?? ParameterType.STRING),
+              };
+
+        if (/^\s*select\b/i.test(sql)) {
+          this.latestQuery = compiled;
+          return new ArrayResult([{ ok: true }], ["ok"], 1);
+        }
+
+        this.latestStatement = compiled;
+        return new ArrayResult([], [], 1);
+      },
+    };
   }
 
-  public async executeStatement(query: CompiledQuery): Promise<DriverExecutionResult> {
-    this.latestStatement = query;
-    return { affectedRows: 1, insertId: null };
+  public async query(sql: string) {
+    this.latestQuery = { sql, parameters: [], types: [] };
+    return new ArrayResult([{ ok: true }], ["ok"], 1);
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
+    this.latestStatement = { sql, parameters: [], types: [] };
+    return 1;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 1;
   }
 
   public async beginTransaction(): Promise<void> {}
@@ -79,6 +129,8 @@ class SpyDriver implements Driver {
 }
 
 describe("Connection type conversion", () => {
+  registerBuiltInTypes();
+
   it("converts Datazen Type names to driver values and binding types", async () => {
     const capture = new CaptureConnection();
     const connection = new Connection({}, new SpyDriver(capture));

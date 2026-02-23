@@ -1,16 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { ExceptionConverter as MySQLExceptionConverter } from "../../driver/api/mysql/exception-converter";
-import { ExceptionConverter as SQLSrvExceptionConverter } from "../../driver/api/sqlsrv/exception-converter";
-import {
-  ConnectionException,
-  DeadlockException,
-  DriverException,
-  ForeignKeyConstraintViolationException,
-  NotNullConstraintViolationException,
-  SqlSyntaxException,
-  UniqueConstraintViolationException,
-} from "../../exception/index";
+import { ExceptionConverter as SQLSrvExceptionConverter } from "../../driver/api/sql-server/exception-converter";
+import { ConnectionException } from "../../exception/connection-exception";
+import { DeadlockException } from "../../exception/deadlock-exception";
+import { DriverException } from "../../exception/driver-exception";
+import { ForeignKeyConstraintViolationException } from "../../exception/foreign-key-constraint-violation-exception";
+import { NotNullConstraintViolationException } from "../../exception/not-null-constraint-violation-exception";
+import { SyntaxErrorException } from "../../exception/syntax-error-exception";
+import { UniqueConstraintViolationException } from "../../exception/unique-constraint-violation-exception";
 import { Query } from "../../query";
 
 describe("Driver exception converters", () => {
@@ -90,7 +88,7 @@ describe("Driver exception converters", () => {
     });
 
     expect(converter.convert(syntaxError, { operation: "executeQuery" })).toBeInstanceOf(
-      SqlSyntaxException,
+      SyntaxErrorException,
     );
     expect(converter.convert(uniqueError, { operation: "executeStatement" })).toBeInstanceOf(
       UniqueConstraintViolationException,

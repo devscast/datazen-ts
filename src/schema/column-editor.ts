@@ -1,6 +1,6 @@
 import { Type } from "../types/type";
 import { Column } from "./column";
-import { InvalidColumnDefinition } from "./exception/index";
+import { InvalidColumnDefinition } from "./exception/invalid-column-definition";
 
 export class ColumnEditor {
   private name: string | null = null;

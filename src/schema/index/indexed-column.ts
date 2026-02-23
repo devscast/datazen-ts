@@ -1,4 +1,4 @@
-import { InvalidIndexDefinition } from "../exception";
+import { InvalidIndexDefinition } from "../exception/invalid-index-definition";
 import { UnqualifiedName } from "../name/unqualified-name";
 
 export class IndexedColumn {

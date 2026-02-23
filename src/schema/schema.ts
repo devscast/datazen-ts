@@ -1,11 +1,9 @@
 import { AbstractAsset } from "./abstract-asset";
-import {
-  NamespaceAlreadyExists,
-  SequenceAlreadyExists,
-  SequenceDoesNotExist,
-  TableAlreadyExists,
-  TableDoesNotExist,
-} from "./exception/index";
+import { NamespaceAlreadyExists } from "./exception/namespace-already-exists";
+import { SequenceAlreadyExists } from "./exception/sequence-already-exists";
+import { SequenceDoesNotExist } from "./exception/sequence-does-not-exist";
+import { TableAlreadyExists } from "./exception/table-already-exists";
+import { TableDoesNotExist } from "./exception/table-does-not-exist";
 import { SchemaConfig } from "./schema-config";
 import { Sequence } from "./sequence";
 import { Table } from "./table";

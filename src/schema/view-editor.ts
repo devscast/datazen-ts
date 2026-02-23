@@ -1,4 +1,4 @@
-import { InvalidViewDefinition } from "./exception/index";
+import { InvalidViewDefinition } from "./exception/invalid-view-definition";
 import { View } from "./view";
 
 export class ViewEditor {

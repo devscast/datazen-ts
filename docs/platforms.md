@@ -18,10 +18,7 @@ const platform = conn.getDatabasePlatform();
 `Connection` resolves the platform in this order:
 
 1. `params.platform` when it is an `AbstractPlatform` instance
-2. `driver.getDatabasePlatform()` when provided by the active driver
-3. Driver-name fallback (`mysql2` -> `MySQLPlatform`, `mssql` -> `SQLServerPlatform`)
-
-If none of these applies, Datazen throws a DBAL exception.
+2. `driver.getDatabasePlatform(versionProvider)` provided by the active driver
 
 Available Platform Classes
 --------------------------
@@ -29,7 +26,17 @@ Available Platform Classes
 Currently implemented in this port:
 
 - `MySQLPlatform`
+- `MySQL80Platform`
+- `MySQL84Platform`
+- `MariaDBPlatform`
+- `MariaDB1052Platform`
+- `MariaDB1060Platform`
+- `MariaDB1010Platform`
+- `MariaDB110700Platform`
 - `SQLServerPlatform`
+- `PostgreSQLPlatform`
+- `PostgreSQL120Platform`
+- `SQLitePlatform`
 - `OraclePlatform`
 - `DB2Platform`
 - `AbstractMySQLPlatform` (base class)
@@ -37,11 +44,15 @@ Currently implemented in this port:
 
 Driver defaults:
 
-- `mysql2` driver uses `MySQLPlatform`
+- `mysql2` driver uses MySQL/MariaDB platform variants (best effort via configured `serverVersion`)
 - `mssql` driver uses `SQLServerPlatform`
+- `pg` driver uses PostgreSQL platform variants (best effort via configured `serverVersion`)
+- `sqlite3` driver uses `SQLitePlatform`
 
-Unlike Doctrine DBAL, version-specific platform subclasses and automatic server
-version-based platform switching are not implemented yet.
+Unlike Doctrine DBAL, full automatic platform detection from a live async server
+connection is not implemented yet. Versioned platform selection in Datazen is
+best effort and primarily driven by configured `serverVersion` /
+`primary.serverVersion`.
 
 What Platforms Are Responsible For
 ----------------------------------
@@ -151,4 +162,4 @@ Not Implemented
 
 Schema-manager-driven platform features are available in this port, but full
 Doctrine parity is still incomplete across vendors and version-specific
-platform variants.
+platform variants and runtime detection behavior.

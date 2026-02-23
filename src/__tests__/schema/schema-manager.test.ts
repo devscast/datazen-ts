@@ -2,22 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
 import { Connection } from "../../connection";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
 import { DriverException } from "../../exception/driver-exception";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { AbstractSchemaManager } from "../../schema/abstract-schema-manager";
 import { SchemaManagerFactory } from "../../schema/schema-manager-factory";
-import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -32,24 +27,35 @@ class NoopExceptionConverter implements ExceptionConverter {
 }
 
 class SchemaSpyConnection implements DriverConnection {
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
-    if (query.sql.includes("TABLE_TYPE = 'BASE TABLE'")) {
-      return {
-        rows: [{ TABLE_NAME: "users" }, { TABLE_NAME: "posts" }],
-      };
-    }
-
-    if (query.sql.includes("TABLE_TYPE = 'VIEW'")) {
-      return {
-        rows: [{ TABLE_NAME: "active_users" }],
-      };
-    }
-
-    return { rows: [] };
+  public async prepare(sql: string) {
+    return {
+      bindValue: () => undefined,
+      execute: async () => this.query(sql),
+    };
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    return { affectedRows: 0, insertId: null };
+  public async query(sql: string) {
+    if (sql.includes("TABLE_TYPE = 'BASE TABLE'")) {
+      return new ArrayResult([{ TABLE_NAME: "users" }, { TABLE_NAME: "posts" }], ["TABLE_NAME"]);
+    }
+
+    if (sql.includes("TABLE_TYPE = 'VIEW'")) {
+      return new ArrayResult([{ TABLE_NAME: "active_users" }], ["TABLE_NAME"]);
+    }
+
+    return new ArrayResult([], [], 0);
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(_sql: string): Promise<number | string> {
+    return 0;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 0;
   }
 
   public async beginTransaction(): Promise<void> {}

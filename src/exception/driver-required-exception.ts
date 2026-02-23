@@ -1,7 +1,3 @@
-import { DbalException } from "./dbal-exception";
+import { DriverRequired } from "./driver-required";
 
-export class DriverRequiredException extends DbalException {
-  constructor() {
-    super("Either `driver`, `driverClass`, or `driverInstance` must be provided.");
-  }
-}
+export class DriverRequiredException extends DriverRequired {}

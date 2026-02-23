@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { AbstractPlatform } from "../../platforms/abstract-platform";
 import { Column } from "../../schema/column";
-import { IncomparableNames, InvalidIndexDefinition } from "../../schema/exception";
+import { IncomparableNames } from "../../schema/exception/incomparable-names";
+import { InvalidIndexDefinition } from "../../schema/exception/invalid-index-definition";
 import { Deferrability } from "../../schema/foreign-key-constraint/deferrability";
 import { MatchType } from "../../schema/foreign-key-constraint/match-type";
 import { ReferentialAction } from "../../schema/foreign-key-constraint/referential-action";
-import { IndexType, IndexedColumn } from "../../schema/index/index";
+import { IndexType } from "../../schema/index/index-type";
+import { IndexedColumn } from "../../schema/index/indexed-column";
 import { ForeignKeyConstraintColumnMetadataProcessor } from "../../schema/introspection/metadata-processor/foreign-key-constraint-column-metadata-processor";
 import { IndexColumnMetadataProcessor } from "../../schema/introspection/metadata-processor/index-column-metadata-processor";
 import { PrimaryKeyConstraintColumnMetadataProcessor } from "../../schema/introspection/metadata-processor/primary-key-constraint-column-metadata-processor";

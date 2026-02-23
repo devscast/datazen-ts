@@ -1,22 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { Connection } from "../../connection";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { StaticServerVersionProvider } from "../../connection/static-server-version-provider";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import { DriverException } from "../../exception/index";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
+import { DriverException } from "../../exception/driver-exception";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import type { ServerVersionProvider } from "../../server-version-provider";
-import { StaticServerVersionProvider } from "../../static-server-version-provider";
-import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -31,12 +26,27 @@ class NoopExceptionConverter implements ExceptionConverter {
 }
 
 class PlatformSpyConnection implements DriverConnection {
-  public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
-    return { rows: [] };
+  public async prepare(_sql: string) {
+    return {
+      bindValue: () => undefined,
+      execute: async () => new ArrayResult([], [], 0),
+    };
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    return { affectedRows: 0 };
+  public async query(_sql: string) {
+    return new ArrayResult([], [], 0);
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(_sql: string): Promise<number | string> {
+    return 0;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 0;
   }
 
   public async beginTransaction(): Promise<void> {}

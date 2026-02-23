@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { StaticServerVersionProvider } from "../../static-server-version-provider";
+import { StaticServerVersionProvider } from "../../connection/static-server-version-provider";
 
 describe("StaticServerVersionProvider", () => {
   it("returns the configured server version", async () => {

@@ -54,7 +54,8 @@ const conn = DriverManager.getConnection({
 ```
 
 Important: built-in drivers need an already-created low-level client (`pool`,
-`connection`, or `client`). DSN parsing does not create a driver client.
+`connection`, or `client`; `sqlite3` may also use `database`). DSN parsing does
+not create a driver client.
 
 Driver
 ------
@@ -69,6 +70,8 @@ Built-in drivers currently available:
 
 - `mysql2`
 - `mssql`
+- `pg`
+- `sqlite3`
 
 There is no `wrapperClass` option in this port.
 
@@ -77,7 +80,7 @@ Connection Parameters
 
 Core manager-level params:
 
-- `driver?: "mysql2" | "mssql"`
+- `driver?: "mysql2" | "mssql" | "pg" | "sqlite3"`
 - `driverClass?: new () => Driver`
 - `driverInstance?: Driver`
 - `platform?: AbstractPlatform` (optional platform override)
@@ -108,6 +111,33 @@ At least one is required:
 Optional ownership flags:
 
 - `ownsPool?: boolean`
+- `ownsClient?: boolean`
+
+PostgreSQL (pg) Driver Params
+-----------------------------
+
+At least one is required:
+
+- `pool`
+- `connection`
+- `client`
+
+Optional ownership flags:
+
+- `ownsPool?: boolean`
+- `ownsClient?: boolean`
+
+SQLite3 Driver Params
+---------------------
+
+At least one is required:
+
+- `database`
+- `connection`
+- `client`
+
+Optional ownership flags:
+
 - `ownsClient?: boolean`
 
 Notes:
@@ -199,11 +229,50 @@ Platform Selection
 Platform resolution order:
 
 1. `params.platform` when provided
-2. Driver-provided platform (`mysql2` -> `MySQLPlatform`, `mssql` -> `SQLServerPlatform`)
-3. Driver-name fallback in `Connection`
+2. Driver-provided platform (`mysql2` -> MySQL/MariaDB family, `mssql` -> `SQLServerPlatform`, `pg` -> PostgreSQL family, `sqlite3` -> `SQLitePlatform`)
 
-Unlike Doctrine, version-specific automatic platform detection is not implemented
-in this port.
+Version-based platform selection is partially implemented:
+
+- `mysql2` resolves MySQL/MariaDB platform variants from configured `serverVersion` / `primary.serverVersion`
+- `pg` resolves PostgreSQL major-version variants from configured `serverVersion` / `primary.serverVersion`
+- `mssql` and `sqlite3` currently return fixed platform classes
+
+Unlike Doctrine, full automatic version detection from a live async connection is
+not available through the current synchronous `Driver#getDatabasePlatform()`
+contract, so unconfigured connections fall back to base platform classes.
+
+Primary / Read-Replica Connection
+---------------------------------
+
+Datazen now provides a Doctrine-inspired `PrimaryReadReplicaConnection` wrapper
+for routing reads to replicas and writes/transactions to the primary.
+
+Create it through `DriverManager`:
+
+```ts
+import { DriverManager } from "@devscast/datazen";
+
+const conn = DriverManager.getPrimaryReadReplicaConnection({
+  driver: "mysql2",
+  primary: { pool: primaryPool },
+  replica: { pool: replicaPool },
+});
+```
+
+Supported params:
+
+- `primary` (required): connection params object for the primary node
+- `replica` (optional): one replica params object
+- `replicas` (optional): array of replica params objects
+
+Behavior notes:
+
+- `executeQuery()` reads use a replica by default
+- writes (`executeStatement()`) and transactions are routed to primary
+- after writing or starting a transaction, reads stick to primary until you
+  explicitly call `ensureConnectedToReplica()`
+- helper methods: `ensureConnectedToPrimary()`, `ensureConnectedToReplica()`,
+  `isConnectedToPrimary()`, `isConnectedToReplica()`
 
 Not Implemented
 ---------------

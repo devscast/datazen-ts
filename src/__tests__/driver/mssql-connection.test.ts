@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { MSSQLConnection } from "../../driver/mssql/connection";
-import { DbalException, InvalidParameterException } from "../../exception/index";
 
 interface QueryPayload {
   recordset?: Array<Record<string, unknown>>;
@@ -76,58 +75,35 @@ class FakePool {
 }
 
 describe("MSSQLConnection", () => {
-  it("executes named-parameter queries and normalizes row output", async () => {
+  it("executes named-parameter prepared queries and normalizes row output", async () => {
     const pool = new FakePool(async () => ({
       recordset: [{ id: 1, name: "Alice" }],
       rowsAffected: [1],
     }));
     const connection = new MSSQLConnection(pool, false);
+    const statement = await connection.prepare(
+      "SELECT * FROM users WHERE id = @p1 AND status = @p2",
+    );
+    statement.bindValue("id", 1);
+    statement.bindValue("status", "active");
 
-    const result = await connection.executeQuery({
-      parameters: { id: 1, status: "active" },
-      sql: "SELECT * FROM users WHERE id = @p1 AND status = @p2",
-      types: { p1: "INTEGER", p2: "STRING" },
-    });
+    const result = await statement.execute();
 
     expect(pool.requestInstance.inputs).toEqual([
       { name: "id", value: 1 },
       { name: "status", value: "active" },
     ]);
-    expect(result).toEqual({
-      columns: ["id", "name"],
-      rowCount: 1,
-      rows: [{ id: 1, name: "Alice" }],
-    });
+    expect(result.fetchAllAssociative()).toEqual([{ id: 1, name: "Alice" }]);
+    expect(result.rowCount()).toBe(1);
   });
 
-  it("normalizes statement affected rows", async () => {
+  it("normalizes exec() affected rows", async () => {
     const pool = new FakePool(async () => ({
       rowsAffected: [2, 3],
     }));
     const connection = new MSSQLConnection(pool, false);
 
-    const result = await connection.executeStatement({
-      parameters: { status: "active" },
-      sql: "UPDATE users SET status = @status",
-      types: { status: "STRING" },
-    });
-
-    expect(result).toEqual({ affectedRows: 5, insertId: null });
-  });
-
-  it("rejects positional parameters after compilation", async () => {
-    const pool = new FakePool(async () => ({
-      rowsAffected: [1],
-    }));
-    const connection = new MSSQLConnection(pool, false);
-
-    await expect(
-      connection.executeQuery({
-        parameters: [1],
-        sql: "SELECT * FROM users WHERE id = ?",
-        types: [],
-      }),
-    ).rejects.toThrow(InvalidParameterException);
+    expect(await connection.exec("UPDATE users SET status = 'active'")).toBe(5);
   });
 
   it("serializes requests to respect single-flight behavior", async () => {
@@ -147,8 +123,8 @@ describe("MSSQLConnection", () => {
     });
     const connection = new MSSQLConnection(pool, false);
 
-    const first = connection.executeQuery({ parameters: {}, sql: "q1", types: {} });
-    const second = connection.executeQuery({ parameters: {}, sql: "q2", types: {} });
+    const first = connection.query("q1");
+    const second = connection.query("q2");
 
     await Promise.resolve();
     expect(order).toEqual(["start:q1"]);
@@ -171,11 +147,9 @@ describe("MSSQLConnection", () => {
     const connection = new MSSQLConnection(pool, false);
 
     await connection.beginTransaction();
-    await connection.executeQuery({
-      parameters: { id: 1 },
-      sql: "SELECT @id AS v",
-      types: { id: "INTEGER" },
-    });
+    const statement = await connection.prepare("SELECT @id AS v");
+    statement.bindValue("id", 1);
+    await statement.execute();
 
     expect(pool.transactionInstance.beginCalls).toBe(1);
     expect(pool.transactionInstance.requestInstance.inputs).toEqual([{ name: "id", value: 1 }]);
@@ -185,28 +159,15 @@ describe("MSSQLConnection", () => {
     expect(pool.transactionInstance.commitCalls).toBe(1);
   });
 
-  it("supports rollback and savepoint SQL inside transactions", async () => {
+  it("supports rollback inside transactions", async () => {
     const pool = new FakePool(async () => ({
       rowsAffected: [1],
     }));
     const connection = new MSSQLConnection(pool, false);
 
     await connection.beginTransaction();
-    await connection.createSavepoint("sp1");
-    await connection.rollbackSavepoint("sp1");
     await connection.rollBack();
-
-    expect(pool.transactionInstance.requestInstance.queries).toContain("SAVE TRANSACTION sp1");
-    expect(pool.transactionInstance.requestInstance.queries).toContain("ROLLBACK TRANSACTION sp1");
     expect(pool.transactionInstance.rollbackCalls).toBe(1);
-  });
-
-  it("throws for savepoint usage outside transactions", async () => {
-    const pool = new FakePool(async () => ({ rowsAffected: [1] }));
-    const connection = new MSSQLConnection(pool, false);
-
-    await expect(connection.createSavepoint("sp1")).rejects.toThrow(DbalException);
-    await expect(connection.rollbackSavepoint("sp1")).rejects.toThrow(DbalException);
   });
 
   it("quotes values and reads server version", async () => {

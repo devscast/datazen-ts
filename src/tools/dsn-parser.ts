@@ -1,5 +1,5 @@
 import type { Driver } from "../driver";
-import { MalformedDsnException } from "../exception/index";
+import { MalformedDsnException } from "../exception/malformed-dsn-exception";
 
 export type DsnSchemeMappingValue = string | (new () => Driver);
 export type DsnSchemeMapping = Record<string, DsnSchemeMappingValue>;

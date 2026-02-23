@@ -1,11 +1,16 @@
 import { Configuration } from "./configuration";
 import { Connection } from "./connection";
+import {
+  PrimaryReadReplicaConnection,
+  type PrimaryReadReplicaConnectionParams,
+} from "./connections/primary-read-replica-connection";
 import type { Driver } from "./driver";
 import { MSSQLDriver } from "./driver/mssql/driver";
 import { MySQL2Driver } from "./driver/mysql2/driver";
 import { PgDriver } from "./driver/pg/driver";
 import { SQLite3Driver } from "./driver/sqlite3/driver";
-import { DriverRequiredException, UnknownDriverException } from "./exception/index";
+import { DriverRequired } from "./exception/driver-required";
+import { UnknownDriver } from "./exception/unknown-driver";
 
 export type DriverName = "mysql2" | "mssql" | "pg" | "sqlite3";
 
@@ -37,6 +42,20 @@ export class DriverManager {
     return new Connection(params, wrappedDriver, configuration);
   }
 
+  public static getPrimaryReadReplicaConnection(
+    params: PrimaryReadReplicaConnectionParams,
+    configuration: Configuration = new Configuration(),
+  ): PrimaryReadReplicaConnection {
+    const driver = DriverManager.createDriver(params);
+
+    let wrappedDriver = driver;
+    for (const middleware of configuration.getMiddlewares()) {
+      wrappedDriver = middleware.wrap(wrappedDriver);
+    }
+
+    return new PrimaryReadReplicaConnection(params, wrappedDriver, configuration);
+  }
+
   public static getAvailableDrivers(): DriverName[] {
     return Object.keys(DriverManager.DRIVER_MAP) as DriverName[];
   }
@@ -51,12 +70,12 @@ export class DriverManager {
     }
 
     if (params.driver === undefined) {
-      throw new DriverRequiredException();
+      throw DriverRequired.new();
     }
 
     const DriverClass = DriverManager.DRIVER_MAP[params.driver];
     if (DriverClass === undefined) {
-      throw new UnknownDriverException(params.driver, Object.keys(DriverManager.DRIVER_MAP));
+      throw UnknownDriver.new(params.driver, Object.keys(DriverManager.DRIVER_MAP));
     }
 
     return new DriverClass();

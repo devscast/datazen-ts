@@ -1,7 +1,6 @@
-import { MixedParameterStyleException } from "./exception/index";
 import { ParameterType } from "./parameter-type";
+import type { QueryParameterType, QueryParameterTypes, QueryParameters } from "./query";
 import type { Result } from "./result";
-import type { QueryParameterType, QueryParameterTypes, QueryParameters } from "./types";
 
 export interface StatementExecutor {
   executeQuery(sql: string, params?: QueryParameters, types?: QueryParameterTypes): Promise<Result>;
@@ -81,7 +80,10 @@ export class Statement {
     const hasPositional = this.positionalParams.length > 0;
 
     if (hasNamed && hasPositional) {
-      throw new MixedParameterStyleException();
+      return [
+        { ...Object.assign({}, this.positionalParams), ...this.namedParams },
+        { ...Object.assign({}, this.positionalTypes), ...this.namedTypes },
+      ];
     }
 
     if (hasNamed) {

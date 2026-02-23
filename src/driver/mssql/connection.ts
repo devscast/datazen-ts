@@ -1,6 +1,10 @@
-import type { DriverConnection, DriverExecutionResult, DriverQueryResult } from "../../driver";
-import { DbalException, InvalidParameterException } from "../../exception/index";
-import type { CompiledQuery } from "../../types";
+import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
+import { ArrayResult } from "../array-result";
+import type { Connection as DriverConnection } from "../connection";
+import { IdentityColumnsNotSupported } from "../exception/identity-columns-not-supported";
+import type { Result as DriverResult } from "../result";
+import type { Statement as DriverStatement } from "../statement";
+import { MSSQLStatement } from "./statement";
 import type { MSSQLPoolLike, MSSQLRequestLike, MSSQLTransactionLike } from "./types";
 
 export class MSSQLConnection implements DriverConnection {
@@ -12,43 +16,37 @@ export class MSSQLConnection implements DriverConnection {
     private readonly ownsClient: boolean,
   ) {}
 
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
+  public async prepare(sql: string): Promise<DriverStatement> {
+    return new MSSQLStatement(this, sql);
+  }
+
+  public async query(sql: string): Promise<DriverResult> {
     return this.runSerial(async () => {
       const request = this.createRequest();
-      const namedParameters = this.toNamedParameters(query.parameters);
-      this.bindNamedParameters(request, namedParameters);
-
-      const payload = await request.query(query.sql);
-      const rows = this.toRows(payload);
-      const firstRow = rows[0];
-
-      return {
-        columns: firstRow === undefined ? [] : Object.keys(firstRow),
-        rowCount: rows.length,
-        rows,
-      };
+      const payload = await request.query(sql);
+      return this.toDriverResult(payload);
     });
   }
 
-  public async executeStatement(query: CompiledQuery): Promise<DriverExecutionResult> {
+  public quote(value: string): string {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
     return this.runSerial(async () => {
       const request = this.createRequest();
-      const namedParameters = this.toNamedParameters(query.parameters);
-      this.bindNamedParameters(request, namedParameters);
-
-      const payload = await request.query(query.sql);
-      const rowsAffected = this.getRowsAffected(payload);
-
-      return {
-        affectedRows: rowsAffected,
-        insertId: null,
-      };
+      const payload = await request.query(sql);
+      return this.getRowsAffected(payload);
     });
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    throw IdentityColumnsNotSupported.new();
   }
 
   public async beginTransaction(): Promise<void> {
     if (this.transaction !== null) {
-      throw new DbalException("A transaction is already active on this connection.");
+      throw new Error("A transaction is already active on this connection.");
     }
 
     const transaction = this.pool.transaction();
@@ -59,7 +57,7 @@ export class MSSQLConnection implements DriverConnection {
   public async commit(): Promise<void> {
     const transaction = this.transaction;
     if (transaction === null) {
-      throw new DbalException("No active transaction to commit.");
+      throw new Error("No active transaction to commit.");
     }
 
     await transaction.commit();
@@ -69,45 +67,19 @@ export class MSSQLConnection implements DriverConnection {
   public async rollBack(): Promise<void> {
     const transaction = this.transaction;
     if (transaction === null) {
-      throw new DbalException("No active transaction to roll back.");
+      throw new Error("No active transaction to roll back.");
     }
 
     await transaction.rollback();
     this.transaction = null;
   }
 
-  public async createSavepoint(name: string): Promise<void> {
-    if (this.transaction === null) {
-      throw new DbalException("Cannot create a savepoint without an active transaction.");
-    }
-
-    await this.transaction.request().query(`SAVE TRANSACTION ${name}`);
-  }
-
-  public async releaseSavepoint(_name: string): Promise<void> {
-    // SQL Server does not provide explicit savepoint release.
-  }
-
-  public async rollbackSavepoint(name: string): Promise<void> {
-    if (this.transaction === null) {
-      throw new DbalException("Cannot roll back a savepoint without an active transaction.");
-    }
-
-    await this.transaction.request().query(`ROLLBACK TRANSACTION ${name}`);
-  }
-
-  public quote(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`;
-  }
-
   public async getServerVersion(): Promise<string> {
-    const request = this.createRequest();
-    const payload = await request.query("SELECT @@VERSION AS version");
-    const rows = this.toRows(payload);
-    const firstRow = rows[0];
-    const version = firstRow?.version;
+    const result = await this.query("SELECT @@VERSION AS version");
+    const version = result.fetchOne() ?? "unknown";
+    result.free();
 
-    return typeof version === "string" ? version : String(version ?? "unknown");
+    return typeof version === "string" ? version : String(version);
   }
 
   public async close(): Promise<void> {
@@ -123,6 +95,19 @@ export class MSSQLConnection implements DriverConnection {
 
   public getNativeConnection(): unknown {
     return this.pool;
+  }
+
+  public async executePrepared(
+    sql: string,
+    parameters: Record<string, unknown>,
+  ): Promise<DriverResult> {
+    return this.runSerial(async () => {
+      const request = this.createRequest();
+      this.bindNamedParameters(request, parameters);
+      const payload = await request.query(sql);
+
+      return this.toDriverResult(payload);
+    });
   }
 
   private createRequest(): MSSQLRequestLike {
@@ -142,13 +127,24 @@ export class MSSQLConnection implements DriverConnection {
     }
   }
 
-  private toNamedParameters(parameters: CompiledQuery["parameters"]): Record<string, unknown> {
-    if (!Array.isArray(parameters)) {
-      return parameters;
+  public toNamedParameters(parameters: unknown): Record<string, unknown> {
+    if (parameters !== null && typeof parameters === "object" && !Array.isArray(parameters)) {
+      return parameters as Record<string, unknown>;
     }
 
     throw new InvalidParameterException(
       "The mssql driver expects named parameters after SQL compilation.",
+    );
+  }
+
+  private toDriverResult(payload: unknown): DriverResult {
+    const rows = this.toRows(payload);
+    const firstRow = rows[0];
+
+    return new ArrayResult(
+      rows,
+      firstRow === undefined ? [] : Object.keys(firstRow),
+      rows.length > 0 ? rows.length : this.getRowsAffected(payload),
     );
   }
 

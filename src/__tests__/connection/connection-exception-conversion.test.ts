@@ -1,20 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { Connection } from "../../connection";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import { ConnectionException, DbalException, DriverException } from "../../exception/index";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
+import { ConnectionException } from "../../exception/connection-exception";
+import { DriverException } from "../../exception/driver-exception";
+import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import type { CompiledQuery } from "../../types";
 
 class SpyExceptionConverter implements ExceptionConverter {
   public lastContext: ExceptionConverterContext | undefined;
@@ -37,11 +33,23 @@ class SpyExceptionConverter implements ExceptionConverter {
 }
 
 class ThrowingConnection implements DriverConnection {
-  public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
+  public async prepare(_sql: string) {
     throw new Error("driver query failure");
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
+  public async query(_sql: string) {
+    throw new Error("driver query failure");
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(_sql: string): Promise<number | string> {
+    throw new Error("driver statement failure");
+  }
+
+  public async lastInsertId(): Promise<number | string> {
     throw new Error("driver statement failure");
   }
 
@@ -69,28 +77,40 @@ class ThrowingConnection implements DriverConnection {
 }
 
 class PassThroughConnection implements DriverConnection {
-  public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
-    throw new DbalException("already normalized");
+  public async prepare(_sql: string) {
+    throw new InvalidParameterException("already normalized");
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    throw new DbalException("already normalized");
+  public async query(_sql: string) {
+    throw new InvalidParameterException("already normalized");
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(_sql: string): Promise<number | string> {
+    throw new InvalidParameterException("already normalized");
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    throw new InvalidParameterException("already normalized");
   }
 
   public async beginTransaction(): Promise<void> {
-    throw new DbalException("already normalized");
+    throw new InvalidParameterException("already normalized");
   }
 
   public async commit(): Promise<void> {
-    throw new DbalException("already normalized");
+    throw new InvalidParameterException("already normalized");
   }
 
   public async rollBack(): Promise<void> {
-    throw new DbalException("already normalized");
+    throw new InvalidParameterException("already normalized");
   }
 
   public async getServerVersion(): Promise<string> {
-    throw new DbalException("already normalized");
+    throw new InvalidParameterException("already normalized");
   }
 
   public async close(): Promise<void> {}
@@ -140,7 +160,9 @@ describe("Connection exception conversion", () => {
   it("does not reconvert already normalized DBAL errors", async () => {
     const connection = new Connection({}, new SpyDriver(new PassThroughConnection()));
 
-    await expect(connection.executeQuery("SELECT 1")).rejects.toBeInstanceOf(DbalException);
+    await expect(connection.executeQuery("SELECT 1")).rejects.toBeInstanceOf(
+      InvalidParameterException,
+    );
     await expect(connection.executeQuery("SELECT 1")).rejects.not.toBeInstanceOf(
       ConnectionException,
     );

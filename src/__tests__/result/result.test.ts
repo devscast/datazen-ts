@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { NoKeyValueException } from "../../exception/index";
+import { ArrayResult } from "../../driver/array-result";
+import { NoKeyValue } from "../../exception/no-key-value";
 import { Result } from "../../result";
 
 function expectUserRow(_row: { id: number; name: string } | false): void {}
 
 describe("Result", () => {
   it("uses class-level row type for fetchAssociative() by default", () => {
-    const result = new Result<{ id: number; name: string }>({
-      rows: [{ id: 1, name: "Alice" }],
-    });
+    const result = new Result<{ id: number; name: string }>(
+      new ArrayResult([{ id: 1, name: "Alice" }]),
+    );
 
     const row = result.fetchAssociative();
     expectUserRow(row);
@@ -17,12 +18,12 @@ describe("Result", () => {
   });
 
   it("fetches associative rows sequentially", () => {
-    const result = new Result({
-      rows: [
+    const result = new Result(
+      new ArrayResult([
         { id: 1, name: "Alice" },
         { id: 2, name: "Bob" },
-      ],
-    });
+      ]),
+    );
 
     expect(result.fetchAssociative()).toEqual({ id: 1, name: "Alice" });
     expect(result.fetchAssociative()).toEqual({ id: 2, name: "Bob" });
@@ -30,9 +31,7 @@ describe("Result", () => {
   });
 
   it("returns a clone when fetching associative rows", () => {
-    const result = new Result({
-      rows: [{ id: 1, name: "Alice" }],
-    });
+    const result = new Result(new ArrayResult([{ id: 1, name: "Alice" }]));
 
     const row = result.fetchAssociative<{ id: number; name: string }>();
     expect(row).toEqual({ id: 1, name: "Alice" });
@@ -44,40 +43,37 @@ describe("Result", () => {
   });
 
   it("fetches numeric rows using explicit column order", () => {
-    const result = new Result({
-      columns: ["name", "id"],
-      rows: [{ id: 7, name: "Carol" }],
-    });
+    const result = new Result(new ArrayResult([{ id: 7, name: "Carol" }], ["name", "id"]));
 
     expect(result.fetchNumeric<[string, number]>()).toEqual(["Carol", 7]);
   });
 
   it("fetches single values and first column values", () => {
-    const result = new Result({
-      rows: [
+    const result = new Result(
+      new ArrayResult([
         { id: 10, name: "A" },
         { id: 20, name: "B" },
-      ],
-    });
+      ]),
+    );
 
     expect(result.fetchOne<number>()).toBe(10);
     expect(result.fetchFirstColumn<number>()).toEqual([20]);
   });
 
   it("fetches all numeric and associative rows", () => {
-    const resultForNumeric = new Result({
-      rows: [
+    const resultForNumeric = new Result(
+      new ArrayResult([
         { id: 1, name: "A" },
         { id: 2, name: "B" },
-      ],
-    });
+      ]),
+    );
 
-    const resultForAssociative = new Result({
-      rows: [
+    const resultForAssociative = new Result(
+      new ArrayResult([
         { id: 1, name: "A" },
         { id: 2, name: "B" },
-      ],
-    });
+      ]),
+    );
 
     expect(resultForNumeric.fetchAllNumeric<[number, string]>()).toEqual([
       [1, "A"],
@@ -90,12 +86,12 @@ describe("Result", () => {
   });
 
   it("fetches key/value pairs", () => {
-    const result = new Result({
-      rows: [
+    const result = new Result(
+      new ArrayResult([
         { id: "one", value: 100, extra: "x" },
         { id: "two", value: 200, extra: "y" },
-      ],
-    });
+      ]),
+    );
 
     expect(result.fetchAllKeyValue<number>()).toEqual({
       one: 100,
@@ -104,20 +100,18 @@ describe("Result", () => {
   });
 
   it("throws when key/value fetch has less than two columns", () => {
-    const result = new Result({
-      rows: [{ id: 1 }],
-    });
+    const result = new Result(new ArrayResult([{ id: 1 }]));
 
-    expect(() => result.fetchAllKeyValue()).toThrow(NoKeyValueException);
+    expect(() => result.fetchAllKeyValue()).toThrow(NoKeyValue);
   });
 
   it("fetches associative rows indexed by first column", () => {
-    const result = new Result({
-      rows: [
+    const result = new Result(
+      new ArrayResult([
         { id: "u1", name: "Alice", active: true },
         { id: "u2", name: "Bob", active: false },
-      ],
-    });
+      ]),
+    );
 
     expect(result.fetchAllAssociativeIndexed<{ name: string; active: boolean }>()).toEqual({
       u1: { active: true, name: "Alice" },
@@ -126,11 +120,7 @@ describe("Result", () => {
   });
 
   it("supports explicit row and column metadata", () => {
-    const result = new Result({
-      columns: ["id", "name"],
-      rowCount: 42,
-      rows: [],
-    });
+    const result = new Result(new ArrayResult([], ["id", "name"], 42));
 
     expect(result.rowCount()).toBe(42);
     expect(result.columnCount()).toBe(2);
@@ -139,9 +129,7 @@ describe("Result", () => {
   });
 
   it("releases rows when free() is called", () => {
-    const result = new Result({
-      rows: [{ id: 1 }],
-    });
+    const result = new Result(new ArrayResult([{ id: 1 }]));
 
     result.free();
     expect(result.fetchAssociative()).toBe(false);
