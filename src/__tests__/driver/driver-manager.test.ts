@@ -19,6 +19,7 @@ import {
   DriverRequiredException,
   UnknownDriverException,
 } from "../../exception/index";
+import { MySQLPlatform } from "../../platforms/mysql-platform";
 import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
@@ -68,6 +69,10 @@ class SpyDriver implements Driver {
   public getExceptionConverter(): ExceptionConverter {
     return this.converter;
   }
+
+  public getDatabasePlatform(): MySQLPlatform {
+    return new MySQLPlatform();
+  }
 }
 
 class NeverUseDriver implements Driver {
@@ -81,6 +86,10 @@ class NeverUseDriver implements Driver {
   public getExceptionConverter(): ExceptionConverter {
     return new NoopExceptionConverter();
   }
+
+  public getDatabasePlatform(): MySQLPlatform {
+    return new MySQLPlatform();
+  }
 }
 
 class PrefixMiddleware implements DriverMiddleware {
@@ -92,6 +101,7 @@ class PrefixMiddleware implements DriverMiddleware {
     return {
       bindingStyle: driver.bindingStyle,
       connect: (params: Record<string, unknown>) => driver.connect(params),
+      getDatabasePlatform: (versionProvider) => driver.getDatabasePlatform(versionProvider),
       getExceptionConverter: () => driver.getExceptionConverter(),
       name: `${prefix}${driver.name}`,
     };
@@ -100,7 +110,12 @@ class PrefixMiddleware implements DriverMiddleware {
 
 describe("DriverManager", () => {
   it("lists available drivers", () => {
-    expect(DriverManager.getAvailableDrivers().sort()).toEqual(["mssql", "mysql2"]);
+    expect(DriverManager.getAvailableDrivers().sort()).toEqual([
+      "mssql",
+      "mysql2",
+      "pg",
+      "sqlite3",
+    ]);
   });
 
   it("throws when no driver is configured", () => {

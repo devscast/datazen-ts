@@ -16,6 +16,10 @@ class DummyDriver implements Driver {
   public getExceptionConverter(): ExceptionConverter {
     throw new Error("not implemented");
   }
+
+  public getDatabasePlatform(): never {
+    throw new Error("not implemented");
+  }
 }
 
 describe("DsnParser", () => {
@@ -81,14 +85,28 @@ describe("DsnParser", () => {
     const file = parser.parse("sqlite:////var/data/app.db");
 
     expect(memory).toEqual({
-      driver: "sqlite",
+      driver: "sqlite3",
       host: "localhost",
       memory: true,
     });
     expect(file).toEqual({
-      driver: "sqlite",
+      driver: "sqlite3",
       host: "localhost",
       path: "/var/data/app.db",
+    });
+  });
+
+  it("maps postgres URL schemes to pg driver", () => {
+    const parser = new DsnParser();
+
+    const params = parser.parse("postgresql://user:pass@localhost/app");
+
+    expect(params).toEqual({
+      dbname: "app",
+      driver: "pg",
+      host: "localhost",
+      password: "pass",
+      user: "user",
     });
   });
 

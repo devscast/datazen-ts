@@ -17,6 +17,7 @@ import { DriverException } from "../../exception/index";
 import type { Logger } from "../../logging/logger";
 import { Middleware } from "../../logging/middleware";
 import { ParameterType } from "../../parameter-type";
+import { MySQLPlatform } from "../../platforms/mysql-platform";
 import type { CompiledQuery } from "../../types";
 
 interface LogEntry {
@@ -134,6 +135,10 @@ class SpyDriver implements Driver {
 
   public getExceptionConverter(): ExceptionConverter {
     return this.converter;
+  }
+
+  public getDatabasePlatform(): MySQLPlatform {
+    return new MySQLPlatform();
   }
 }
 

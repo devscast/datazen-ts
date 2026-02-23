@@ -38,7 +38,7 @@ export interface Driver {
   readonly bindingStyle: ParameterBindingStyle;
   connect(params: Record<string, unknown>): Promise<DriverConnection>;
   getExceptionConverter(): ExceptionConverter;
-  getDatabasePlatform?(): AbstractPlatform;
+  getDatabasePlatform(versionProvider: ServerVersionProvider): AbstractPlatform;
 }
 
 export interface DriverMiddleware {

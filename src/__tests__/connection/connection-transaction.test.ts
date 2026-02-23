@@ -19,6 +19,7 @@ import {
   NoActiveTransactionException,
   RollbackOnlyException,
 } from "../../exception/index";
+import { MySQLPlatform } from "../../platforms/mysql-platform";
 import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
@@ -145,6 +146,10 @@ class SpyDriver implements Driver {
 
   public getExceptionConverter(): ExceptionConverter {
     return this.exceptionConverter;
+  }
+
+  public getDatabasePlatform(): MySQLPlatform {
+    return new MySQLPlatform();
   }
 }
 

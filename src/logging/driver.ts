@@ -5,19 +5,19 @@ import {
 } from "../driver";
 import type { ExceptionConverter } from "../driver/api/exception-converter";
 import type { AbstractPlatform } from "../platforms/abstract-platform";
+import type { ServerVersionProvider } from "../server-version-provider";
 import { Connection } from "./connection";
 import type { Logger } from "./logger";
 
 export class Driver implements DriverInterface {
-  public readonly getDatabasePlatform?: () => AbstractPlatform;
+  public readonly getDatabasePlatform: (versionProvider: ServerVersionProvider) => AbstractPlatform;
 
   constructor(
     private readonly driver: DriverInterface,
     private readonly logger: Logger,
   ) {
-    if (this.driver.getDatabasePlatform !== undefined) {
-      this.getDatabasePlatform = (): AbstractPlatform => this.driver.getDatabasePlatform!();
-    }
+    this.getDatabasePlatform = (versionProvider: ServerVersionProvider): AbstractPlatform =>
+      this.driver.getDatabasePlatform(versionProvider);
   }
 
   public get name(): string {

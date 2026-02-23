@@ -13,6 +13,7 @@ import type {
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ConnectionException, DbalException, DriverException } from "../../exception/index";
+import { MySQLPlatform } from "../../platforms/mysql-platform";
 import type { CompiledQuery } from "../../types";
 
 class SpyExceptionConverter implements ExceptionConverter {
@@ -114,6 +115,10 @@ class SpyDriver implements Driver {
 
   public getExceptionConverter(): ExceptionConverter {
     return this.converter;
+  }
+
+  public getDatabasePlatform(): MySQLPlatform {
+    return new MySQLPlatform();
   }
 }
 

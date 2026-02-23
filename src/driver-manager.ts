@@ -3,9 +3,11 @@ import { Connection } from "./connection";
 import type { Driver } from "./driver";
 import { MSSQLDriver } from "./driver/mssql/driver";
 import { MySQL2Driver } from "./driver/mysql2/driver";
+import { PgDriver } from "./driver/pg/driver";
+import { SQLite3Driver } from "./driver/sqlite3/driver";
 import { DriverRequiredException, UnknownDriverException } from "./exception/index";
 
-export type DriverName = "mysql2" | "mssql";
+export type DriverName = "mysql2" | "mssql" | "pg" | "sqlite3";
 
 export interface ConnectionParams extends Record<string, unknown> {
   driver?: DriverName;
@@ -17,6 +19,8 @@ export class DriverManager {
   private static readonly DRIVER_MAP: Record<DriverName, new () => Driver> = {
     mssql: MSSQLDriver,
     mysql2: MySQL2Driver,
+    pg: PgDriver,
+    sqlite3: SQLite3Driver,
   };
 
   public static getConnection(

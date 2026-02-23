@@ -14,6 +14,7 @@ import type {
 } from "../../driver/api/exception-converter";
 import { DriverException, MixedParameterStyleException } from "../../exception/index";
 import { ParameterType } from "../../parameter-type";
+import { MySQLPlatform } from "../../platforms/mysql-platform";
 import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
@@ -65,6 +66,10 @@ class NamedSpyDriver implements Driver {
 
   public getExceptionConverter(): ExceptionConverter {
     return this.converter;
+  }
+
+  public getDatabasePlatform(): MySQLPlatform {
+    return new MySQLPlatform();
   }
 }
 
