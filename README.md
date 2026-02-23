@@ -39,6 +39,7 @@ bun add @devscast/datazen mssql
 - [Transactions](docs/transactions.md)
 - [Security](docs/security.md)
 - [Known Vendor Issues](docs/known-vendor-issues.md)
+- [Parity Matrix (Best Effort)](docs/parity-matrix.md)
 - [Supporting Other Databases](docs/supporting-other-databases.md)
 
 ## Quick Start (MySQL)

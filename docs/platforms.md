@@ -149,5 +149,6 @@ same public DBAL API.
 Not Implemented
 ---------------
 
-The schema module is out of scope currently, so schema-manager-driven platform
-features from Doctrine docs are not part of this port yet.
+Schema-manager-driven platform features are available in this port, but full
+Doctrine parity is still incomplete across vendors and version-specific
+platform variants.

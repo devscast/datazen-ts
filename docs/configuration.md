@@ -208,5 +208,5 @@ in this port.
 Not Implemented
 ---------------
 
-- Schema module / schema manager configuration
+- Some Doctrine schema-manager options and wrapper customization patterns outside this port's API shape
 - Doctrine-style wrapper class replacement (`wrapperClass`)

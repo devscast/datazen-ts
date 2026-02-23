@@ -39,9 +39,9 @@ Current scope includes:
 - Driver middleware (logging, portability)
 - DSN parsing
 
-Current non-goal:
+Current limitations:
 
-- Doctrine-style Schema module (schema manager/tooling) is not implemented yet.
+- Full Doctrine DBAL Schema parity is not complete yet (especially broader reverse-engineering parity and migrations-adjacent workflows).
 
 Getting Started
 ---------------
