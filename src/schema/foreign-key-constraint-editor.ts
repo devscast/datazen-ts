@@ -1,4 +1,4 @@
-import { InvalidForeignKeyConstraintDefinition } from "./exception/index";
+import { InvalidForeignKeyConstraintDefinition } from "./exception/invalid-foreign-key-constraint-definition";
 import { ForeignKeyConstraint } from "./foreign-key-constraint";
 import { Deferrability } from "./foreign-key-constraint/deferrability";
 import { MatchType } from "./foreign-key-constraint/match-type";

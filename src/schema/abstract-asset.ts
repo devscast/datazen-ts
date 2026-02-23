@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 
 /**
- * Doctrine-inspired base class for schema assets (table, column, index, sequence...).
+ * Datazen base class for schema assets (table, column, index, sequence...).
  */
 export abstract class AbstractAsset {
   protected _name = "";

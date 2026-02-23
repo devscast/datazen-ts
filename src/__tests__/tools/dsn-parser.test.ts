@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { type Driver, type DriverConnection, ParameterBindingStyle } from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type { ExceptionConverter } from "../../driver/api/exception-converter";
-import { MalformedDsnException } from "../../exception/index";
+import { MalformedDsnException } from "../../exception/malformed-dsn-exception";
 import { DsnParser } from "../../tools/dsn-parser";
 
 class DummyDriver implements Driver {
   public readonly name = "dummy";
-  public readonly bindingStyle = ParameterBindingStyle.POSITIONAL;
 
   public async connect(_params: Record<string, unknown>): Promise<DriverConnection> {
     throw new Error("not implemented");

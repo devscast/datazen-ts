@@ -2,25 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
 import { Connection } from "../../connection";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import {
-  DriverException,
-  NestedTransactionsNotSupportedException,
-  NoActiveTransactionException,
-  RollbackOnlyException,
-} from "../../exception/index";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
+import { CommitFailedRollbackOnly } from "../../exception/commit-failed-rollback-only";
+import { DriverException } from "../../exception/driver-exception";
+import { NoActiveTransaction } from "../../exception/no-active-transaction";
+import { SavepointsNotSupported } from "../../exception/savepoints-not-supported";
+import { AbstractPlatform } from "../../platforms/abstract-platform";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -34,65 +28,37 @@ class NoopExceptionConverter implements ExceptionConverter {
   }
 }
 
-interface SavepointSupport {
-  create: boolean;
-  release: boolean;
-  rollback: boolean;
-}
-
 class SpyDriverConnection implements DriverConnection {
   public beginCalls = 0;
   public commitCalls = 0;
   public rollbackCalls = 0;
   public closeCalls = 0;
-  public createSavepointCalls: string[] = [];
-  public releaseSavepointCalls: string[] = [];
-  public rollbackSavepointCalls: string[] = [];
+  public execCalls: string[] = [];
 
-  public createSavepoint?: (name: string) => Promise<void>;
-  public releaseSavepoint?: (name: string) => Promise<void>;
-  public rollbackSavepoint?: (name: string) => Promise<void>;
-  public quote?: (value: string) => string;
+  constructor(private readonly quoteImpl?: (value: string) => string) {}
 
-  constructor(
-    savepointSupport: SavepointSupport = { create: true, release: true, rollback: true },
-    quote?: (value: string) => string,
-  ) {
-    if (savepointSupport.create) {
-      this.createSavepoint = async (name: string): Promise<void> => {
-        this.createSavepointCalls.push(name);
-      };
-    }
-
-    if (savepointSupport.release) {
-      this.releaseSavepoint = async (name: string): Promise<void> => {
-        this.releaseSavepointCalls.push(name);
-      };
-    }
-
-    if (savepointSupport.rollback) {
-      this.rollbackSavepoint = async (name: string): Promise<void> => {
-        this.rollbackSavepointCalls.push(name);
-      };
-    }
-
-    if (quote !== undefined) {
-      this.quote = quote;
-    }
-  }
-
-  public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
+  public async prepare(_sql: string) {
     return {
-      rowCount: 1,
-      rows: [{ value: 1 }],
+      bindValue: () => undefined,
+      execute: async () => new ArrayResult([], [], 1),
     };
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    return {
-      affectedRows: 1,
-      insertId: 123,
-    };
+  public async query(_sql: string) {
+    return new ArrayResult([{ value: 1 }], ["value"], 1);
+  }
+
+  public quote(value: string): string {
+    return this.quoteImpl?.(value) ?? `'${value.replace(/'/g, "''")}'`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
+    this.execCalls.push(sql);
+    return 1;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 123;
   }
 
   public async beginTransaction(): Promise<void> {
@@ -120,14 +86,28 @@ class SpyDriverConnection implements DriverConnection {
   }
 }
 
+class NoSavepointPlatform extends MySQLPlatform {
+  public override supportsSavepoints(): boolean {
+    return false;
+  }
+}
+
+class NoReleaseSavepointPlatform extends MySQLPlatform {
+  public override supportsReleaseSavepoints(): boolean {
+    return false;
+  }
+}
+
 class MultiColumnDriverConnection extends SpyDriverConnection {
-  public override async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
-    return {
-      rows: [
+  public override async query(_sql: string) {
+    return new ArrayResult(
+      [
         { id: "u1", name: "Alice", active: true },
         { id: "u2", name: "Bob", active: false },
       ],
-    };
+      ["id", "name", "active"],
+      2,
+    );
   }
 }
 
@@ -137,7 +117,10 @@ class SpyDriver implements Driver {
   public connectCalls = 0;
   private readonly exceptionConverter = new NoopExceptionConverter();
 
-  constructor(private readonly connection: DriverConnection) {}
+  constructor(
+    private readonly connection: DriverConnection,
+    private readonly platform: AbstractPlatform = new MySQLPlatform(),
+  ) {}
 
   public async connect(_params: Record<string, unknown>): Promise<DriverConnection> {
     this.connectCalls += 1;
@@ -148,8 +131,8 @@ class SpyDriver implements Driver {
     return this.exceptionConverter;
   }
 
-  public getDatabasePlatform(): MySQLPlatform {
-    return new MySQLPlatform();
+  public getDatabasePlatform(): AbstractPlatform {
+    return this.platform;
   }
 }
 
@@ -203,12 +186,15 @@ describe("Connection transactions and state", () => {
     await connection.beginTransaction();
 
     expect(connection.getTransactionNestingLevel()).toBe(2);
-    expect(driverConnection.createSavepointCalls).toEqual(["DATAZEN_2"]);
+    expect(driverConnection.execCalls).toEqual(["SAVEPOINT DATAZEN_2"]);
 
     await connection.commit();
 
     expect(connection.getTransactionNestingLevel()).toBe(1);
-    expect(driverConnection.releaseSavepointCalls).toEqual(["DATAZEN_2"]);
+    expect(driverConnection.execCalls).toEqual([
+      "SAVEPOINT DATAZEN_2",
+      "RELEASE SAVEPOINT DATAZEN_2",
+    ]);
   });
 
   it("rolls back nested transactions to savepoint", async () => {
@@ -220,7 +206,10 @@ describe("Connection transactions and state", () => {
 
     await connection.rollBack();
     expect(connection.getTransactionNestingLevel()).toBe(1);
-    expect(driverConnection.rollbackSavepointCalls).toEqual(["DATAZEN_2"]);
+    expect(driverConnection.execCalls).toEqual([
+      "SAVEPOINT DATAZEN_2",
+      "ROLLBACK TO SAVEPOINT DATAZEN_2",
+    ]);
 
     await connection.rollBack();
     expect(connection.getTransactionNestingLevel()).toBe(0);
@@ -228,50 +217,33 @@ describe("Connection transactions and state", () => {
   });
 
   it("throws when nested transactions are not supported", async () => {
-    const driverConnection = new SpyDriverConnection({
-      create: false,
-      release: false,
-      rollback: false,
-    });
-    const connection = new Connection({}, new SpyDriver(driverConnection));
+    const driverConnection = new SpyDriverConnection();
+    const connection = new Connection(
+      {},
+      new SpyDriver(driverConnection, new NoSavepointPlatform()),
+    );
 
     await connection.beginTransaction();
-    await expect(connection.beginTransaction()).rejects.toThrow(
-      NestedTransactionsNotSupportedException,
-    );
+    await expect(connection.beginTransaction()).rejects.toThrow(SavepointsNotSupported);
   });
 
   it("throws when commit savepoints are not supported", async () => {
-    const driverConnection = new SpyDriverConnection({
-      create: true,
-      release: false,
-      rollback: true,
-    });
-    const connection = new Connection({}, new SpyDriver(driverConnection));
+    const driverConnection = new SpyDriverConnection();
+    const connection = new Connection(
+      {},
+      new SpyDriver(driverConnection, new NoReleaseSavepointPlatform()),
+    );
 
     await connection.beginTransaction();
     await connection.beginTransaction();
-    await expect(connection.commit()).rejects.toThrow(NestedTransactionsNotSupportedException);
-  });
-
-  it("throws when rollback savepoints are not supported", async () => {
-    const driverConnection = new SpyDriverConnection({
-      create: true,
-      release: true,
-      rollback: false,
-    });
-    const connection = new Connection({}, new SpyDriver(driverConnection));
-
-    await connection.beginTransaction();
-    await connection.beginTransaction();
-    await expect(connection.rollBack()).rejects.toThrow(NestedTransactionsNotSupportedException);
+    await expect(connection.commit()).rejects.toThrow(SavepointsNotSupported);
   });
 
   it("throws for commit/rollback when there is no active transaction", async () => {
     const connection = new Connection({}, new SpyDriver(new SpyDriverConnection()));
 
-    await expect(connection.commit()).rejects.toThrow(NoActiveTransactionException);
-    await expect(connection.rollBack()).rejects.toThrow(NoActiveTransactionException);
+    await expect(connection.commit()).rejects.toThrow(NoActiveTransaction);
+    await expect(connection.rollBack()).rejects.toThrow(NoActiveTransaction);
   });
 
   it("supports rollback-only state and blocks commit", async () => {
@@ -280,15 +252,15 @@ describe("Connection transactions and state", () => {
     await connection.beginTransaction();
     connection.setRollbackOnly();
     expect(connection.isRollbackOnly()).toBe(true);
-    await expect(connection.commit()).rejects.toThrow(RollbackOnlyException);
+    await expect(connection.commit()).rejects.toThrow(CommitFailedRollbackOnly);
     await connection.rollBack();
   });
 
   it("throws rollback-only checks when not in a transaction", () => {
     const connection = new Connection({}, new SpyDriver(new SpyDriverConnection()));
 
-    expect(() => connection.setRollbackOnly()).toThrow(NoActiveTransactionException);
-    expect(() => connection.isRollbackOnly()).toThrow(NoActiveTransactionException);
+    expect(() => connection.setRollbackOnly()).toThrow(NoActiveTransaction);
+    expect(() => connection.isRollbackOnly()).toThrow(NoActiveTransaction);
   });
 
   it("commits or rolls back through transactional()", async () => {
@@ -339,7 +311,10 @@ describe("Connection transactions and state", () => {
 
     expect(connection.getTransactionNestingLevel()).toBe(1);
     expect(driverConnection.beginCalls).toBe(1);
-    expect(driverConnection.releaseSavepointCalls).toEqual(["DATAZEN_2"]);
+    expect(driverConnection.execCalls).toEqual([
+      "SAVEPOINT DATAZEN_2",
+      "RELEASE SAVEPOINT DATAZEN_2",
+    ]);
   });
 
   it("restarts the root transaction on rollback when auto-commit is disabled", async () => {
@@ -404,7 +379,7 @@ describe("Connection transactions and state", () => {
   it("uses driver quote when available and fallback otherwise", async () => {
     const withQuote = new Connection(
       {},
-      new SpyDriver(new SpyDriverConnection(undefined, (value) => `[${value}]`)),
+      new SpyDriver(new SpyDriverConnection((value) => `[${value}]`)),
     );
     const withoutQuote = new Connection({}, new SpyDriver(new SpyDriverConnection()));
 

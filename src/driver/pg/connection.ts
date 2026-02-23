@@ -1,7 +1,11 @@
-import type { DriverConnection, DriverExecutionResult, DriverQueryResult } from "../../driver";
-import { DbalException, InvalidParameterException } from "../../exception/index";
+import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
 import { Parser, type Visitor } from "../../sql/parser";
-import type { CompiledQuery } from "../../types";
+import { ArrayResult } from "../array-result";
+import type { Connection as DriverConnection } from "../connection";
+import { IdentityColumnsNotSupported } from "../exception/identity-columns-not-supported";
+import type { Result as DriverResult } from "../result";
+import type { Statement as DriverStatement } from "../statement";
+import { PgStatement } from "./statement";
 import type { PgPoolClientLike, PgPoolLike, PgQueryResultLike, PgQueryableLike } from "./types";
 
 export class PgConnection implements DriverConnection {
@@ -14,34 +18,31 @@ export class PgConnection implements DriverConnection {
     private readonly ownsClient: boolean,
   ) {}
 
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
-    const parameters = this.toPositionalParameters(query.parameters);
-    const sql = this.convertPositionalPlaceholders(query.sql);
-    const payload = await this.getQueryable().query(sql, parameters);
-    const rows = this.toRows(payload);
-    const firstRow = rows[0];
-
-    return {
-      columns: this.toColumns(payload, firstRow),
-      rowCount: typeof payload.rowCount === "number" ? payload.rowCount : rows.length,
-      rows,
-    };
+  public async prepare(sql: string): Promise<DriverStatement> {
+    return new PgStatement(this, sql);
   }
 
-  public async executeStatement(query: CompiledQuery): Promise<DriverExecutionResult> {
-    const parameters = this.toPositionalParameters(query.parameters);
-    const sql = this.convertPositionalPlaceholders(query.sql);
-    const payload = await this.getQueryable().query(sql, parameters);
+  public async query(sql: string): Promise<DriverResult> {
+    const payload = await this.getQueryable().query(sql);
+    return this.toDriverResult(payload);
+  }
 
-    return {
-      affectedRows: typeof payload.rowCount === "number" ? payload.rowCount : 0,
-      insertId: null,
-    };
+  public quote(value: string): string {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
+    const payload = await this.getQueryable().query(sql);
+    return typeof payload.rowCount === "number" ? payload.rowCount : 0;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    throw IdentityColumnsNotSupported.new();
   }
 
   public async beginTransaction(): Promise<void> {
     if (this.inTransaction) {
-      throw new DbalException("A transaction is already active on this connection.");
+      throw new Error("A transaction is already active on this connection.");
     }
 
     if (this.transactionClient === null && this.isPool(this.client)) {
@@ -54,7 +55,7 @@ export class PgConnection implements DriverConnection {
 
   public async commit(): Promise<void> {
     if (!this.inTransaction) {
-      throw new DbalException("No active transaction to commit.");
+      throw new Error("No active transaction to commit.");
     }
 
     try {
@@ -67,7 +68,7 @@ export class PgConnection implements DriverConnection {
 
   public async rollBack(): Promise<void> {
     if (!this.inTransaction) {
-      throw new DbalException("No active transaction to roll back.");
+      throw new Error("No active transaction to roll back.");
     }
 
     try {
@@ -78,30 +79,15 @@ export class PgConnection implements DriverConnection {
     }
   }
 
-  public async createSavepoint(name: string): Promise<void> {
-    await this.getQueryable().query(`SAVEPOINT ${name}`);
-  }
-
-  public async releaseSavepoint(name: string): Promise<void> {
-    await this.getQueryable().query(`RELEASE SAVEPOINT ${name}`);
-  }
-
-  public async rollbackSavepoint(name: string): Promise<void> {
-    await this.getQueryable().query(`ROLLBACK TO SAVEPOINT ${name}`);
-  }
-
-  public quote(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`;
-  }
-
   public async getServerVersion(): Promise<string> {
-    const result = await this.getQueryable().query("SHOW server_version");
-    const rows = this.toRows(result);
-    const firstRow = rows[0];
+    const result = await this.query("SHOW server_version");
+    const row = result.fetchAssociative();
+    result.free();
 
     const version =
-      firstRow?.server_version ?? firstRow?.serverVersion ?? firstRow?.version ?? "unknown";
-
+      row !== false
+        ? (row.server_version ?? row.serverVersion ?? row.version ?? "unknown")
+        : "unknown";
     return typeof version === "string" ? version : String(version);
   }
 
@@ -125,6 +111,13 @@ export class PgConnection implements DriverConnection {
 
   public getNativeConnection(): unknown {
     return this.transactionClient ?? this.client;
+  }
+
+  public async executePrepared(sql: string, parameters: unknown[]): Promise<DriverResult> {
+    const convertedSql = this.convertPositionalPlaceholders(sql);
+    const payload = await this.getQueryable().query(convertedSql, parameters);
+
+    return this.toDriverResult(payload);
   }
 
   private getQueryable(): PgQueryableLike {
@@ -168,13 +161,14 @@ export class PgConnection implements DriverConnection {
     return parts.join("");
   }
 
-  private toPositionalParameters(parameters: CompiledQuery["parameters"]): unknown[] {
-    if (Array.isArray(parameters)) {
-      return parameters;
-    }
+  private toDriverResult(payload: PgQueryResultLike): DriverResult {
+    const rows = this.toRows(payload);
+    const firstRow = rows[0];
 
-    throw new InvalidParameterException(
-      "The pg driver expects positional parameters after SQL compilation.",
+    return new ArrayResult(
+      rows,
+      this.toColumns(payload, firstRow),
+      payload.rowCount ?? rows.length,
     );
   }
 

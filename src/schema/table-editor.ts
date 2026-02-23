@@ -1,5 +1,5 @@
 import { Column } from "./column";
-import { InvalidTableDefinition } from "./exception/index";
+import { InvalidTableDefinition } from "./exception/invalid-table-definition";
 import { ForeignKeyConstraint } from "./foreign-key-constraint";
 import { Index } from "./index";
 import { PrimaryKeyConstraint } from "./primary-key-constraint";

@@ -158,6 +158,8 @@ Driver Binding Style Notes
 --------------------------
 
 - MySQL2 driver executes positional bindings.
+- PostgreSQL (`pg`) driver executes positional bindings.
+- SQLite (`sqlite3`) driver executes positional bindings.
 - MSSQL driver executes named bindings.
 
 DataZen normalizes this at `Connection` level so application code can still use

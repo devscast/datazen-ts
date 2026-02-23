@@ -1,4 +1,4 @@
-import type { DriverMiddleware } from "./driver";
+import type { Middleware as DriverMiddleware } from "./driver/middleware";
 import type { SchemaManagerFactory } from "./schema/schema-manager-factory";
 
 interface ConfigurationOptions {
@@ -9,10 +9,10 @@ interface ConfigurationOptions {
 }
 
 export class Configuration {
-  private autoCommit: boolean;
-  private middlewares: DriverMiddleware[];
-  private schemaAssetsFilter: (assetName: string) => boolean;
-  private schemaManagerFactory: SchemaManagerFactory | null;
+  private autoCommit: boolean = true;
+  private middlewares: DriverMiddleware[] = [];
+  protected schemaAssetsFilter: (assetName: string) => boolean;
+  private schemaManagerFactory: SchemaManagerFactory | null = null;
 
   constructor(options?: ConfigurationOptions) {
     this.autoCommit = options?.autoCommit ?? true;

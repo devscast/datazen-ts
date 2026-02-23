@@ -10,39 +10,16 @@ This project keeps namespace/folder parity with Doctrine DBAL where possible, wh
 - Prefer adding Doctrine-like aliases/shims instead of breaking existing imports.
 - Awlays add tests for new features and to cover any gaps in existing test coverage.
 - Validate against Doctrine's test suite where possible, and add any missing tests to this project as needed.
+- PHP should be refered as "Node" in code and documentation
+- Doctrine should be refered as "Datazen" in code and documentation
 - Run "bun run format" and "bun run test" before submitting any changes to ensure code quality and test coverage.
+- When in doubt, follow Doctrine's implementation and naming conventions as closely as possible, while still adhering to TypeScript best practices and Node idioms.
+- When a task is a refactoring, breaking changes are allowed, even full rewrites, refactorings, and reorgs.
+- Try to keep 1:1 parity with Doctrine's classes and interfaces as much as possible, but don't be afraid to deviate a bit when it makes sense for TypeScript or Node.
+- OCI8,PDO, MySQLI are native to PHP and have no direct equivalent in Node so ignore any references to those in Doctrine.
+- mysql2, mssql, pgsql, sqlite3 are node drivers that have some similarities to PDO drivers but are not direct ports, so treat them as their own unique implementations and only borrow concepts and patterns from Doctrine where it makes sense.
+- use "./" imports for internal modules to avoid relative import hell and make it easier to refactor and reorganize code without breaking imports.
 - Once validated add a summary of your changes in CHANGELOG.md
-
-## Current Namespace Parity
-
-- `src/connection.ts` <-> `Doctrine\DBAL\Connection`
-- `src/driver-manager.ts` <-> `Doctrine\DBAL\DriverManager`
-- `src/result.ts` <-> `Doctrine\DBAL\Result`
-- `src/statement.ts` <-> `Doctrine\DBAL\Statement`
-- `src/query/*` <-> `Doctrine\DBAL\Query\*`
-- `src/platforms/*` <-> `Doctrine\DBAL\Platforms\*`
-- `src/platforms/exception/*` <-> `Doctrine\DBAL\Platforms\Exception\*`
-- `src/sql/parser.ts` <-> `Doctrine\DBAL\SQL\Parser`
-- `src/sql/parser/visitor.ts` <-> `Doctrine\DBAL\SQL\Parser\Visitor`
-- `src/sql/parser/exception.ts` <-> `Doctrine\DBAL\SQL\Parser\Exception`
-- `src/sql/parser/exception/regular-expression-error.ts` <-> `Doctrine\DBAL\SQL\Parser\Exception\RegularExpressionError`
-- `src/driver/api/exception-converter.ts` <-> `Doctrine\DBAL\Driver\API\ExceptionConverter`
-- `src/driver/api/mysql/exception-converter.ts` <-> `Doctrine\DBAL\Driver\API\MySQL\ExceptionConverter`
-- `src/driver/api/sqlsrv/exception-converter.ts` <-> `Doctrine\DBAL\Driver\API\SQLSrv\ExceptionConverter`
-- `src/types/*` <-> `Doctrine\DBAL\Types\*`
-- `src/types/exception/*` <-> `Doctrine\DBAL\Types\Exception\*`
-
-## Test Namespace Parity (Best Effort)
-
-- `src/__tests__/connection/*` <-> `Doctrine\DBAL\Tests\Connection\*`
-- `src/__tests__/driver/*` <-> `Doctrine\DBAL\Tests\Driver\*`
-- `src/__tests__/parameter/*` <-> `Doctrine\DBAL\Tests\ArrayParameters\*` + execution parameter coverage
-- `src/__tests__/platforms/*` <-> `Doctrine\DBAL\Tests\Platforms\*`
-- `src/__tests__/query/*` <-> `Doctrine\DBAL\Tests\Query\*`
-- `src/__tests__/result/*` <-> `Doctrine\DBAL\Tests\Result\*`
-- `src/__tests__/sql/*` <-> `Doctrine\DBAL\Tests\SQL\Parser\*`
-- `src/__tests__/statement/*` <-> `Doctrine\DBAL\Tests\Statement\*`
-- `src/__tests__/types/*` <-> `Doctrine\DBAL\Tests\Types\*`
 
 ## Intentional TS/Node Deviations
 

@@ -1,9 +1,3 @@
-import { DbalException } from "./dbal-exception";
+import { UnknownDriver } from "./unknown-driver";
 
-export class UnknownDriverException extends DbalException {
-  constructor(driver: string, availableDrivers: string[]) {
-    super(
-      `Unknown driver "${driver}". Available drivers: ${availableDrivers.join(", ") || "none"}.`,
-    );
-  }
-}
+export class UnknownDriverException extends UnknownDriver {}

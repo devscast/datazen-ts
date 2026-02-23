@@ -16,7 +16,7 @@ const OTHER = `[^${SPECIAL_CHARS}]+`;
 
 /**
  * SQL parser focused on identifying prepared statement parameters.
- * Ported from Doctrine DBAL's SQL parser approach.
+ * Ported for Datazen using the DBAL-style SQL parser approach.
  */
 export class Parser implements SQLParser {
   private readonly tokenExpression: RegExp;

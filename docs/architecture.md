@@ -4,8 +4,9 @@ Architecture
 DataZen keeps the same global architecture idea as Doctrine DBAL: a driver layer
 at the bottom and a stable wrapper layer at the top.
 
-This port is TypeScript/Node-first, async, and intentionally excludes the
-Schema module for now.
+This port is TypeScript/Node-first, async, and intentionally does not yet cover
+the full Doctrine DBAL feature matrix. A partial Schema module is included and
+continues to evolve toward parity.
 
 Layers
 ------
@@ -35,7 +36,7 @@ The driver abstraction is centered around:
 
 Concrete adapters:
 
-- MySQL2 and MSSQL adapters are exposed through `@devscast/datazen/driver`
+- MySQL2, MSSQL, pg, and sqlite3 adapters are exposed through `@devscast/datazen/driver`
 
 Doctrine has separate low-level `Driver\Statement` and `Driver\Result`
 interfaces. In this Node port, the low-level contract is simplified to
@@ -65,7 +66,7 @@ The middleware pipeline is configured via `Configuration` (root import: `@devsca
 Parameter Expansion and SQL Parsing
 -----------------------------------
 
-Array/list parameter expansion follows Doctrine’s model:
+Array/list parameter expansion follows Doctrine's model:
 
 - `ExpandArrayParameters` (root import: `@devscast/datazen`)
 - SQL parser + visitor (`@devscast/datazen/sql`)
@@ -79,7 +80,7 @@ Platforms
 
 Platforms provide dialect capabilities and feature flags through
 `AbstractPlatform` (from `@devscast/datazen/platforms`) and concrete
-implementations (`mysql`, `sql-server`, `oracle`, `db2`).
+implementations (MySQL/MariaDB, PostgreSQL, SQLite, SQL Server, Oracle, Db2).
 
 They are used for SQL dialect behaviors, quoting, date/time and expression
 helpers, and type mapping metadata.
@@ -99,13 +100,20 @@ The query API (`@devscast/datazen/query`) includes a Doctrine-inspired QueryBuil
 related expression/query objects. Query generation and execution remain
 separated: generated SQL is executed through `Connection`.
 
+Schema Layer (Partial)
+----------------------
+
+The schema API (`@devscast/datazen/schema`) is available as a separate module
+and includes schema assets, comparators/diffs, editors, schema managers, and
+metadata/introspection helpers. Doctrine-level schema parity remains partial.
+
 Exceptions
 ----------
 
 Exceptions are normalized in `@devscast/datazen/exception`. Driver-specific errors are
 translated through per-driver exception converters:
 
-- `MySQLExceptionConverter` / `SQLSrvExceptionConverter` from `@devscast/datazen/driver`
+- `MySQLExceptionConverter`, `SQLSrvExceptionConverter`, `PgSQLExceptionConverter`, and `SQLiteExceptionConverter` from `@devscast/datazen/driver`
 
 Tools
 -----

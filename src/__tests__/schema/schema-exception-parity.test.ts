@@ -5,39 +5,37 @@ import { ObjectDoesNotExist } from "../../schema/collections/exception/object-do
 import { OptionallyUnqualifiedNamedObjectSet } from "../../schema/collections/optionally-unqualified-named-object-set";
 import { UnqualifiedNamedObjectSet } from "../../schema/collections/unqualified-named-object-set";
 import { ColumnEditor } from "../../schema/column-editor";
-import {
-  ColumnAlreadyExists,
-  ColumnDoesNotExist,
-  ForeignKeyDoesNotExist,
-  IncomparableNames,
-  IndexAlreadyExists,
-  IndexDoesNotExist,
-  IndexNameInvalid,
-  InvalidColumnDefinition,
-  InvalidForeignKeyConstraintDefinition,
-  InvalidIdentifier,
-  InvalidIndexDefinition,
-  InvalidPrimaryKeyConstraintDefinition,
-  InvalidSequenceDefinition,
-  InvalidState,
-  InvalidTableDefinition,
-  InvalidTableModification,
-  InvalidTableName,
-  InvalidUniqueConstraintDefinition,
-  InvalidViewDefinition,
-  NamespaceAlreadyExists,
-  NotImplemented,
-  PrimaryKeyAlreadyExists,
-  InvalidName as SchemaInvalidName,
-  SequenceAlreadyExists,
-  SequenceDoesNotExist,
-  TableAlreadyExists,
-  TableDoesNotExist,
-  UniqueConstraintDoesNotExist,
-  UnknownColumnOption,
-  UnsupportedName,
-  UnsupportedSchema,
-} from "../../schema/exception";
+import { ColumnAlreadyExists } from "../../schema/exception/column-already-exists";
+import { ColumnDoesNotExist } from "../../schema/exception/column-does-not-exist";
+import { ForeignKeyDoesNotExist } from "../../schema/exception/foreign-key-does-not-exist";
+import { IncomparableNames } from "../../schema/exception/incomparable-names";
+import { IndexAlreadyExists } from "../../schema/exception/index-already-exists";
+import { IndexDoesNotExist } from "../../schema/exception/index-does-not-exist";
+import { IndexNameInvalid } from "../../schema/exception/index-name-invalid";
+import { InvalidColumnDefinition } from "../../schema/exception/invalid-column-definition";
+import { InvalidForeignKeyConstraintDefinition } from "../../schema/exception/invalid-foreign-key-constraint-definition";
+import { InvalidIdentifier } from "../../schema/exception/invalid-identifier";
+import { InvalidIndexDefinition } from "../../schema/exception/invalid-index-definition";
+import { InvalidName as SchemaInvalidName } from "../../schema/exception/invalid-name";
+import { InvalidPrimaryKeyConstraintDefinition } from "../../schema/exception/invalid-primary-key-constraint-definition";
+import { InvalidSequenceDefinition } from "../../schema/exception/invalid-sequence-definition";
+import { InvalidState } from "../../schema/exception/invalid-state";
+import { InvalidTableDefinition } from "../../schema/exception/invalid-table-definition";
+import { InvalidTableModification } from "../../schema/exception/invalid-table-modification";
+import { InvalidTableName } from "../../schema/exception/invalid-table-name";
+import { InvalidUniqueConstraintDefinition } from "../../schema/exception/invalid-unique-constraint-definition";
+import { InvalidViewDefinition } from "../../schema/exception/invalid-view-definition";
+import { NamespaceAlreadyExists } from "../../schema/exception/namespace-already-exists";
+import { NotImplemented } from "../../schema/exception/not-implemented";
+import { PrimaryKeyAlreadyExists } from "../../schema/exception/primary-key-already-exists";
+import { SequenceAlreadyExists } from "../../schema/exception/sequence-already-exists";
+import { SequenceDoesNotExist } from "../../schema/exception/sequence-does-not-exist";
+import { TableAlreadyExists } from "../../schema/exception/table-already-exists";
+import { TableDoesNotExist } from "../../schema/exception/table-does-not-exist";
+import { UniqueConstraintDoesNotExist } from "../../schema/exception/unique-constraint-does-not-exist";
+import { UnknownColumnOption } from "../../schema/exception/unknown-column-option";
+import { UnsupportedName } from "../../schema/exception/unsupported-name";
+import { UnsupportedSchema } from "../../schema/exception/unsupported-schema";
 import { ForeignKeyConstraintEditor } from "../../schema/foreign-key-constraint-editor";
 import { IndexEditor } from "../../schema/index-editor";
 import { ExpectedDot } from "../../schema/name/parser/exception/expected-dot";

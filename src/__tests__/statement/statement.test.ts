@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { MixedParameterStyleException } from "../../exception/index";
 import { ParameterType } from "../../parameter-type";
 import { Result } from "../../result";
 import { Statement, type StatementExecutor } from "../../statement";
-import type { QueryParameterTypes, QueryParameters } from "../../types";
+import type { QueryParameterTypes, QueryParameters } from "./query";
 
 class SpyExecutor implements StatementExecutor {
   public lastQueryCall:
@@ -101,12 +100,17 @@ describe("Statement", () => {
     });
   });
 
-  it("throws when positional and named bindings are mixed", async () => {
-    const statement = new Statement(new SpyExecutor(), "SELECT * FROM users WHERE id = :id");
+  it("supports mixed positional and named bindings", async () => {
+    const executor = new SpyExecutor();
+    const mixed = new Statement(executor, "SELECT * FROM users WHERE id = :id AND parent_id = ?");
 
-    statement.bindValue(1, 10).bindValue("id", 10);
+    await mixed.bindValue(1, 10).bindValue("id", 10).executeQuery();
 
-    await expect(statement.executeQuery()).rejects.toThrow(MixedParameterStyleException);
+    expect(executor.lastQueryCall).toEqual({
+      params: { 0: 10, id: 10 },
+      sql: "SELECT * FROM users WHERE id = :id AND parent_id = ?",
+      types: { 0: ParameterType.STRING, id: ParameterType.STRING },
+    });
   });
 
   it("executes statement calls through executor", async () => {

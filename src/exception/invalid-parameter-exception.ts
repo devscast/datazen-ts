@@ -1,3 +1,8 @@
-import { DbalException } from "./dbal-exception";
+import { initializeException } from "./_util";
 
-export class InvalidParameterException extends DbalException {}
+export class InvalidParameterException extends Error {
+  constructor(message = "Invalid parameter.") {
+    super(message);
+    initializeException(this, new.target);
+  }
+}

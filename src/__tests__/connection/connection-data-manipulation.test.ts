@@ -1,21 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { Connection } from "../../connection";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import { DriverException } from "../../exception/index";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
+import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import type { CompiledQuery } from "../../types";
+import type { CompiledQuery } from "./query";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -32,13 +28,60 @@ class NoopExceptionConverter implements ExceptionConverter {
 class CaptureConnection implements DriverConnection {
   public latestStatement: CompiledQuery | null = null;
 
-  public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
-    return { rows: [] };
+  public async prepare(sql: string) {
+    const boundValues = new Map<string | number, unknown>();
+    const boundTypes = new Map<string | number, ParameterType | undefined>();
+
+    return {
+      bindValue: (param: string | number, value: unknown, type?: ParameterType) => {
+        boundValues.set(param, value);
+        boundTypes.set(param, type);
+      },
+      execute: async () => {
+        const stringKeys = [...boundValues.keys()].filter(
+          (key): key is string => typeof key === "string",
+        );
+
+        if (stringKeys.length > 0) {
+          this.latestStatement = {
+            sql,
+            parameters: Object.fromEntries(stringKeys.map((key) => [key, boundValues.get(key)])),
+            types: Object.fromEntries(
+              stringKeys.map((key) => [key, boundTypes.get(key) ?? ParameterType.STRING]),
+            ),
+          };
+        } else {
+          const numericKeys = [...boundValues.keys()]
+            .filter((key): key is number => typeof key === "number")
+            .sort((a, b) => a - b);
+
+          this.latestStatement = {
+            sql,
+            parameters: numericKeys.map((key) => boundValues.get(key)),
+            types: numericKeys.map((key) => boundTypes.get(key) ?? ParameterType.STRING),
+          };
+        }
+
+        return new ArrayResult([], [], 1);
+      },
+    };
   }
 
-  public async executeStatement(query: CompiledQuery): Promise<DriverExecutionResult> {
-    this.latestStatement = query;
-    return { affectedRows: 1, insertId: 1 };
+  public async query(_sql: string) {
+    return new ArrayResult([]);
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
+    this.latestStatement = { sql, parameters: [], types: [] };
+    return 1;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 1;
   }
 
   public async beginTransaction(): Promise<void> {}

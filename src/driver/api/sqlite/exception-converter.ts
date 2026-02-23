@@ -1,13 +1,10 @@
-import {
-  ConnectionException,
-  DeadlockException,
-  DriverException,
-  type DriverExceptionDetails,
-  ForeignKeyConstraintViolationException,
-  NotNullConstraintViolationException,
-  SqlSyntaxException,
-  UniqueConstraintViolationException,
-} from "../../../exception/index";
+import { ConnectionException } from "../../../exception/connection-exception";
+import { DeadlockException } from "../../../exception/deadlock-exception";
+import { DriverException, type DriverExceptionDetails } from "../../../exception/driver-exception";
+import { ForeignKeyConstraintViolationException } from "../../../exception/foreign-key-constraint-violation-exception";
+import { NotNullConstraintViolationException } from "../../../exception/not-null-constraint-violation-exception";
+import { SyntaxErrorException } from "../../../exception/syntax-error-exception";
+import { UniqueConstraintViolationException } from "../../../exception/unique-constraint-violation-exception";
 import type {
   ExceptionConverterContext,
   ExceptionConverter as ExceptionConverterContract,
@@ -43,7 +40,7 @@ export class ExceptionConverter implements ExceptionConverterContract {
     }
 
     if (code === "SQLITE_ERROR" && message.includes("syntax")) {
-      return new SqlSyntaxException(details.message, details);
+      return new SyntaxErrorException(details.message, details);
     }
 
     return new DriverException(details.message, details);

@@ -1,23 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { ParameterBindingStyle } from "../../driver";
+import { StaticServerVersionProvider } from "../../connection/static-server-version-provider";
+import { ExceptionConverter as SQLiteExceptionConverter } from "../../driver/api/sqlite/exception-converter";
 import { SQLite3Driver } from "../../driver/sqlite3/driver";
-import { DbalException } from "../../exception/index";
 import { SQLitePlatform } from "../../platforms/sqlite-platform";
-import { StaticServerVersionProvider } from "../../static-server-version-provider";
 
 describe("SQLite3Driver", () => {
-  it("exposes expected metadata", () => {
-    const driver = new SQLite3Driver();
-
-    expect(driver.name).toBe("sqlite3");
-    expect(driver.bindingStyle).toBe(ParameterBindingStyle.POSITIONAL);
-  });
-
   it("throws when no database object is provided", async () => {
     const driver = new SQLite3Driver();
 
-    await expect(driver.connect({})).rejects.toThrow(DbalException);
+    await expect(driver.connect({})).rejects.toThrow(Error);
   });
 
   it("prefers database over connection/client", async () => {
@@ -56,9 +48,9 @@ describe("SQLite3Driver", () => {
     expect(calls.close).toBe(1);
   });
 
-  it("returns a stable exception converter instance", () => {
+  it("returns the Doctrine SQLite exception converter", () => {
     const driver = new SQLite3Driver();
-    expect(driver.getExceptionConverter()).toBe(driver.getExceptionConverter());
+    expect(driver.getExceptionConverter()).toBeInstanceOf(SQLiteExceptionConverter);
   });
 
   it("returns the SQLite platform", () => {

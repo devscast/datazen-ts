@@ -1,26 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import { MySQL2Connection } from "../../driver/mysql2/connection";
-import { DbalException, InvalidParameterException } from "../../exception/index";
+import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
 
 describe("MySQL2Connection", () => {
-  it("executes query using execute() and normalizes rows", async () => {
+  it("executes prepared query using execute() and normalizes rows", async () => {
     const client = {
       execute: async () => [[{ id: 1, name: "Alice" }], []],
     };
     const connection = new MySQL2Connection(client, false);
+    const statement = await connection.prepare("SELECT id, name FROM users WHERE id = ?");
+    statement.bindValue(1, 1);
 
-    const result = await connection.executeQuery({
-      parameters: [1],
-      sql: "SELECT id, name FROM users WHERE id = ?",
-      types: [],
-    });
-
-    expect(result).toEqual({
-      columns: ["id", "name"],
-      rowCount: 1,
-      rows: [{ id: 1, name: "Alice" }],
-    });
+    const result = await statement.execute();
+    expect(result.fetchAllAssociative()).toEqual([{ id: 1, name: "Alice" }]);
+    expect(result.rowCount()).toBe(1);
   });
 
   it("falls back to query() when execute() is unavailable", async () => {
@@ -29,70 +23,46 @@ describe("MySQL2Connection", () => {
     };
     const connection = new MySQL2Connection(client, false);
 
-    const result = await connection.executeQuery({
-      parameters: [],
-      sql: "SELECT 1 AS value",
-      types: [],
-    });
-
-    expect(result.rows).toEqual([{ value: 1 }]);
+    const result = await connection.query("SELECT 1 AS value");
+    expect(result.fetchAllAssociative()).toEqual([{ value: 1 }]);
   });
 
-  it("normalizes statement metadata", async () => {
+  it("normalizes statement metadata through exec() and lastInsertId()", async () => {
     const client = {
       execute: async () => [{ affectedRows: 3, insertId: 99 }],
     };
     const connection = new MySQL2Connection(client, false);
 
-    const result = await connection.executeStatement({
-      parameters: [],
-      sql: "UPDATE users SET active = 1",
-      types: [],
-    });
-
-    expect(result).toEqual({ affectedRows: 3, insertId: 99 });
+    expect(await connection.exec("UPDATE users SET active = 1")).toBe(3);
+    await expect(connection.lastInsertId()).resolves.toBe(99);
   });
 
-  it("derives affected rows from array results when metadata is missing", async () => {
+  it("returns rows from prepared statements and rowCount", async () => {
     const client = {
       query: async () => [[{ id: 1 }, { id: 2 }], []],
     };
     const connection = new MySQL2Connection(client, false);
+    const statement = await connection.prepare("SELECT id FROM users");
+    const result = await statement.execute();
 
-    const result = await connection.executeStatement({
-      parameters: [],
-      sql: "SELECT id FROM users",
-      types: [],
-    });
-
-    expect(result).toEqual({ affectedRows: 2, insertId: null });
+    expect(result.fetchAllAssociative()).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(result.rowCount()).toBe(2);
   });
 
-  it("rejects named parameter payloads after compilation", async () => {
+  it("rejects named parameter binding", async () => {
     const client = {
       query: async () => [[{ id: 1 }], []],
     };
     const connection = new MySQL2Connection(client, false);
+    const statement = await connection.prepare("SELECT id FROM users WHERE id = ?");
 
-    await expect(
-      connection.executeQuery({
-        parameters: { id: 1 },
-        sql: "SELECT id FROM users WHERE id = :id",
-        types: {},
-      }),
-    ).rejects.toThrow(InvalidParameterException);
+    expect(() => statement.bindValue("id", 1)).toThrow(InvalidParameterException);
   });
 
   it("throws when client has neither execute() nor query()", async () => {
     const connection = new MySQL2Connection({}, false);
 
-    await expect(
-      connection.executeQuery({
-        parameters: [],
-        sql: "SELECT 1",
-        types: [],
-      }),
-    ).rejects.toThrow(DbalException);
+    await expect(connection.query("SELECT 1")).rejects.toThrow(Error);
   });
 
   it("begins and commits transactions on acquired pooled connections", async () => {
@@ -164,31 +134,8 @@ describe("MySQL2Connection", () => {
   it("throws for invalid transaction transitions", async () => {
     const connection = new MySQL2Connection({ query: async () => [] }, false);
 
-    await expect(connection.commit()).rejects.toThrow(DbalException);
-    await expect(connection.rollBack()).rejects.toThrow(DbalException);
-  });
-
-  it("issues savepoint SQL", async () => {
-    const capturedSql: string[] = [];
-    const connection = new MySQL2Connection(
-      {
-        query: async (sql: string) => {
-          capturedSql.push(sql);
-          return [];
-        },
-      },
-      false,
-    );
-
-    await connection.createSavepoint("sp1");
-    await connection.releaseSavepoint("sp1");
-    await connection.rollbackSavepoint("sp1");
-
-    expect(capturedSql).toEqual([
-      "SAVEPOINT sp1",
-      "RELEASE SAVEPOINT sp1",
-      "ROLLBACK TO SAVEPOINT sp1",
-    ]);
+    await expect(connection.commit()).rejects.toThrow(Error);
+    await expect(connection.rollBack()).rejects.toThrow(Error);
   });
 
   it("quotes string values and reads server version", async () => {

@@ -1,79 +1,76 @@
-import type { DriverConnection, DriverExecutionResult, DriverQueryResult } from "../../driver";
-import { DbalException, InvalidParameterException } from "../../exception/index";
-import type { CompiledQuery } from "../../types";
+import { ArrayResult } from "../array-result";
+import type { Connection as DriverConnection } from "../connection";
+import { NoIdentityValue } from "../exception/no-identity-value";
+import type { Result as DriverResult } from "../result";
+import type { Statement as DriverStatement } from "../statement";
+import { SQLite3Statement } from "./statement";
 import type { SQLite3DatabaseLike, SQLite3RunContextLike } from "./types";
 
 export class SQLite3Connection implements DriverConnection {
   private inTransaction = false;
+  private lastInsertIdValue: number | string | null = null;
 
   constructor(
     private readonly database: SQLite3DatabaseLike,
     private readonly ownsClient: boolean,
   ) {}
 
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
-    const parameters = this.toPositionalParameters(query.parameters);
-    const rows = await this.queryAll(query.sql, parameters);
-    const firstRow = rows[0];
-
-    return {
-      columns: firstRow === undefined ? [] : Object.keys(firstRow),
-      rowCount: rows.length,
-      rows,
-    };
+  public async prepare(sql: string): Promise<DriverStatement> {
+    return new SQLite3Statement(this, sql);
   }
 
-  public async executeStatement(query: CompiledQuery): Promise<DriverExecutionResult> {
-    const parameters = this.toPositionalParameters(query.parameters);
-    const result = await this.queryRun(query.sql, parameters);
+  public async query(sql: string): Promise<DriverResult> {
+    const rows = await this.queryAll(sql, []);
+    const firstRow = rows[0];
 
-    return {
-      affectedRows: result.changes ?? 0,
-      insertId: result.lastID ?? null,
-    };
+    return new ArrayResult(rows, firstRow === undefined ? [] : Object.keys(firstRow), rows.length);
+  }
+
+  public quote(value: string): string {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
+    const result = await this.queryRun(sql, []);
+    this.lastInsertIdValue =
+      typeof result.lastID === "number" || typeof result.lastID === "string" ? result.lastID : null;
+
+    return typeof result.changes === "number" ? result.changes : 0;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    if (this.lastInsertIdValue === null) {
+      throw NoIdentityValue.new();
+    }
+
+    return this.lastInsertIdValue;
   }
 
   public async beginTransaction(): Promise<void> {
     if (this.inTransaction) {
-      throw new DbalException("A transaction is already active on this connection.");
+      throw new Error("A transaction is already active on this connection.");
     }
 
-    await this.exec("BEGIN");
+    await this.execSql("BEGIN");
     this.inTransaction = true;
   }
 
   public async commit(): Promise<void> {
     if (!this.inTransaction) {
-      throw new DbalException("No active transaction to commit.");
+      throw new Error("No active transaction to commit.");
     }
 
-    await this.exec("COMMIT");
+    await this.execSql("COMMIT");
     this.inTransaction = false;
   }
 
   public async rollBack(): Promise<void> {
     if (!this.inTransaction) {
-      throw new DbalException("No active transaction to roll back.");
+      throw new Error("No active transaction to roll back.");
     }
 
-    await this.exec("ROLLBACK");
+    await this.execSql("ROLLBACK");
     this.inTransaction = false;
-  }
-
-  public async createSavepoint(name: string): Promise<void> {
-    await this.exec(`SAVEPOINT ${name}`);
-  }
-
-  public async releaseSavepoint(name: string): Promise<void> {
-    await this.exec(`RELEASE SAVEPOINT ${name}`);
-  }
-
-  public async rollbackSavepoint(name: string): Promise<void> {
-    await this.exec(`ROLLBACK TO SAVEPOINT ${name}`);
-  }
-
-  public quote(value: string): string {
-    return `'${value.replace(/'/g, "''")}'`;
   }
 
   public async getServerVersion(): Promise<string> {
@@ -86,7 +83,7 @@ export class SQLite3Connection implements DriverConnection {
   public async close(): Promise<void> {
     if (this.inTransaction) {
       try {
-        await this.exec("ROLLBACK");
+        await this.execSql("ROLLBACK");
       } catch {
         // best effort rollback during close
       } finally {
@@ -94,11 +91,7 @@ export class SQLite3Connection implements DriverConnection {
       }
     }
 
-    if (!this.ownsClient) {
-      return;
-    }
-
-    if (this.database.close === undefined) {
+    if (!this.ownsClient || this.database.close === undefined) {
       return;
     }
 
@@ -118,13 +111,33 @@ export class SQLite3Connection implements DriverConnection {
     return this.database;
   }
 
-  private toPositionalParameters(parameters: CompiledQuery["parameters"]): unknown[] {
-    if (Array.isArray(parameters)) {
-      return parameters;
+  public async executePrepared(sql: string, parameters: unknown[]): Promise<DriverResult> {
+    if (this.isResultSetSql(sql)) {
+      const rows = await this.queryAll(sql, parameters);
+      const firstRow = rows[0];
+
+      return new ArrayResult(
+        rows,
+        firstRow === undefined ? [] : Object.keys(firstRow),
+        rows.length,
+      );
     }
 
-    throw new InvalidParameterException(
-      "The sqlite3 driver expects positional parameters after SQL compilation.",
+    const result = await this.queryRun(sql, parameters);
+    this.lastInsertIdValue =
+      typeof result.lastID === "number" || typeof result.lastID === "string" ? result.lastID : null;
+
+    return new ArrayResult([], [], typeof result.changes === "number" ? result.changes : 0);
+  }
+
+  private isResultSetSql(sql: string): boolean {
+    const normalized = sql.trimStart().toUpperCase();
+
+    return (
+      normalized.startsWith("SELECT") ||
+      normalized.startsWith("PRAGMA") ||
+      normalized.startsWith("WITH") ||
+      normalized.startsWith("EXPLAIN")
     );
   }
 
@@ -133,7 +146,7 @@ export class SQLite3Connection implements DriverConnection {
     parameters: unknown[],
   ): Promise<Array<Record<string, unknown>>> {
     if (this.database.all === undefined) {
-      throw new DbalException("The provided sqlite3 database does not expose all().");
+      throw new Error("The provided sqlite3 database does not expose all().");
     }
 
     const rows = await new Promise<unknown[]>((resolve, reject) => {
@@ -159,7 +172,12 @@ export class SQLite3Connection implements DriverConnection {
 
   private async queryRun(sql: string, parameters: unknown[]): Promise<SQLite3RunContextLike> {
     if (this.database.run === undefined) {
-      throw new DbalException("The provided sqlite3 database does not expose run().");
+      if (parameters.length === 0 && this.database.exec !== undefined) {
+        await this.execSql(sql);
+        return { changes: 0 };
+      }
+
+      throw new Error("The provided sqlite3 database does not expose run().");
     }
 
     return new Promise<SQLite3RunContextLike>((resolve, reject) => {
@@ -171,13 +189,16 @@ export class SQLite3Connection implements DriverConnection {
 
         resolve({
           changes: typeof this?.changes === "number" ? this.changes : 0,
-          lastID: typeof this?.lastID === "number" ? this.lastID : undefined,
+          lastID:
+            typeof this?.lastID === "number" || typeof this?.lastID === "string"
+              ? this.lastID
+              : undefined,
         });
       });
     });
   }
 
-  private async exec(sql: string): Promise<void> {
+  private async execSql(sql: string): Promise<void> {
     if (this.database.exec !== undefined) {
       await new Promise<void>((resolve, reject) => {
         this.database.exec?.(sql, (error) => {

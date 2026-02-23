@@ -17,14 +17,14 @@ Top-Level Parity
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Connection / Statement / Result | Partial | Core runtime APIs are implemented; some Doctrine transaction APIs and behaviors remain missing. |
-| DriverManager | Partial | Built-in resolution exists, but driver matrix is much smaller than Doctrine. |
+| Connection / Statement / Result | Partial | Core runtime APIs are implemented, including Doctrine-inspired `PrimaryReadReplicaConnection`; some Doctrine transaction APIs and behaviors remain missing. |
+| DriverManager | Partial | Built-in resolution exists for `mysql2`, `mssql`, `pg`, and `sqlite3`, but Doctrine's driver/vendor matrix is still much broader. |
 | Driver abstraction | Partial | TS/Node async contract differs intentionally from Doctrine's low-level driver interfaces. |
 | Query Builder | Partial | Core builder and execution APIs implemented; Doctrine result cache integration is missing. |
 | SQL Parser / SQL Builders | Partial | Parameter parser and SQL builder support exist; parity breadth is still evolving. |
-| Platforms | Partial | MySQL, SQL Server, Oracle, Db2 platforms exist; version-specific platform variants/detection are incomplete. |
+| Platforms | Partial | MySQL/MariaDB, PostgreSQL, SQLite, SQL Server, Oracle, and Db2 platform classes exist. Versioned MySQL/MariaDB/PostgreSQL platform selection is implemented when a synchronous `serverVersion` is available, but full Doctrine matrix/detection parity is incomplete. |
 | Types | Partial | Strong runtime type system and registry support; parity breadth and schema-driven flows continue to evolve. |
-| Schema | Partial | Significant schema module support exists (assets, managers, comparator/editors, metadata/introspection scaffolding), but full Doctrine parity is still in progress. |
+| Schema | Partial | Significant schema module support exists (assets, managers, comparator/editors, metadata/introspection helpers, vendor schema managers), but full Doctrine parity is still in progress. |
 | Logging middleware | Implemented | Doctrine-inspired middleware pattern ported for Node driver wrapping. |
 | Portability middleware | Implemented | Result portability normalization and optimization flags are available. |
 | Tools (DSN parser) | Implemented | `DsnParser` exists and is documented/test-covered. |
@@ -34,17 +34,18 @@ Doctrine Areas With Strong Coverage (Current)
 ---------------------------------------------
 
 - Driver middleware (`logging`, `portability`)
+- Built-in runtime adapters for `mysql2`, `mssql`, `pg`, and `sqlite3`
 - SQL parameter parsing and array/list expansion flow
 - QueryBuilder core operations and execution helpers
-- Platform SQL helpers and vendor keyword list access
+- Platform SQL helpers, vendor keyword lists, and versioned MySQL/MariaDB/PostgreSQL platform variants
 - Types registry and built-in type conversions
 - Schema foundations (assets, diffs, editors, schema managers, metadata/introspection helpers)
 
 Known Major Gaps vs Doctrine DBAL
 ---------------------------------
 
-- Wider driver support (Doctrine supports many more drivers/vendors than the current `mysql2` + `mssql` runtime adapters)
-- Version-specific platform subclass selection and automatic server-version detection
+- Wider driver support (Doctrine supports more drivers/vendors; Datazen currently ships runtime adapters for `mysql2`, `mssql`, `pg`, and `sqlite3`)
+- Fully automatic version-based platform detection from live async connections (versioned selection is best-effort and primarily driven by configured `serverVersion` / `primary.serverVersion`)
 - QueryBuilder result cache integration (`enableResultCache()`-style API)
 - Connection transaction isolation getter/setter parity
 - Retryable exception marker semantics / lock-wait-timeout-specific exception parity
@@ -54,7 +55,7 @@ Intentional TS/Node Deviations
 ------------------------------
 
 - Async driver contracts returning `Promise` values
-- Node-driver adapters (`mysql2`, `mssql`) instead of PDO-style drivers
+- Node-driver adapters (`mysql2`, `mssql`, `pg`, `sqlite3`) instead of PDO-style drivers
 - Package subpath exports for grouped APIs:
   - `@devscast/datazen/driver`
   - `@devscast/datazen/platforms`

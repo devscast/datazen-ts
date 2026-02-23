@@ -15,11 +15,15 @@ Runtime drivers currently shipped:
 
 - MySQL (via `mysql2`)
 - Microsoft SQL Server (via `mssql`)
+- PostgreSQL (via `pg`)
+- SQLite (via `sqlite3`)
 
 Platform abstractions currently shipped:
 
-- MySQL
+- MySQL / MariaDB (including versioned variants)
 - SQL Server
+- PostgreSQL
+- SQLite
 - Oracle (platform-only)
 - Db2 (platform-only)
 
@@ -36,6 +40,7 @@ Current scope includes:
 - `Connection`, `Statement`, `Result` abstractions
 - QueryBuilder and SQL parser support
 - Type conversion subsystem
+- Schema module foundations (`@devscast/datazen/schema`) with ongoing parity work
 - Driver middleware (logging, portability)
 - DSN parsing
 

@@ -1,73 +1,34 @@
-import type { DriverQueryResult } from "./driver";
-import { NoKeyValueException } from "./exception/index";
+import type { Result as DriverResult } from "./driver/result";
+import { NoKeyValue } from "./exception/no-key-value";
 
 type AssociativeRow = Record<string, unknown>;
 type NumericRow = unknown[];
 
-export class Result<TRow extends AssociativeRow = AssociativeRow> {
-  private rows: TRow[];
-  private cursor = 0;
-  private readonly explicitColumns: string[];
-  private readonly explicitRowCount?: number;
+type DriverResultWithColumnName = DriverResult & {
+  getColumnName?: (index: number) => string;
+};
 
-  constructor(result: DriverQueryResult) {
-    this.rows = [...result.rows] as TRow[];
-    this.explicitColumns = result.columns ?? [];
-    this.explicitRowCount = result.rowCount;
-  }
+export class Result<TRow extends AssociativeRow = AssociativeRow> {
+  constructor(private readonly result: DriverResult) {}
 
   public fetchNumeric<T extends NumericRow = NumericRow>(): T | false {
-    const row = this.fetchAssociative();
-    if (row === false) {
-      return false;
-    }
-
-    const columns = this.getColumnsFromRow(row);
-    return columns.map((column) => row[column]) as T;
+    return this.result.fetchNumeric<unknown>() as T | false;
   }
 
   public fetchAssociative<T extends AssociativeRow = TRow>(): T | false {
-    const row = this.rows[this.cursor];
-    if (row === undefined) {
-      return false;
-    }
-
-    this.cursor += 1;
-    return { ...row } as unknown as T;
+    return this.result.fetchAssociative<T>();
   }
 
   public fetchOne<T = unknown>(): T | false {
-    const row = this.fetchNumeric();
-    if (row === false) {
-      return false;
-    }
-
-    const value = row[0];
-    return value === undefined ? false : (value as T);
+    return this.result.fetchOne<T>();
   }
 
   public fetchAllNumeric<T extends NumericRow = NumericRow>(): T[] {
-    const rows: T[] = [];
-    let row = this.fetchNumeric<T>();
-
-    while (row !== false) {
-      rows.push(row);
-      row = this.fetchNumeric<T>();
-    }
-
-    return rows;
+    return this.result.fetchAllNumeric<unknown>() as T[];
   }
 
   public fetchAllAssociative<T extends AssociativeRow = TRow>(): T[] {
-    const rows: T[] = [];
-    let row = this.fetchAssociative<T>();
-
-    while (row !== false) {
-      rows.push(row);
-      row = this.fetchAssociative<T>();
-    }
-
-    return rows;
+    return this.result.fetchAllAssociative<T>();
   }
 
   public fetchAllKeyValue<T = unknown>(): Record<string, T> {
@@ -96,12 +57,7 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
     const indexed: Record<string, T> = {};
 
     for (const row of rows) {
-      const columns = this.getColumnsFromRow(row);
-      const keyColumn = columns[0];
-      if (keyColumn === undefined) {
-        continue;
-      }
-
+      const keyColumn = this.getColumnName(0);
       const key = row[keyColumn];
       const clone = { ...row };
       delete clone[keyColumn];
@@ -112,64 +68,36 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
   }
 
   public fetchFirstColumn<T = unknown>(): T[] {
-    const values: T[] = [];
-    let value = this.fetchOne<T>();
-
-    while (value !== false) {
-      values.push(value);
-      value = this.fetchOne<T>();
-    }
-
-    return values;
+    return this.result.fetchFirstColumn<T>();
   }
 
-  public rowCount(): number {
-    return this.explicitRowCount ?? this.rows.length;
+  public rowCount(): number | string {
+    return this.result.rowCount();
   }
 
   public columnCount(): number {
-    const row = this.rows[0];
-    if (row === undefined) {
-      return this.explicitColumns.length;
-    }
-
-    return this.getColumnsFromRow(row).length;
+    return this.result.columnCount();
   }
 
   public getColumnName(index: number): string {
-    const columns = this.getColumns();
-    const column = columns[index];
+    const withColumnName = this.result as DriverResultWithColumnName;
 
-    if (column === undefined) {
-      throw new RangeError(`Column index ${index} is out of bounds.`);
+    if (typeof withColumnName.getColumnName === "function") {
+      return withColumnName.getColumnName(index);
     }
 
-    return column;
+    throw new Error("The driver result does not support accessing the column name.");
   }
 
   public free(): void {
-    this.rows = [];
-    this.cursor = 0;
-  }
-
-  private getColumnsFromRow(row: AssociativeRow): string[] {
-    return this.explicitColumns.length > 0 ? this.explicitColumns : Object.keys(row);
-  }
-
-  private getColumns(): string[] {
-    const row = this.rows[0];
-    if (row !== undefined) {
-      return this.getColumnsFromRow(row);
-    }
-
-    return this.explicitColumns;
+    this.result.free();
   }
 
   private ensureHasKeyValue(): void {
     const columnCount = this.columnCount();
 
     if (columnCount < 2) {
-      throw new NoKeyValueException(columnCount);
+      throw NoKeyValue.fromColumnCount(columnCount);
     }
   }
 }

@@ -9,15 +9,17 @@ import {
   TypesAlreadyExists,
   UnknownColumnType,
 } from "../../types/exception/index";
-import { Type } from "../../types/index";
 import { JsonType } from "../../types/json-type";
+import { registerBuiltInTypes } from "../../types/register-built-in-types";
 import { SimpleArrayType } from "../../types/simple-array-type";
 import { StringType } from "../../types/string-type";
+import { Type } from "../../types/type";
 import { TypeRegistry } from "../../types/type-registry";
 import { Types } from "../../types/types";
 
 describe("Types subsystem", () => {
   it("loads built-in types from the global registry", () => {
+    registerBuiltInTypes();
     expect(Type.hasType(Types.STRING)).toBe(true);
     expect(Type.hasType(Types.INTEGER)).toBe(true);
 

@@ -1,4 +1,4 @@
-import { InvalidPrimaryKeyConstraintDefinition } from "./exception/index";
+import { InvalidPrimaryKeyConstraintDefinition } from "./exception/invalid-primary-key-constraint-definition";
 import { PrimaryKeyConstraintEditor } from "./primary-key-constraint-editor";
 
 export class PrimaryKeyConstraint {

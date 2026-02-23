@@ -1,21 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { ParameterBindingStyle } from "../../driver";
+import { ExceptionConverter as SQLServerExceptionConverter } from "../../driver/api/sql-server/exception-converter";
 import { MSSQLDriver } from "../../driver/mssql/driver";
-import { DbalException } from "../../exception/index";
 
 describe("MSSQLDriver", () => {
-  it("exposes expected metadata", () => {
-    const driver = new MSSQLDriver();
-
-    expect(driver.name).toBe("mssql");
-    expect(driver.bindingStyle).toBe(ParameterBindingStyle.NAMED);
-  });
-
   it("throws when no client object is provided", async () => {
     const driver = new MSSQLDriver();
 
-    await expect(driver.connect({})).rejects.toThrow(DbalException);
+    await expect(driver.connect({})).rejects.toThrow(Error);
   });
 
   it("prefers pool over connection/client in params", async () => {
@@ -96,9 +88,9 @@ describe("MSSQLDriver", () => {
     expect(calls.close).toBe(1);
   });
 
-  it("returns a stable exception converter instance", () => {
+  it("returns the Doctrine SQL Server exception converter", () => {
     const driver = new MSSQLDriver();
 
-    expect(driver.getExceptionConverter()).toBe(driver.getExceptionConverter());
+    expect(driver.getExceptionConverter()).toBeInstanceOf(SQLServerExceptionConverter);
   });
 });

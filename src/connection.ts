@@ -1,19 +1,26 @@
 import { ArrayParameterType } from "./array-parameter-type";
 import { Configuration } from "./configuration";
-import { type Driver, type DriverConnection, ParameterBindingStyle } from "./driver";
+import { StaticServerVersionProvider } from "./connection/static-server-version-provider";
+import { type Driver, type DriverConnection } from "./driver";
 import type { ExceptionConverter } from "./driver/api/exception-converter";
-import {
-  ConnectionException,
-  DbalException,
-  MissingPositionalParameterException,
-  MixedParameterStyleException,
-  NestedTransactionsNotSupportedException,
-  NoActiveTransactionException,
-  RollbackOnlyException,
-} from "./exception/index";
+import { ParameterBindingStyle } from "./driver/internal-parameter-binding-style";
+import type { Statement as DriverStatement } from "./driver/statement";
+import type { Exception as DoctrineException } from "./exception";
+import { isDoctrineException } from "./exception/_util";
+import { CommitFailedRollbackOnly } from "./exception/commit-failed-rollback-only";
+import { ConnectionException } from "./exception/connection-exception";
+import { MissingPositionalParameterException } from "./exception/missing-positional-parameter-exception";
+import { NoActiveTransaction } from "./exception/no-active-transaction";
+import { SavepointsNotSupported } from "./exception/savepoints-not-supported";
 import { ExpandArrayParameters } from "./expand-array-parameters";
 import { ParameterType } from "./parameter-type";
 import { AbstractPlatform } from "./platforms/abstract-platform";
+import type {
+  QueryParameterType,
+  QueryParameterTypes,
+  QueryParameters,
+  QueryScalarParameterType,
+} from "./query";
 import { Query } from "./query";
 import { ExpressionBuilder } from "./query/expression/expression-builder";
 import { QueryBuilder } from "./query/query-builder";
@@ -24,15 +31,7 @@ import type { SchemaManagerFactory } from "./schema/schema-manager-factory";
 import type { ServerVersionProvider } from "./server-version-provider";
 import { Parser, type SQLParser, type Visitor } from "./sql/parser";
 import { Statement, type StatementExecutor } from "./statement";
-import { StaticServerVersionProvider } from "./static-server-version-provider";
-import type {
-  CompiledQuery,
-  QueryParameterType,
-  QueryParameterTypes,
-  QueryParameters,
-  QueryScalarParameterType,
-} from "./types";
-import { Type } from "./types/index";
+import { Type } from "./types/type";
 
 type DataMap = Record<string, unknown>;
 
@@ -47,7 +46,6 @@ export class Connection implements StatementExecutor {
   private driverConnection: DriverConnection | null = null;
   private transactionNestingLevel = 0;
   private rollbackOnly = false;
-  private latestInsertId: number | string | null = null;
   private exceptionConverter: ExceptionConverter | null = null;
   private databasePlatform: AbstractPlatform | null = null;
   private parser: SQLParser | null = null;
@@ -150,7 +148,7 @@ export class Connection implements StatementExecutor {
     const query = new Query(sql, params, types);
 
     try {
-      const result = await (await this.connect()).executeQuery(compiledQuery);
+      const result = await this.executeDriverQuery(compiledQuery);
       return new Result(result);
     } catch (error) {
       throw this.convertException(error, "executeQuery", query);
@@ -164,7 +162,7 @@ export class Connection implements StatementExecutor {
     const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
 
     try {
-      const result = await (await this.connect()).executeQuery(compiledQuery);
+      const result = await this.executeDriverQuery(compiledQuery);
       return new Result(result);
     } catch (error) {
       throw this.convertException(error, "executeQuery", query);
@@ -181,9 +179,7 @@ export class Connection implements StatementExecutor {
     const query = new Query(sql, params, types);
 
     try {
-      const result = await (await this.connect()).executeStatement(compiledQuery);
-      this.latestInsertId = result.insertId ?? null;
-      return result.affectedRows;
+      return await this.executeDriverStatement(compiledQuery);
     } catch (error) {
       throw this.convertException(error, "executeStatement", query);
     }
@@ -194,9 +190,7 @@ export class Connection implements StatementExecutor {
     const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
 
     try {
-      const result = await (await this.connect()).executeStatement(compiledQuery);
-      this.latestInsertId = result.insertId ?? null;
-      return result.affectedRows;
+      return await this.executeDriverStatement(compiledQuery);
     } catch (error) {
       throw this.convertException(error, "executeStatement", query);
     }
@@ -340,27 +334,40 @@ export class Connection implements StatementExecutor {
         return;
       }
 
+      const platform = this.getDatabasePlatform();
+      if (!platform.supportsSavepoints()) {
+        throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
+      }
+
       const savepointName = this.getNestedTransactionSavePointName(
         this.transactionNestingLevel + 1,
       );
-      if (connection.createSavepoint === undefined) {
-        throw new NestedTransactionsNotSupportedException(this.driver.name);
-      }
-
-      await connection.createSavepoint(savepointName);
+      await this.executeStatement(platform.createSavePoint(savepointName));
       this.transactionNestingLevel += 1;
     } catch (error) {
       throw this.convertException(error, "beginTransaction");
     }
   }
 
+  public async createSavepoint(savepoint: string): Promise<void> {
+    await this.executeStatement(this.getDatabasePlatform().createSavePoint(savepoint));
+  }
+
+  public async releaseSavepoint(savepoint: string): Promise<void> {
+    await this.executeStatement(this.getDatabasePlatform().releaseSavePoint(savepoint));
+  }
+
+  public async rollbackSavepoint(savepoint: string): Promise<void> {
+    await this.executeStatement(this.getDatabasePlatform().rollbackSavePoint(savepoint));
+  }
+
   public async commit(): Promise<void> {
     if (this.transactionNestingLevel === 0) {
-      throw new NoActiveTransactionException();
+      throw NoActiveTransaction.new();
     }
 
     if (this.rollbackOnly) {
-      throw new RollbackOnlyException();
+      throw CommitFailedRollbackOnly.new();
     }
 
     const connection = await this.connect();
@@ -369,12 +376,15 @@ export class Connection implements StatementExecutor {
       if (this.transactionNestingLevel === 1) {
         await connection.commit();
       } else {
-        if (connection.releaseSavepoint === undefined) {
-          throw new NestedTransactionsNotSupportedException(this.driver.name);
+        const platform = this.getDatabasePlatform();
+        if (!platform.supportsSavepoints() || !platform.supportsReleaseSavepoints()) {
+          throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
         }
 
-        await connection.releaseSavepoint(
-          this.getNestedTransactionSavePointName(this.transactionNestingLevel),
+        await this.executeStatement(
+          platform.releaseSavePoint(
+            this.getNestedTransactionSavePointName(this.transactionNestingLevel),
+          ),
         );
       }
     } catch (error) {
@@ -386,7 +396,7 @@ export class Connection implements StatementExecutor {
 
   public async rollBack(): Promise<void> {
     if (this.transactionNestingLevel === 0) {
-      throw new NoActiveTransactionException();
+      throw NoActiveTransaction.new();
     }
 
     try {
@@ -407,12 +417,15 @@ export class Connection implements StatementExecutor {
         return;
       }
 
-      if (connection.rollbackSavepoint === undefined) {
-        throw new NestedTransactionsNotSupportedException(this.driver.name);
+      const platform = this.getDatabasePlatform();
+      if (!platform.supportsSavepoints()) {
+        throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
       }
 
-      await connection.rollbackSavepoint(
-        this.getNestedTransactionSavePointName(this.transactionNestingLevel),
+      await this.executeStatement(
+        platform.rollbackSavePoint(
+          this.getNestedTransactionSavePointName(this.transactionNestingLevel),
+        ),
       );
       this.transactionNestingLevel -= 1;
     } catch (error) {
@@ -422,7 +435,7 @@ export class Connection implements StatementExecutor {
 
   public setRollbackOnly(): void {
     if (this.transactionNestingLevel === 0) {
-      throw new NoActiveTransactionException();
+      throw NoActiveTransaction.new();
     }
 
     this.rollbackOnly = true;
@@ -430,7 +443,7 @@ export class Connection implements StatementExecutor {
 
   public isRollbackOnly(): boolean {
     if (this.transactionNestingLevel === 0) {
-      throw new NoActiveTransactionException();
+      throw NoActiveTransaction.new();
     }
 
     return this.rollbackOnly;
@@ -450,7 +463,11 @@ export class Connection implements StatementExecutor {
   }
 
   public async lastInsertId(): Promise<number | string | null> {
-    return this.latestInsertId;
+    try {
+      return await (await this.connect()).lastInsertId();
+    } catch (error) {
+      throw this.convertException(error, "lastInsertId");
+    }
   }
 
   public async quote(value: string): Promise<string> {
@@ -473,10 +490,14 @@ export class Connection implements StatementExecutor {
     }
 
     try {
-      await this.driverConnection.close();
-      this.driverConnection = null;
-      this.transactionNestingLevel = 0;
-      this.rollbackOnly = false;
+      const closableConnection = this.driverConnection as DriverConnection & {
+        close?: () => Promise<void>;
+      };
+
+      if (closableConnection.close !== undefined) {
+        await closableConnection.close();
+      }
+      this.resetConnectionState();
     } catch (error) {
       throw this.convertException(error, "close");
     }
@@ -549,14 +570,75 @@ export class Connection implements StatementExecutor {
     }
   }
 
-  private compileQuery(
-    sql: string,
-    params: QueryParameters,
-    types: QueryParameterTypes,
-  ): CompiledQuery {
+  private async executeDriverQuery(compiledQuery: Query) {
+    const connection = await this.connect();
+
+    if (!this.hasBoundParameters(compiledQuery.parameters)) {
+      return connection.query(compiledQuery.sql);
+    }
+
+    const statement = await connection.prepare(compiledQuery.sql);
+    this.bindDriverParameters(statement, compiledQuery.parameters, compiledQuery.types);
+
+    return statement.execute();
+  }
+
+  private async executeDriverStatement(compiledQuery: Query): Promise<number> {
+    const connection = await this.connect();
+
+    if (!this.hasBoundParameters(compiledQuery.parameters)) {
+      const affectedRows = await connection.exec(compiledQuery.sql);
+      return typeof affectedRows === "number" ? affectedRows : Number(affectedRows);
+    }
+
+    const statement = await connection.prepare(compiledQuery.sql);
+    this.bindDriverParameters(statement, compiledQuery.parameters, compiledQuery.types);
+
+    const result = await statement.execute();
+
+    try {
+      const affectedRows = result.rowCount();
+      return typeof affectedRows === "number" ? affectedRows : Number(affectedRows);
+    } finally {
+      result.free();
+    }
+  }
+
+  private bindDriverParameters(
+    statement: DriverStatement,
+    parameters: Query["parameters"],
+    types: Query["types"],
+  ): void {
+    if (Array.isArray(parameters) && Array.isArray(types)) {
+      for (let index = 0; index < parameters.length; index += 1) {
+        const type = (types[index] ?? ParameterType.STRING) as ParameterType;
+        statement.bindValue(index + 1, parameters[index], type);
+      }
+
+      return;
+    }
+
+    if (!Array.isArray(parameters) && !Array.isArray(types)) {
+      for (const [name, value] of Object.entries(parameters)) {
+        statement.bindValue(name, value, (types[name] ?? ParameterType.STRING) as ParameterType);
+      }
+
+      return;
+    }
+  }
+
+  private hasBoundParameters(parameters: Query["parameters"]): boolean {
+    if (Array.isArray(parameters)) {
+      return parameters.length > 0;
+    }
+
+    return Object.keys(parameters).length > 0;
+  }
+
+  private compileQuery(sql: string, params: QueryParameters, types: QueryParameterTypes): Query {
     const expanded = this.expandArrayParameters(sql, params, types);
 
-    if (this.driver.bindingStyle === ParameterBindingStyle.POSITIONAL) {
+    if (this.getDriverBindingStyle() === ParameterBindingStyle.POSITIONAL) {
       return expanded;
     }
 
@@ -573,10 +655,6 @@ export class Connection implements StatementExecutor {
       (Array.isArray(types) && types.some((type) => this.isArrayParameterType(type)));
 
     if (!needsExpansion) {
-      if (!Array.isArray(params)) {
-        throw new MixedParameterStyleException();
-      }
-
       return {
         parameters: [...params],
         sql,
@@ -598,7 +676,7 @@ export class Connection implements StatementExecutor {
     sql: string,
     parameters: unknown[],
     types: QueryScalarParameterType[],
-  ): CompiledQuery {
+  ): Query {
     const sqlParts: string[] = [];
     const namedParameters: DataMap = {};
     const namedTypes: Record<string, QueryScalarParameterType> = {};
@@ -607,7 +685,16 @@ export class Connection implements StatementExecutor {
 
     const visitor: Visitor = {
       acceptNamedParameter: (): void => {
-        throw new MixedParameterStyleException();
+        if (!Object.hasOwn(parameters, parameterIndex)) {
+          throw new MissingPositionalParameterException(parameterIndex);
+        }
+
+        bindCounter += 1;
+        const name = `p${bindCounter}`;
+        sqlParts.push(`@${name}`);
+        namedParameters[name] = parameters[parameterIndex];
+        namedTypes[name] = types[parameterIndex] ?? ParameterType.STRING;
+        parameterIndex += 1;
       },
       acceptOther: (fragment: string): void => {
         sqlParts.push(fragment);
@@ -662,6 +749,30 @@ export class Connection implements StatementExecutor {
     return this.parser;
   }
 
+  private getDriverBindingStyle(): ParameterBindingStyle {
+    const bindingStyle = (this.driver as { bindingStyle?: unknown }).bindingStyle;
+
+    if (bindingStyle === ParameterBindingStyle.NAMED) {
+      return ParameterBindingStyle.NAMED;
+    }
+
+    return ParameterBindingStyle.POSITIONAL;
+  }
+
+  private getDriverName(): string {
+    const explicitName = (this.driver as { name?: unknown }).name;
+    if (typeof explicitName === "string" && explicitName.length > 0) {
+      return explicitName;
+    }
+
+    const ctorName = (this.driver as { constructor?: { name?: unknown } }).constructor?.name;
+    if (typeof ctorName === "string" && ctorName.length > 0) {
+      return ctorName;
+    }
+
+    return "driver";
+  }
+
   public convertToDatabaseValue(value: unknown, type: string): unknown {
     return Type.getType(type).convertToDatabaseValue(value, this.getDatabasePlatform());
   }
@@ -705,7 +816,7 @@ export class Connection implements StatementExecutor {
     }
 
     try {
-      this.driverConnection = await this.driver.connect(this.params);
+      this.driverConnection = await this.performConnect();
 
       if (!this.autoCommit) {
         await this.beginTransaction();
@@ -717,8 +828,26 @@ export class Connection implements StatementExecutor {
     }
   }
 
-  private convertException(error: unknown, operation: string, query?: Query): DbalException {
-    if (error instanceof DbalException) {
+  protected async performConnect(_connectionName?: string): Promise<DriverConnection> {
+    return this.driver.connect(this.params);
+  }
+
+  protected getWrappedDriverConnection(): DriverConnection | null {
+    return this.driverConnection;
+  }
+
+  protected setWrappedDriverConnection(connection: DriverConnection | null): void {
+    this.driverConnection = connection;
+  }
+
+  protected resetConnectionState(): void {
+    this.driverConnection = null;
+    this.transactionNestingLevel = 0;
+    this.rollbackOnly = false;
+  }
+
+  protected convertException(error: unknown, operation: string, query?: Query): DoctrineException {
+    if (isDoctrineException(error)) {
       return error;
     }
 
@@ -726,9 +855,7 @@ export class Connection implements StatementExecutor {
     const converted = this.exceptionConverter.convert(error, { operation, query });
 
     if (converted instanceof ConnectionException) {
-      this.driverConnection = null;
-      this.transactionNestingLevel = 0;
-      this.rollbackOnly = false;
+      this.resetConnectionState();
     }
 
     return converted;

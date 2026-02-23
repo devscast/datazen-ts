@@ -1,4 +1,4 @@
-import { InvalidSequenceDefinition } from "./exception/index";
+import { InvalidSequenceDefinition } from "./exception/invalid-sequence-definition";
 import { Sequence } from "./sequence";
 
 export class SequenceEditor {

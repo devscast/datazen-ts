@@ -2,15 +2,13 @@ import { Type } from "../types/type";
 import { AbstractAsset } from "./abstract-asset";
 import type { ColumnOptions } from "./column";
 import { Column } from "./column";
-import {
-  ColumnAlreadyExists,
-  ColumnDoesNotExist,
-  ForeignKeyDoesNotExist,
-  IndexAlreadyExists,
-  IndexDoesNotExist,
-  InvalidState,
-  PrimaryKeyAlreadyExists,
-} from "./exception/index";
+import { ColumnAlreadyExists } from "./exception/column-already-exists";
+import { ColumnDoesNotExist } from "./exception/column-does-not-exist";
+import { ForeignKeyDoesNotExist } from "./exception/foreign-key-does-not-exist";
+import { IndexAlreadyExists } from "./exception/index-already-exists";
+import { IndexDoesNotExist } from "./exception/index-does-not-exist";
+import { InvalidState } from "./exception/invalid-state";
+import { PrimaryKeyAlreadyExists } from "./exception/primary-key-already-exists";
 import { ForeignKeyConstraint } from "./foreign-key-constraint";
 import { Index } from "./index";
 import { TableEditor } from "./table-editor";

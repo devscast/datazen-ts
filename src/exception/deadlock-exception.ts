@@ -1,3 +1,3 @@
-import { DriverException } from "./driver-exception";
+import { ServerException } from "./server-exception";
 
-export class DeadlockException extends DriverException {}
+export class DeadlockException extends ServerException {}

@@ -1,24 +1,16 @@
 import { ArrayParameterType } from "./array-parameter-type";
-import {
-  InvalidParameterException,
-  MissingNamedParameterException,
-  MissingPositionalParameterException,
-  MixedParameterStyleException,
-} from "./exception/index";
-import { ParameterType } from "./parameter-type";
-import type { Visitor } from "./sql/parser";
+import { MissingNamedParameter } from "./array-parameters/exception/missing-named-parameter";
+import { MissingPositionalParameter } from "./array-parameters/exception/missing-positional-parameter";
 import type {
   QueryParameterType,
   QueryParameterTypes,
   QueryParameters,
   QueryScalarParameterType,
-} from "./types";
-
-type ParameterStyle = "none" | "named" | "positional";
+} from "./query";
+import type { Visitor } from "./sql/parser";
 
 export class ExpandArrayParameters implements Visitor {
-  private originalParameterIndex = 0;
-  private parameterStyle: ParameterStyle = "none";
+  private originalParameterIndex: number = 0;
   private readonly convertedSQL: string[] = [];
   private readonly convertedParameters: unknown[] = [];
   private readonly convertedTypes: QueryScalarParameterType[] = [];
@@ -29,31 +21,22 @@ export class ExpandArrayParameters implements Visitor {
   ) {}
 
   public acceptPositionalParameter(_sql: string): void {
-    this.acceptParameterStyle("positional");
-
-    if (!Array.isArray(this.parameters)) {
-      throw new MixedParameterStyleException();
-    }
-
-    const index = this.originalParameterIndex;
+    const index: number = this.originalParameterIndex;
     if (!Object.hasOwn(this.parameters, index)) {
-      throw new MissingPositionalParameterException(index);
+      throw MissingPositionalParameter.new(index);
     }
 
-    this.acceptParameter(index, this.parameters[index]);
+    this.acceptParameter(index, (this.parameters as unknown[])[index]);
     this.originalParameterIndex += 1;
   }
 
   public acceptNamedParameter(sql: string): void {
-    this.acceptParameterStyle("named");
-
-    if (Array.isArray(this.parameters)) {
-      throw new MixedParameterStyleException();
+    const name = sql.slice(1);
+    if (!Object.hasOwn(this.parameters, name)) {
+      throw MissingNamedParameter.new(name);
     }
 
-    const name = sql.slice(1);
-    const value = this.readNamedValue(name);
-    this.acceptParameter(name, value);
+    this.acceptParameter(name, (this.parameters as Record<string, unknown>)[name]);
   }
 
   public acceptOther(sql: string): void {
@@ -73,40 +56,25 @@ export class ExpandArrayParameters implements Visitor {
   }
 
   private acceptParameter(key: number | string, value: unknown): void {
-    const type = this.readType(key) ?? ParameterType.STRING;
-
-    if (!Array.isArray(value)) {
-      this.appendTypedParameter([value], type);
+    const type = this.readType(key);
+    if (type === undefined) {
+      this.convertedSQL.push("?");
+      this.convertedParameters.push(value);
       return;
     }
 
     if (!this.isArrayParameterType(type)) {
-      throw new InvalidParameterException("Array values require an ArrayParameterType binding.");
+      this.appendTypedParameter([value], type);
+      return;
     }
 
-    if (value.length === 0) {
+    const values = value as unknown[];
+    if (values.length === 0) {
       this.convertedSQL.push("NULL");
       return;
     }
 
-    this.appendTypedParameter(value, ArrayParameterType.toElementParameterType(type));
-  }
-
-  private readNamedValue(name: string): unknown {
-    if (Array.isArray(this.parameters)) {
-      throw new MixedParameterStyleException();
-    }
-
-    if (Object.hasOwn(this.parameters, name)) {
-      return this.parameters[name];
-    }
-
-    const prefixedName = `:${name}`;
-    if (Object.hasOwn(this.parameters, prefixedName)) {
-      return this.parameters[prefixedName];
-    }
-
-    throw new MissingNamedParameterException(name);
+    this.appendTypedParameter(values, ArrayParameterType.toElementParameterType(type));
   }
 
   private readType(key: number | string): QueryParameterType | undefined {
@@ -118,37 +86,21 @@ export class ExpandArrayParameters implements Visitor {
       return this.types[key];
     }
 
-    if (typeof key === "string") {
-      if (Object.hasOwn(this.types, key)) {
-        return this.types[key];
-      }
-
-      const prefixedName = `:${key}`;
-      if (Object.hasOwn(this.types, prefixedName)) {
-        return this.types[prefixedName];
-      }
+    if (!Object.hasOwn(this.types, key)) {
+      return undefined;
     }
 
-    return undefined;
+    return (this.types as Record<string, QueryParameterType>)[String(key)];
   }
 
   private appendTypedParameter(values: unknown[], type: QueryScalarParameterType): void {
     this.convertedSQL.push(new Array(values.length).fill("?").join(", "));
 
+    let index = this.convertedParameters.length;
     for (const value of values) {
       this.convertedParameters.push(value);
-      this.convertedTypes.push(type);
-    }
-  }
-
-  private acceptParameterStyle(nextStyle: ParameterStyle): void {
-    if (this.parameterStyle === "none") {
-      this.parameterStyle = nextStyle;
-      return;
-    }
-
-    if (this.parameterStyle !== nextStyle) {
-      throw new MixedParameterStyleException();
+      this.convertedTypes[index] = type;
+      index += 1;
     }
   }
 

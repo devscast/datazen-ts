@@ -1,3 +1,8 @@
-import { DbalException } from "../../exception/index";
+import { initializeException } from "../../exception/_util";
 
-export class TypesException extends DbalException {}
+export class TypesException extends Error {
+  constructor(message: string) {
+    super(message);
+    initializeException(this, new.target);
+  }
+}

@@ -1,3 +1,3 @@
-import { DriverException } from "./driver-exception";
+import { ServerException } from "./server-exception";
 
-export class ConstraintViolationException extends DriverException {}
+export class ConstraintViolationException extends ServerException {}

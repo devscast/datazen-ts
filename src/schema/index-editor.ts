@@ -1,4 +1,4 @@
-import { InvalidIndexDefinition } from "./exception/index";
+import { InvalidIndexDefinition } from "./exception/invalid-index-definition";
 import { Index } from "./index";
 import { IndexType } from "./index/index-type";
 import { IndexedColumn } from "./index/indexed-column";

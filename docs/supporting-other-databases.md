@@ -8,8 +8,9 @@ Current port scope note
 -----------------------
 
 Datazen currently focuses on runtime DBAL concerns (driver, connection,
-platform, query execution, type conversion). The Doctrine Schema module is not
-ported yet, so there is no `SchemaManager` implementation step in this port.
+platform, query execution, type conversion), and now includes a partial Schema
+module. If you are adding runtime support only, you can ship a driver/platform
+without schema-manager parity first.
 
 What to implement
 -----------------
@@ -24,6 +25,8 @@ For a new database platform (new vendor/dialect), also implement:
 
 - `AbstractPlatform` subclass (`src/platforms/*`)
 - vendor type mappings and SQL generation overrides
+- optionally, a vendor `AbstractSchemaManager` subclass (`src/schema/*`) if you
+  want schema-introspection parity
 
 Driver/Connection contracts
 ---------------------------
@@ -79,7 +82,9 @@ Path B: New vendor/platform
 3. Implement `initializeDatazenTypeMappings()` for DB type -> Datazen type names.
 4. Add driver adapter as in Path A and return your platform from
    `Driver#getDatabasePlatform()`.
-5. Export the platform from `src/platforms/index.ts` and `src/index.ts`.
+5. (Optional, schema parity) add a vendor schema manager and return it from the
+   platform's `createSchemaManager(connection)` implementation.
+6. Export the platform from `src/platforms/index.ts` and `src/index.ts`.
 
 Connection parameters
 ---------------------

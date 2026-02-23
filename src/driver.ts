@@ -1,46 +1,31 @@
 import type { ExceptionConverter } from "./driver/api/exception-converter";
+import type { Connection as DriverConnection } from "./driver/connection";
+import type { Middleware as DriverMiddleware } from "./driver/middleware";
 import type { AbstractPlatform } from "./platforms/abstract-platform";
 import type { ServerVersionProvider } from "./server-version-provider";
-import type { CompiledQuery } from "./types";
-
-export enum ParameterBindingStyle {
-  POSITIONAL = "positional",
-  NAMED = "named",
-}
-
-export interface DriverQueryResult {
-  rows: Array<Record<string, unknown>>;
-  columns?: string[];
-  rowCount?: number;
-}
-
-export interface DriverExecutionResult {
-  affectedRows: number;
-  insertId?: number | string | null;
-}
-
-export interface DriverConnection extends ServerVersionProvider {
-  executeQuery(query: CompiledQuery): Promise<DriverQueryResult>;
-  executeStatement(query: CompiledQuery): Promise<DriverExecutionResult>;
-  beginTransaction(): Promise<void>;
-  commit(): Promise<void>;
-  rollBack(): Promise<void>;
-  createSavepoint?(name: string): Promise<void>;
-  releaseSavepoint?(name: string): Promise<void>;
-  rollbackSavepoint?(name: string): Promise<void>;
-  quote?(value: string): string;
-  close(): Promise<void>;
-  getNativeConnection(): unknown;
-}
 
 export interface Driver {
-  readonly name: string;
-  readonly bindingStyle: ParameterBindingStyle;
+  /**
+   * Attempts to create a connection with the database.
+   *
+   * @throws Exception
+   */
   connect(params: Record<string, unknown>): Promise<DriverConnection>;
+
+  /**
+   * Gets the ExceptionConverter that can be used to convert driver-level exceptions into DBAL exceptions.
+   */
   getExceptionConverter(): ExceptionConverter;
+
+  /**
+   * Gets the DatabasePlatform instance that provides all the metadata about
+   * the platform this driver connects to.
+   *
+   * @return AbstractPlatform The database platform.
+   *
+   * @throws PlatformException
+   */
   getDatabasePlatform(versionProvider: ServerVersionProvider): AbstractPlatform;
 }
 
-export interface DriverMiddleware {
-  wrap(driver: Driver): Driver;
-}
+export type { DriverConnection, DriverMiddleware };

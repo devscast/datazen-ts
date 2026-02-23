@@ -1,26 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverMiddleware,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection, type DriverMiddleware } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
+import { ArrayResult } from "../../driver/array-result";
 import { DriverManager } from "../../driver-manager";
-import {
-  DriverException,
-  DriverRequiredException,
-  UnknownDriverException,
-} from "../../exception/index";
+import { DriverException } from "../../exception/driver-exception";
+import { DriverRequired } from "../../exception/driver-required";
+import { UnknownDriver } from "../../exception/unknown-driver";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import type { CompiledQuery } from "../../types";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -35,12 +26,27 @@ class NoopExceptionConverter implements ExceptionConverter {
 }
 
 class SpyConnection implements DriverConnection {
-  public async executeQuery(_query: CompiledQuery): Promise<DriverQueryResult> {
-    return { rows: [] };
+  public async prepare(_sql: string) {
+    return {
+      bindValue: () => undefined,
+      execute: async () => new ArrayResult([], [], 0),
+    };
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    return { affectedRows: 0 };
+  public async query(_sql: string) {
+    return new ArrayResult([], [], 0);
+  }
+
+  public quote(value: string): string {
+    return value;
+  }
+
+  public async exec(_sql: string): Promise<number | string> {
+    return 0;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 0;
   }
 
   public async beginTransaction(): Promise<void> {}
@@ -56,8 +62,6 @@ class SpyConnection implements DriverConnection {
 }
 
 class SpyDriver implements Driver {
-  public readonly name = "spy";
-  public readonly bindingStyle = ParameterBindingStyle.POSITIONAL;
   public connectCalls = 0;
   private readonly converter = new NoopExceptionConverter();
 
@@ -76,9 +80,6 @@ class SpyDriver implements Driver {
 }
 
 class NeverUseDriver implements Driver {
-  public readonly name = "never";
-  public readonly bindingStyle = ParameterBindingStyle.POSITIONAL;
-
   public async connect(_params: Record<string, unknown>): Promise<DriverConnection> {
     throw new Error("driverClass should not be used when driverInstance is provided");
   }
@@ -99,14 +100,17 @@ class PrefixMiddleware implements DriverMiddleware {
     const prefix = this.prefix;
 
     return {
-      bindingStyle: driver.bindingStyle,
-      connect: (params: Record<string, unknown>) => driver.connect(params),
+      connect: async (params: Record<string, unknown>) => {
+        middlewareOrder.push(prefix);
+        return driver.connect(params);
+      },
       getDatabasePlatform: (versionProvider) => driver.getDatabasePlatform(versionProvider),
       getExceptionConverter: () => driver.getExceptionConverter(),
-      name: `${prefix}${driver.name}`,
     };
   }
 }
+
+const middlewareOrder: string[] = [];
 
 describe("DriverManager", () => {
   it("lists available drivers", () => {
@@ -119,7 +123,7 @@ describe("DriverManager", () => {
   });
 
   it("throws when no driver is configured", () => {
-    expect(() => DriverManager.getConnection({})).toThrow(DriverRequiredException);
+    expect(() => DriverManager.getConnection({})).toThrow(DriverRequired);
   });
 
   it("throws for unknown driver name", () => {
@@ -127,7 +131,7 @@ describe("DriverManager", () => {
       DriverManager.getConnection({
         driver: "invalid" as unknown as "mysql2",
       }),
-    ).toThrow(UnknownDriverException);
+    ).toThrow(UnknownDriver);
   });
 
   it("uses driverClass when provided", () => {
@@ -135,7 +139,7 @@ describe("DriverManager", () => {
       driverClass: SpyDriver,
     });
 
-    expect(connection.getDriver().name).toBe("spy");
+    expect(connection.getDriver()).toBeInstanceOf(SpyDriver);
   });
 
   it("prefers driverInstance over driverClass", () => {
@@ -149,6 +153,7 @@ describe("DriverManager", () => {
   });
 
   it("applies middlewares in declaration order", () => {
+    middlewareOrder.length = 0;
     const configuration = new Configuration();
     configuration.addMiddleware(new PrefixMiddleware("a:"));
     configuration.addMiddleware(new PrefixMiddleware("b:"));
@@ -160,6 +165,8 @@ describe("DriverManager", () => {
       configuration,
     );
 
-    expect(connection.getDriver().name).toBe("b:a:spy");
+    return connection.connect().then(() => {
+      expect(middlewareOrder).toEqual(["b:", "a:"]);
+    });
   });
 });

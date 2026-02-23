@@ -1,7 +1,8 @@
-import { Type, registerBuiltInTypes } from "../types/index";
+import { registerBuiltInTypes } from "../types/register-built-in-types";
+import { Type } from "../types/type";
 import { AbstractAsset } from "./abstract-asset";
 import { ColumnEditor } from "./column-editor";
-import { UnknownColumnOption } from "./exception/index";
+import { UnknownColumnOption } from "./exception/unknown-column-option";
 
 export type ColumnOptions = Record<string, unknown>;
 

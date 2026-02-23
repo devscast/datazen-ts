@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SQLite3Connection } from "../../driver/sqlite3/connection";
-import { DbalException, InvalidParameterException } from "../../exception/index";
+import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
 
 class FakeSQLiteDatabase {
   public readonly allCalls: Array<{ parameters: unknown[]; sql: string }> = [];
@@ -48,68 +48,47 @@ class FakeSQLiteDatabase {
 }
 
 describe("SQLite3Connection", () => {
-  it("executes queries and normalizes rows", async () => {
+  it("executes prepared queries and normalizes rows", async () => {
     const db = new FakeSQLiteDatabase(() => [{ id: 1, name: "Alice" }]);
     const connection = new SQLite3Connection(db, false);
+    const statement = await connection.prepare("SELECT id, name FROM users WHERE id = ?");
 
-    const result = await connection.executeQuery({
-      parameters: [1],
-      sql: "SELECT id, name FROM users WHERE id = ?",
-      types: [],
-    });
-
-    expect(result).toEqual({
-      columns: ["id", "name"],
-      rowCount: 1,
-      rows: [{ id: 1, name: "Alice" }],
-    });
+    statement.bindValue(1, 1);
+    const result = await statement.execute();
+    expect(result.fetchAllAssociative()).toEqual([{ id: 1, name: "Alice" }]);
+    expect(result.rowCount()).toBe(1);
   });
 
-  it("executes statements and returns changes/insertId", async () => {
+  it("executes statements and exposes affected rows/lastInsertId", async () => {
     const db = new FakeSQLiteDatabase(
       () => [],
       () => ({ changes: 2, lastID: 7 }),
     );
     const connection = new SQLite3Connection(db, false);
 
-    const result = await connection.executeStatement({
-      parameters: ["active"],
-      sql: "UPDATE users SET status = ?",
-      types: [],
-    });
+    const statement = await connection.prepare("UPDATE users SET status = ?");
+    statement.bindValue(1, "active");
+    const result = await statement.execute();
 
-    expect(result).toEqual({ affectedRows: 2, insertId: 7 });
+    expect(result.rowCount()).toBe(2);
+    await expect(connection.lastInsertId()).resolves.toBe(7);
   });
 
-  it("rejects named parameter payloads after compilation", async () => {
+  it("rejects named parameter binding", async () => {
     const connection = new SQLite3Connection(new FakeSQLiteDatabase(), false);
+    const statement = await connection.prepare("SELECT * FROM users WHERE id = ?");
 
-    await expect(
-      connection.executeQuery({
-        parameters: { id: 1 },
-        sql: "SELECT * FROM users WHERE id = :id",
-        types: {},
-      }),
-    ).rejects.toThrow(InvalidParameterException);
+    expect(() => statement.bindValue("id", 1)).toThrow(InvalidParameterException);
   });
 
-  it("supports transactions and savepoints via exec()", async () => {
+  it("supports transactions via exec()", async () => {
     const db = new FakeSQLiteDatabase();
     const connection = new SQLite3Connection(db, false);
 
     await connection.beginTransaction();
-    await connection.createSavepoint("sp1");
-    await connection.releaseSavepoint("sp1");
-    await connection.rollbackSavepoint("sp1");
     await connection.commit();
 
-    expect(db.execCalls).toEqual([
-      "BEGIN",
-      "SAVEPOINT sp1",
-      "RELEASE SAVEPOINT sp1",
-      "ROLLBACK TO SAVEPOINT sp1",
-      "COMMIT",
-    ]);
+    expect(db.execCalls).toEqual(["BEGIN", "COMMIT"]);
   });
 
   it("quotes values and reads sqlite version", async () => {
@@ -123,6 +102,7 @@ describe("SQLite3Connection", () => {
     const connection = new SQLite3Connection(db, false);
 
     expect(connection.quote("O'Reilly")).toBe("'O''Reilly'");
+    await expect(connection.query("SELECT 1")).resolves.toBeDefined();
     await expect(connection.getServerVersion()).resolves.toBe("3.45");
   });
 
@@ -130,8 +110,8 @@ describe("SQLite3Connection", () => {
     const db = new FakeSQLiteDatabase();
     const connection = new SQLite3Connection(db, true);
 
-    await expect(connection.commit()).rejects.toThrow(DbalException);
-    await expect(connection.rollBack()).rejects.toThrow(DbalException);
+    await expect(connection.commit()).rejects.toThrow(Error);
+    await expect(connection.rollBack()).rejects.toThrow(Error);
 
     await connection.close();
     expect(db.closeCalls).toBe(1);

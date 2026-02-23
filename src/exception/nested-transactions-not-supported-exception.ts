@@ -1,7 +1,3 @@
-import { DbalException } from "./dbal-exception";
+import { SavepointsNotSupported } from "./savepoints-not-supported";
 
-export class NestedTransactionsNotSupportedException extends DbalException {
-  constructor(driverName: string) {
-    super(`Driver "${driverName}" does not support nested transactions (savepoints).`);
-  }
-}
+export class NestedTransactionsNotSupportedException extends SavepointsNotSupported {}

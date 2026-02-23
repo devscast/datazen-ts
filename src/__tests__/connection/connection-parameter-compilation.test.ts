@@ -1,21 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { Connection } from "../../connection";
-import {
-  type Driver,
-  type DriverConnection,
-  type DriverExecutionResult,
-  type DriverQueryResult,
-  ParameterBindingStyle,
-} from "../../driver";
+import { type Driver, type DriverConnection } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
-import { DriverException, MixedParameterStyleException } from "../../exception/index";
+import { ArrayResult } from "../../driver/array-result";
+import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
+import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import type { CompiledQuery } from "../../types";
+import type { CompiledQuery } from "./query";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -32,13 +28,62 @@ class NoopExceptionConverter implements ExceptionConverter {
 class CaptureConnection implements DriverConnection {
   public latestQuery: CompiledQuery | null = null;
 
-  public async executeQuery(query: CompiledQuery): Promise<DriverQueryResult> {
-    this.latestQuery = query;
-    return { rows: [] };
+  public async prepare(sql: string) {
+    const boundValues = new Map<string | number, unknown>();
+    const boundTypes = new Map<string | number, ParameterType | undefined>();
+
+    return {
+      bindValue: (param: string | number, value: unknown, type?: ParameterType) => {
+        boundValues.set(param, value);
+        boundTypes.set(param, type);
+      },
+      execute: async () => {
+        const stringKeys = [...boundValues.keys()].filter(
+          (key): key is string => typeof key === "string",
+        );
+
+        if (stringKeys.length > 0) {
+          const parameters: Record<string, unknown> = {};
+          const types: Record<string, ParameterType> = {};
+
+          for (const key of stringKeys) {
+            parameters[key] = boundValues.get(key);
+            types[key] = boundTypes.get(key) ?? ParameterType.STRING;
+          }
+
+          this.latestQuery = { sql, parameters, types };
+        } else {
+          const numericKeys = [...boundValues.keys()]
+            .filter((key): key is number => typeof key === "number")
+            .sort((a, b) => a - b);
+
+          const parameters = numericKeys.map((key) => boundValues.get(key));
+          const types = numericKeys.map((key) => boundTypes.get(key) ?? ParameterType.STRING);
+
+          this.latestQuery = { sql, parameters, types };
+        }
+
+        return new ArrayResult([]);
+      },
+    };
   }
 
-  public async executeStatement(_query: CompiledQuery): Promise<DriverExecutionResult> {
-    return { affectedRows: 1 };
+  public async query(sql: string) {
+    this.latestQuery = { sql, parameters: [], types: [] };
+    return new ArrayResult([]);
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(sql: string): Promise<number | string> {
+    this.latestQuery = { sql, parameters: [], types: [] };
+    return 1;
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 1;
   }
 
   public async beginTransaction(): Promise<void> {}
@@ -120,15 +165,26 @@ describe("Connection parameter compilation", () => {
     });
   });
 
-  it("throws on mixed placeholder styles in the same SQL", async () => {
-    const connection = new Connection({}, new NamedSpyDriver(new CaptureConnection()));
+  it("compiles mixed placeholder styles without throwing", async () => {
+    const capture = new CaptureConnection();
+    const connection = new Connection({}, new NamedSpyDriver(capture));
 
-    await expect(
-      connection.executeQuery(
-        "SELECT * FROM users WHERE id = :id AND parent_id = ?",
-        { id: 1 },
-        { id: ParameterType.INTEGER },
-      ),
-    ).rejects.toThrow(MixedParameterStyleException);
+    await connection.executeQuery(
+      "SELECT * FROM users WHERE id = :id AND parent_id = ?",
+      { id: 1, 0: 2 },
+      { id: ParameterType.INTEGER, 0: ParameterType.INTEGER },
+    );
+
+    expect(capture.latestQuery).toEqual({
+      parameters: {
+        p1: 1,
+        p2: 2,
+      },
+      sql: "SELECT * FROM users WHERE id = @p1 AND parent_id = @p2",
+      types: {
+        p1: ParameterType.INTEGER,
+        p2: ParameterType.INTEGER,
+      },
+    });
   });
 });

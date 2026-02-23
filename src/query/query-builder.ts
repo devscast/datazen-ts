@@ -1,14 +1,15 @@
 import { ArrayParameterType } from "../array-parameter-type";
 import type { Connection } from "../connection";
 import { ParameterType } from "../parameter-type";
+import type { QueryParameterTypes, QueryParameters } from "../query";
 import { CommonTableExpression } from "../query/common-table-expression";
 import type { Result } from "../result";
-import type { QueryParameterTypes, QueryParameters } from "../types";
 import { NonUniqueAlias } from "./exception/non-unique-alias";
 import { UnknownAlias } from "./exception/unknown-alias";
 import { CompositeExpression } from "./expression/composite-expression";
 import { ExpressionBuilder } from "./expression/expression-builder";
-import { ConflictResolutionMode, ForUpdate } from "./for-update";
+import { ForUpdate } from "./for-update";
+import { ConflictResolutionMode } from "./for-update/conflict-resolution-mode";
 import { From } from "./from";
 import { Join } from "./join";
 import { Limit } from "./limit";
@@ -19,7 +20,7 @@ import { Union } from "./union";
 import { UnionQuery } from "./union-query";
 import { UnionType } from "./union-type";
 
-type DataMap = Record<string, unknown>;
+type AssociativeRow = Record<string, unknown>;
 type ParamType = string | ParameterType | ArrayParameterType;
 
 export enum PlaceHolder {
@@ -84,7 +85,7 @@ export class QueryBuilder {
   /**
    * Executes an SQL query (SELECT) and returns a Result.
    */
-  public executeQuery<T extends DataMap = DataMap>(): Promise<Result<T>> {
+  public executeQuery<T extends AssociativeRow = AssociativeRow>(): Promise<Result<T>> {
     return this.connection.executeQuery<T>(this.getSQL(), this.params, this.types);
   }
 
@@ -95,7 +96,7 @@ export class QueryBuilder {
     return this.connection.executeStatement(this.getSQL(), this.params, this.types);
   }
 
-  public async fetchAssociative<T extends DataMap = DataMap>(): Promise<T | false> {
+  public async fetchAssociative<T extends AssociativeRow = AssociativeRow>(): Promise<T | false> {
     return (await this.executeQuery()).fetchAssociative<T>();
   }
 
@@ -111,7 +112,7 @@ export class QueryBuilder {
     return (await this.executeQuery()).fetchAllNumeric<T>();
   }
 
-  public async fetchAllAssociative<T extends DataMap = DataMap>(): Promise<T[]> {
+  public async fetchAllAssociative<T extends AssociativeRow = AssociativeRow>(): Promise<T[]> {
     return (await this.executeQuery()).fetchAllAssociative<T>();
   }
 
@@ -119,7 +120,7 @@ export class QueryBuilder {
     return (await this.executeQuery()).fetchAllKeyValue<T>();
   }
 
-  public async fetchAllAssociativeIndexed<T extends DataMap = DataMap>(): Promise<
+  public async fetchAllAssociativeIndexed<T extends AssociativeRow = AssociativeRow>(): Promise<
     Record<string, T>
   > {
     return (await this.executeQuery()).fetchAllAssociativeIndexed<T>();
@@ -388,7 +389,7 @@ export class QueryBuilder {
    */
   public insertWith(
     table: string,
-    data: DataMap,
+    data: AssociativeRow,
     placeHolder: PlaceHolder = PlaceHolder.POSITIONAL,
   ): this {
     if (!data || Object.keys(data).length === 0) {
@@ -418,7 +419,7 @@ export class QueryBuilder {
    */
   public updateWith(
     table: string,
-    data: DataMap,
+    data: AssociativeRow,
     placeHolder: PlaceHolder = PlaceHolder.POSITIONAL,
   ): this {
     if (!data || Object.keys(data).length === 0) {
@@ -988,7 +989,7 @@ export class QueryBuilder {
     return this.types as ParamType[];
   }
 
-  private ensureNamedParams(): DataMap {
+  private ensureNamedParams(): AssociativeRow {
     if (Array.isArray(this.params)) {
       this.params = {};
     }
