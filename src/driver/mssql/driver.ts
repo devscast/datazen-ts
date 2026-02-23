@@ -1,6 +1,7 @@
 import { type Driver, type DriverConnection, ParameterBindingStyle } from "../../driver";
 import { DbalException } from "../../exception/index";
 import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import type { ServerVersionProvider } from "../../server-version-provider";
 import { ExceptionConverter as SQLSrvExceptionConverter } from "../api/sqlsrv/exception-converter";
 import { MSSQLConnection } from "./connection";
 import type { MSSQLConnectionParams } from "./types";
@@ -29,7 +30,7 @@ export class MSSQLDriver implements Driver {
     return this.exceptionConverter;
   }
 
-  public getDatabasePlatform(): SQLServerPlatform {
+  public getDatabasePlatform(_versionProvider: ServerVersionProvider): SQLServerPlatform {
     return this.platform;
   }
 }

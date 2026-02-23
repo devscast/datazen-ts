@@ -15,6 +15,15 @@ interface ParsedDsnUrl {
   user?: string;
 }
 
+const DEFAULT_SCHEME_ALIASES: Record<string, string> = {
+  pdo_pgsql: "pg",
+  pdo_sqlite: "sqlite3",
+  pgsql: "pg",
+  postgres: "pg",
+  postgresql: "pg",
+  sqlite: "sqlite3",
+};
+
 export class DsnParser {
   constructor(private readonly schemeMapping: DsnSchemeMapping = {}) {}
 
@@ -152,7 +161,7 @@ export class DsnParser {
 
   private parseDatabaseUrlScheme(scheme: string): DsnSchemeMappingValue {
     const driver = scheme.replaceAll("-", "_");
-    return this.schemeMapping[driver] ?? driver;
+    return this.schemeMapping[driver] ?? DEFAULT_SCHEME_ALIASES[driver] ?? driver;
   }
 
   private decodeRawUrlComponent(value: string): string {

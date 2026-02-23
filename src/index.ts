@@ -19,6 +19,7 @@ export { Query } from "./query";
 export { Result } from "./result";
 export type { ServerVersionProvider } from "./server-version-provider";
 export { Statement } from "./statement";
+export { StaticServerVersionProvider } from "./static-server-version-provider";
 export { TransactionIsolationLevel } from "./transaction-isolation-level";
 export type {
   CompiledQuery,

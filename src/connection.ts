@@ -14,8 +14,6 @@ import {
 import { ExpandArrayParameters } from "./expand-array-parameters";
 import { ParameterType } from "./parameter-type";
 import { AbstractPlatform } from "./platforms/abstract-platform";
-import { MySQLPlatform } from "./platforms/mysql-platform";
-import { SQLServerPlatform } from "./platforms/sql-server-platform";
 import { Query } from "./query";
 import { ExpressionBuilder } from "./query/expression/expression-builder";
 import { QueryBuilder } from "./query/query-builder";
@@ -23,8 +21,10 @@ import { Result } from "./result";
 import type { AbstractSchemaManager } from "./schema/abstract-schema-manager";
 import { DefaultSchemaManagerFactory } from "./schema/default-schema-manager-factory";
 import type { SchemaManagerFactory } from "./schema/schema-manager-factory";
+import type { ServerVersionProvider } from "./server-version-provider";
 import { Parser, type SQLParser, type Visitor } from "./sql/parser";
 import { Statement, type StatementExecutor } from "./statement";
+import { StaticServerVersionProvider } from "./static-server-version-provider";
 import type {
   CompiledQuery,
   QueryParameterType,
@@ -681,25 +681,22 @@ export class Connection implements StatementExecutor {
       return this.databasePlatform;
     }
 
-    const driverPlatform = this.driver.getDatabasePlatform?.();
-    if (driverPlatform !== undefined) {
-      this.databasePlatform = driverPlatform;
-      return this.databasePlatform;
+    let versionProvider: ServerVersionProvider = this;
+
+    if (typeof this.params.serverVersion === "string") {
+      versionProvider = new StaticServerVersionProvider(this.params.serverVersion);
+    } else {
+      const primary = this.params.primary;
+      if (primary !== null && typeof primary === "object") {
+        const primaryServerVersion = (primary as Record<string, unknown>).serverVersion;
+        if (typeof primaryServerVersion === "string") {
+          versionProvider = new StaticServerVersionProvider(primaryServerVersion);
+        }
+      }
     }
 
-    if (this.driver.name === "mysql2") {
-      this.databasePlatform = new MySQLPlatform();
-      return this.databasePlatform;
-    }
-
-    if (this.driver.name === "mssql") {
-      this.databasePlatform = new SQLServerPlatform();
-      return this.databasePlatform;
-    }
-
-    throw new DbalException(
-      `No database platform could be resolved for driver "${this.driver.name}".`,
-    );
+    this.databasePlatform = this.driver.getDatabasePlatform(versionProvider);
+    return this.databasePlatform;
   }
 
   public async connect(): Promise<DriverConnection> {

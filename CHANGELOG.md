@@ -1,6 +1,8 @@
 # @devscast/datazen
 
 # Unreleased
+- Breaking: made `Driver.getDatabasePlatform(versionProvider)` driver-owned and required, removed `Connection` driver-name platform fallbacks, added Doctrine-style `StaticServerVersionProvider` selection from `serverVersion` / `primary.serverVersion`, introduced semver-based MySQL/MariaDB versioned platform resolution (`MySQL80/84`, `MariaDB1052/1060/1010/110700`), and now throw `InvalidPlatformVersion` for malformed platform version strings.
+- Added `pg` and `sqlite3` driver adapters (connections, exception converters, driver-manager registration, and driver barrel exports) with best-effort Doctrine-style PostgreSQL/SQLite platform classes and DSN scheme aliases (`postgres*` -> `pg`, `sqlite` -> `sqlite3`).
 - Added package subpath namespace exports so consumers can import grouped APIs from:
   - `@devscast/datazen/driver`
   - `@devscast/datazen/exception`

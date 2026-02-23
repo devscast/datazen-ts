@@ -16,6 +16,7 @@ import type {
 import { DriverManager } from "../../driver-manager";
 import { DriverException } from "../../exception/index";
 import { OraclePlatform } from "../../platforms/oracle-platform";
+import { SQLServerPlatform } from "../../platforms/sql-server-platform";
 import { Connection } from "../../portability/connection";
 import { Middleware } from "../../portability/middleware";
 import type { CompiledQuery } from "../../types";
@@ -62,16 +63,14 @@ class SpyConnection implements DriverConnection {
 class SpyDriver implements Driver {
   public readonly name = "spy";
   public readonly bindingStyle = ParameterBindingStyle.POSITIONAL;
-  public readonly getDatabasePlatform?: () => OraclePlatform;
   private readonly converter = new NoopExceptionConverter();
+  private readonly platform: OraclePlatform | null;
 
   constructor(
     private readonly connection: SpyConnection,
     platform?: OraclePlatform,
   ) {
-    if (platform !== undefined) {
-      this.getDatabasePlatform = () => platform;
-    }
+    this.platform = platform ?? null;
   }
 
   public async connect(_params: Record<string, unknown>): Promise<DriverConnection> {
@@ -80,6 +79,10 @@ class SpyDriver implements Driver {
 
   public getExceptionConverter(): ExceptionConverter {
     return this.converter;
+  }
+
+  public getDatabasePlatform() {
+    return this.platform ?? new SQLServerPlatform();
   }
 }
 
