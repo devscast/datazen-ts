@@ -82,7 +82,9 @@ Keyword Lists
 -------------
 
 Doctrine exposes vendor keyword lists through schema-related APIs.
-In this port, schema/keyword-list modules are not implemented yet.
+In this port, keyword lists are available through platform APIs such as
+`platform.getReservedKeywordsList()` and the `@devscast/datazen/platforms`
+namespace keyword classes.
 
 Related Modules
 ---------------

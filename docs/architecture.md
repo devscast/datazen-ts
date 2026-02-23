@@ -117,6 +117,7 @@ Implemented tooling currently includes:
 Not Implemented
 ---------------
 
-The Doctrine DBAL Schema subsystem is not ported in this project yet.
-That includes schema introspection, schema manager operations, and schema
-tooling/migrations-related APIs.
+Full Doctrine DBAL parity is not complete in this project yet.
+Major gaps include wider driver coverage, cache/result-cache integration, and
+some transaction/retryability APIs. Schema support exists, but parity is still
+in progress across all Doctrine features and vendors.

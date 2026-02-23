@@ -200,8 +200,9 @@ including:
 - `TypeNotFound`
 - `TypeNotRegistered`
 
-Not Implemented
----------------
+Scope Note
+----------
 
-The schema module is intentionally out of scope in this project at this stage,
-so Doctrine-style schema reverse-engineering workflows are not documented here.
+Schema support is available separately under `@devscast/datazen/schema`.
+This page focuses on the runtime type system rather than schema
+reverse-engineering workflows.

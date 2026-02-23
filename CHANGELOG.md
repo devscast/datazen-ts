@@ -16,6 +16,7 @@
 - Updated build configuration to emit multi-entry bundles/types for subpath exports.
 - Added coverage test for namespace barrels and `package.json` subpath export declarations.
 - Breaking: reduced root `@devscast/datazen` exports to modules backed by files directly under `src/`; grouped APIs now require subpath imports (for example `@devscast/datazen/query`, `@devscast/datazen/types`, `@devscast/datazen/platforms`).
+- Documentation: corrected outdated schema/keyword-list status notes and added a living parity matrix guide (`docs/parity-matrix.md`).
 
 # 1.0.2 - Schema Foundation Parity
 - Ported a Doctrine-inspired schema foundation under `src/schema/*`:
