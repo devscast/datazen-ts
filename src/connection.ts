@@ -43,6 +43,12 @@ interface CompiledPositionalQuery {
   types: QueryScalarParameterType[];
 }
 
+interface CompiledQuery {
+  sql: string;
+  parameters: Query["parameters"];
+  types: Query["types"];
+}
+
 export class Connection {
   private autoCommit: boolean;
   private driverConnection: DriverConnection | null = null;
@@ -656,7 +662,7 @@ export class Connection {
     }
   }
 
-  private async executeDriverQuery(compiledQuery: Query) {
+  private async executeDriverQuery(compiledQuery: CompiledQuery) {
     const connection = await this.connect();
 
     if (!this.hasBoundParameters(compiledQuery.parameters)) {
@@ -669,7 +675,7 @@ export class Connection {
     return statement.execute();
   }
 
-  private async executeDriverStatement(compiledQuery: Query): Promise<number> {
+  private async executeDriverStatement(compiledQuery: CompiledQuery): Promise<number> {
     const connection = await this.connect();
 
     if (!this.hasBoundParameters(compiledQuery.parameters)) {
@@ -721,7 +727,11 @@ export class Connection {
     return Object.keys(parameters).length > 0;
   }
 
-  private compileQuery(sql: string, params: QueryParameters, types: QueryParameterTypes): Query {
+  private compileQuery(
+    sql: string,
+    params: QueryParameters,
+    types: QueryParameterTypes,
+  ): CompiledQuery {
     const expanded = this.expandArrayParameters(sql, params, types);
 
     if (this.getDriverBindingStyle() === ParameterBindingStyle.POSITIONAL) {
@@ -762,7 +772,7 @@ export class Connection {
     sql: string,
     parameters: unknown[],
     types: QueryScalarParameterType[],
-  ): Query {
+  ): CompiledQuery {
     const sqlParts: string[] = [];
     const namedParameters: AssociativeRow = {};
     const namedTypes: Record<string, QueryScalarParameterType> = {};

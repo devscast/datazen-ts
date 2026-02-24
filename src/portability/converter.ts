@@ -2,10 +2,9 @@ import { ColumnCase } from "../column-case";
 
 type AssociativeRow = Record<string, unknown>;
 type NumericRow = unknown[];
+type ConvertibleRow = AssociativeRow | NumericRow;
 
 type ValueConverter = (value: unknown) => unknown;
-type RowConverter = ((row: AssociativeRow) => AssociativeRow) | ((row: NumericRow) => NumericRow);
-type ArrayConverter = (value: unknown[]) => unknown[];
 
 export class Converter {
   private readonly convertNumericFn: (row: NumericRow | false) => NumericRow | false;
@@ -25,26 +24,19 @@ export class Converter {
       this.emptyStringToNullEnabled,
       this.rightTrimStringEnabled,
     );
-    const convertNumericRow = this.createConvertRow(convertValue, null);
-    const convertAssociativeRow = this.createConvertRow(convertValue, this.columnCase);
+    const convertNumericRow = this.createConvertRow<NumericRow>(convertValue, null);
+    const convertAssociativeRow = this.createConvertRow<AssociativeRow>(
+      convertValue,
+      this.columnCase,
+    );
 
-    this.convertNumericFn = this.createConvert(convertNumericRow) as (
-      row: NumericRow | false,
-    ) => NumericRow | false;
-    this.convertAssociativeFn = this.createConvert(convertAssociativeRow) as (
-      row: AssociativeRow | false,
-    ) => AssociativeRow | false;
-    this.convertOneFn = this.createConvert(convertValue);
+    this.convertNumericFn = this.createConvert<NumericRow>(convertNumericRow);
+    this.convertAssociativeFn = this.createConvert<AssociativeRow>(convertAssociativeRow);
+    this.convertOneFn = this.createConvert<unknown>(convertValue);
 
-    this.convertAllNumericFn = this.createConvertAll(convertNumericRow) as (
-      rows: NumericRow[],
-    ) => NumericRow[];
-    this.convertAllAssociativeFn = this.createConvertAll(convertAssociativeRow) as (
-      rows: AssociativeRow[],
-    ) => AssociativeRow[];
-    this.convertFirstColumnFn = this.createConvertAll(convertValue) as (
-      values: unknown[],
-    ) => unknown[];
+    this.convertAllNumericFn = this.createConvertAll<NumericRow>(convertNumericRow);
+    this.convertAllAssociativeFn = this.createConvertAll<AssociativeRow>(convertAssociativeRow);
+    this.convertFirstColumnFn = this.createConvertAll<unknown>(convertValue);
 
     this.convertColumnNameFn =
       this.columnCase === ColumnCase.LOWER
@@ -130,8 +122,16 @@ export class Converter {
   private createConvertRow(
     function_: ValueConverter | null,
     caseMode: ColumnCase | null,
-  ): RowConverter | null {
-    const functions: Array<(row: AssociativeRow | NumericRow) => AssociativeRow | NumericRow> = [];
+  ): ((row: ConvertibleRow) => ConvertibleRow) | null;
+  private createConvertRow<T extends ConvertibleRow>(
+    function_: ValueConverter | null,
+    caseMode: ColumnCase | null,
+  ): ((row: T) => T) | null;
+  private createConvertRow<T extends ConvertibleRow>(
+    function_: ValueConverter | null,
+    caseMode: ColumnCase | null,
+  ): ((row: T) => T) | null {
+    const functions: Array<(row: ConvertibleRow) => ConvertibleRow> = [];
 
     if (function_ !== null) {
       functions.push(this.createMapper(function_));
@@ -153,39 +153,37 @@ export class Converter {
       });
     }
 
-    return this.compose(...functions) as RowConverter | null;
+    return this.compose<ConvertibleRow>(...functions) as ((row: T) => T) | null;
   }
 
-  private createConvert(
-    function_: ((value: unknown) => unknown) | null,
-  ): (value: unknown) => unknown {
+  private createConvert<T>(function_: ((value: T) => T) | null): (value: T | false) => T | false {
     if (function_ === null) {
-      return Converter.id;
+      return Converter.id as (value: T | false) => T | false;
     }
 
-    return (value: unknown): unknown => {
+    return (value: T | false): T | false => {
       if (value === false) {
         return false;
       }
 
-      return function_(value);
+      return function_(value as T);
     };
   }
 
-  private createConvertAll(function_: ((value: unknown) => unknown) | null): ArrayConverter {
+  private createConvertAll<T>(function_: ((value: T) => T) | null): (values: T[]) => T[] {
     if (function_ === null) {
-      return Converter.id as ArrayConverter;
+      return Converter.id as (values: T[]) => T[];
     }
 
-    return this.createMapper(function_) as ArrayConverter;
+    return this.createMapper<T[]>(function_ as ValueConverter);
   }
 
-  private createMapper(
-    function_: (value: unknown) => unknown,
-  ): (value: AssociativeRow | unknown[]) => AssociativeRow | unknown[] {
+  private createMapper<T extends ConvertibleRow | unknown[]>(
+    function_: ValueConverter,
+  ): (value: T) => T {
     return (value) => {
       if (Array.isArray(value)) {
-        return value.map((item) => function_(item));
+        return value.map((item) => function_(item)) as T;
       }
 
       const converted: AssociativeRow = {};
@@ -193,19 +191,17 @@ export class Converter {
         converted[key] = function_(item);
       }
 
-      return converted;
+      return converted as T;
     };
   }
 
-  private compose(
-    ...functions: Array<(value: unknown) => unknown>
-  ): ((value: unknown) => unknown) | null {
+  private compose<T>(...functions: Array<(value: T) => T>): ((value: T) => T) | null {
     if (functions.length === 0) {
       return null;
     }
 
-    return functions.reduce<(value: unknown) => unknown>(
-      (carry, item) => (value: unknown) => item(carry(value)),
+    return functions.reduce<(value: T) => T>(
+      (carry, item) => (value: T) => item(carry(value)),
       Converter.id,
     );
   }
