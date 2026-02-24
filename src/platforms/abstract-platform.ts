@@ -1,14 +1,17 @@
 import type { Connection } from "../connection";
 import { LockMode } from "../lock-mode";
 import type { AbstractSchemaManager } from "../schema/abstract-schema-manager";
+import type { MetadataProvider } from "../schema/metadata/metadata-provider";
 import { UnquotedIdentifierFolding } from "../schema/name/unquoted-identifier-folding";
 import { DefaultSelectSQLBuilder } from "../sql/builder/default-select-sql-builder";
 import { DefaultUnionSQLBuilder } from "../sql/builder/default-union-sql-builder";
 import { SelectSQLBuilder } from "../sql/builder/select-sql-builder";
 import { UnionSQLBuilder } from "../sql/builder/union-sql-builder";
 import { WithSQLBuilder } from "../sql/builder/with-sql-builder";
+import { Parser } from "../sql/parser";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { DateIntervalUnit } from "./date-interval-unit";
+import { NoColumnsSpecifiedForTable } from "./exception/no-columns-specified-for-table";
 import { NotSupported } from "./exception/not-supported";
 import { EmptyKeywords, KeywordList } from "./keywords";
 import { TrimMode } from "./trim-mode";
@@ -213,9 +216,19 @@ export abstract class AbstractPlatform {
     this.datazenTypeMapping![dbType.toLowerCase()] = datazenType;
   }
 
+  // Doctrine-compatible alias kept for port parity.
+  public registerDoctrineTypeMapping(dbType: string, doctrineType: string): void {
+    this.registerDatazenTypeMapping(dbType, doctrineType);
+  }
+
   public hasDatazenTypeMappingFor(dbType: string): boolean {
     this.ensureDatazenTypeMappingsInitialized();
     return Object.hasOwn(this.datazenTypeMapping!, dbType.toLowerCase());
+  }
+
+  // Doctrine-compatible alias kept for port parity.
+  public hasDoctrineTypeMappingFor(dbType: string): boolean {
+    return this.hasDatazenTypeMappingFor(dbType);
   }
 
   public getDatazenTypeMapping(dbType: string): string {
@@ -230,6 +243,11 @@ export abstract class AbstractPlatform {
     }
 
     return mapped;
+  }
+
+  // Doctrine-compatible alias kept for port parity.
+  public getDoctrineTypeMapping(dbType: string): string {
+    return this.getDatazenTypeMapping(dbType);
   }
 
   public escapeStringForLike(inputString: string, escapeChar: string): string {
@@ -359,16 +377,32 @@ export abstract class AbstractPlatform {
     return this.getDateArithmeticIntervalExpression(date, "+", quarters, DateIntervalUnit.QUARTER);
   }
 
+  public getDateAddQuartersExpression(date: string, quarters: string): string {
+    return this.getDateAddQuarterExpression(date, quarters);
+  }
+
   public getDateSubQuarterExpression(date: string, quarters: string): string {
     return this.getDateArithmeticIntervalExpression(date, "-", quarters, DateIntervalUnit.QUARTER);
+  }
+
+  public getDateSubQuartersExpression(date: string, quarters: string): string {
+    return this.getDateSubQuarterExpression(date, quarters);
   }
 
   public getDateAddYearExpression(date: string, years: string): string {
     return this.getDateArithmeticIntervalExpression(date, "+", years, DateIntervalUnit.YEAR);
   }
 
+  public getDateAddYearsExpression(date: string, years: string): string {
+    return this.getDateAddYearExpression(date, years);
+  }
+
   public getDateSubYearExpression(date: string, years: string): string {
     return this.getDateArithmeticIntervalExpression(date, "-", years, DateIntervalUnit.YEAR);
+  }
+
+  public getDateSubYearsExpression(date: string, years: string): string {
+    return this.getDateSubYearExpression(date, years);
   }
 
   protected getDateArithmeticIntervalExpression(
@@ -394,6 +428,14 @@ export abstract class AbstractPlatform {
 
   public getCurrentDatabaseExpression(): string {
     throw NotSupported.new("currentDatabase");
+  }
+
+  public getBitAndComparisonExpression(value1: string, value2: string): string {
+    return `(${value1} & ${value2})`;
+  }
+
+  public getBitOrComparisonExpression(value1: string, value2: string): string {
+    return `(${value1} | ${value2})`;
   }
 
   protected getTransactionIsolationLevelSQL(level: TransactionIsolationLevel): string {
@@ -474,6 +516,438 @@ export abstract class AbstractPlatform {
 
   public getTruncateTableSQL(tableName: string, _cascade = false): string {
     return `TRUNCATE TABLE ${tableName}`;
+  }
+
+  public getDropTableSQL(table: string): string {
+    return `DROP TABLE ${table}`;
+  }
+
+  public getDropTemporaryTableSQL(table: string): string {
+    return this.getDropTableSQL(table);
+  }
+
+  public getDropIndexSQL(name: string, _table: string): string {
+    return `DROP INDEX ${name}`;
+  }
+
+  protected getDropConstraintSQL(name: string, table: string): string {
+    return `ALTER TABLE ${table} DROP CONSTRAINT ${name}`;
+  }
+
+  public getDropForeignKeySQL(foreignKey: string, table: string): string {
+    return `ALTER TABLE ${table} DROP FOREIGN KEY ${foreignKey}`;
+  }
+
+  public getDropUniqueConstraintSQL(name: string, tableName: string): string {
+    return this.getDropConstraintSQL(name, tableName);
+  }
+
+  public getCreateTableSQL(table: {
+    getColumns(): readonly unknown[];
+    getName(): string;
+  }): string[] {
+    return this.buildCreateTableSQL(table, true);
+  }
+
+  public getCreateTablesSQL(tables: Iterable<unknown>): string[] {
+    const materializedTables = [...tables];
+    const sql: string[] = [];
+
+    for (const table of materializedTables) {
+      sql.push(...this.buildCreateTableSQL(table, false));
+    }
+
+    for (const table of materializedTables) {
+      const tableName = this.getDynamicTableSQLName(table);
+      const foreignKeys = this.invokeMethod<unknown[]>(table, "getForeignKeys") ?? [];
+
+      for (const foreignKey of foreignKeys) {
+        sql.push(this.getCreateForeignKeySQL(foreignKey, tableName));
+      }
+    }
+
+    return sql;
+  }
+
+  public getDropTablesSQL(tables: Iterable<unknown>): string[] {
+    const sql: string[] = [];
+
+    for (const table of tables) {
+      const tableName = this.getDynamicTableSQLName(table);
+      const foreignKeys = this.invokeMethod<unknown[]>(table, "getForeignKeys") ?? [];
+
+      for (const foreignKey of foreignKeys) {
+        const foreignKeyName =
+          this.invokeMethod<string>(foreignKey, "getQuotedName", this) ??
+          this.invokeMethod<string>(foreignKey, "getName") ??
+          String(foreignKey);
+        sql.push(this.getDropForeignKeySQL(foreignKeyName, tableName));
+      }
+
+      sql.push(this.getDropTableSQL(tableName));
+    }
+
+    return sql;
+  }
+
+  public getCommentOnColumnSQL(tableName: string, columnName: string, comment: string): string {
+    return `COMMENT ON COLUMN ${tableName}.${columnName} IS ${this.quoteStringLiteral(comment)}`;
+  }
+
+  public getInlineColumnCommentSQL(comment: string): string {
+    if (!this.supportsInlineColumnComments()) {
+      throw NotSupported.new("getInlineColumnCommentSQL");
+    }
+
+    return `COMMENT ${this.quoteStringLiteral(comment)}`;
+  }
+
+  public getCreateTemporaryTableSnippetSQL(): string {
+    return "CREATE TEMPORARY TABLE";
+  }
+
+  public getAlterSchemaSQL(_diff: unknown): string[] {
+    throw NotSupported.new("getAlterSchemaSQL");
+  }
+
+  public getCreateSequenceSQL(_sequence: unknown): string {
+    throw NotSupported.new("getCreateSequenceSQL");
+  }
+
+  public getAlterSequenceSQL(_sequence: unknown): string {
+    throw NotSupported.new("getAlterSequenceSQL");
+  }
+
+  public getDropSequenceSQL(name: string): string {
+    if (!this.supportsSequences()) {
+      throw NotSupported.new("getDropSequenceSQL");
+    }
+
+    return `DROP SEQUENCE ${name}`;
+  }
+
+  public getCreateIndexSQL(index: unknown, table: string): string {
+    if (this.invokeMethod<boolean>(index, "isPrimary") === true) {
+      return this.getCreatePrimaryKeySQL(index, table);
+    }
+
+    const quotedColumns = this.getQuotedColumns(index);
+    if (quotedColumns.length === 0) {
+      throw new Error(`Incomplete or invalid index definition on table ${table}`);
+    }
+
+    const indexName =
+      this.invokeMethod<string>(index, "getQuotedName", this) ??
+      this.invokeMethod<string>(index, "getName") ??
+      "index";
+
+    const flags = this.getCreateIndexSQLFlags(index);
+    return `CREATE ${flags}INDEX ${indexName} ON ${table} (${quotedColumns.join(", ")})${this.getPartialIndexSQL(index)}`;
+  }
+
+  public getCreatePrimaryKeySQL(index: unknown, table: string): string {
+    const quotedColumns = this.getQuotedColumns(index);
+    return `ALTER TABLE ${table} ADD PRIMARY KEY (${quotedColumns.join(", ")})`;
+  }
+
+  public getCreateSchemaSQL(schemaName: string): string {
+    if (!this.supportsSchemas()) {
+      throw NotSupported.new("getCreateSchemaSQL");
+    }
+
+    return `CREATE SCHEMA ${schemaName}`;
+  }
+
+  public getCreateUniqueConstraintSQL(constraint: unknown, tableName: string): string {
+    return `ALTER TABLE ${tableName} ADD ${this.getUniqueConstraintDeclarationSQL(constraint)}`;
+  }
+
+  public getDropSchemaSQL(schemaName: string): string {
+    if (!this.supportsSchemas()) {
+      throw NotSupported.new("getDropSchemaSQL");
+    }
+
+    return `DROP SCHEMA ${schemaName}`;
+  }
+
+  public getCreateForeignKeySQL(foreignKey: unknown, table: string): string {
+    return `ALTER TABLE ${table} ADD ${this.getForeignKeyDeclarationSQL(foreignKey)}`;
+  }
+
+  public getAlterTableSQL(_diff: unknown): string[] {
+    throw NotSupported.new("getAlterTableSQL");
+  }
+
+  public getRenameTableSQL(oldName: string, newName: string): string {
+    return `ALTER TABLE ${oldName} RENAME TO ${newName}`;
+  }
+
+  public getColumnDeclarationListSQL(columns: Array<Record<string, unknown>>): string {
+    return columns
+      .map((column) => this.getColumnDeclarationSQL(String(column.name ?? ""), column))
+      .join(", ");
+  }
+
+  public getColumnDeclarationSQL(name: string, column: Record<string, unknown>): string {
+    if (typeof column.columnDefinition === "string") {
+      return `${name} ${column.columnDefinition}`;
+    }
+
+    const declarationParts: string[] = [];
+    const typeDeclaration = this.resolveColumnTypeDeclaration(column);
+    declarationParts.push(typeDeclaration);
+
+    if (typeof column.charset === "string" && column.charset.length > 0) {
+      const charset = this.getColumnCharsetDeclarationSQL(column.charset);
+      if (charset.length > 0) {
+        declarationParts.push(charset);
+      }
+    }
+
+    const defaultSql = this.getDefaultValueDeclarationSQL(column);
+    if (defaultSql.length > 0) {
+      declarationParts.push(defaultSql.trim());
+    }
+
+    if (column.notnull === true) {
+      declarationParts.push("NOT NULL");
+    }
+
+    if (typeof column.collation === "string" && column.collation.length > 0) {
+      const collation = this.getColumnCollationDeclarationSQL(column.collation);
+      if (collation.length > 0) {
+        declarationParts.push(collation);
+      }
+    }
+
+    if (
+      this.supportsInlineColumnComments() &&
+      typeof column.comment === "string" &&
+      column.comment.length > 0
+    ) {
+      declarationParts.push(this.getInlineColumnCommentSQL(column.comment));
+    }
+
+    return `${name} ${declarationParts.join(" ")}`;
+  }
+
+  public getDefaultValueDeclarationSQL(column: Record<string, unknown>): string {
+    if (!Object.hasOwn(column, "default")) {
+      return column.notnull === true ? "" : " DEFAULT NULL";
+    }
+
+    const defaultValue = column.default;
+    if (defaultValue === null) {
+      return " DEFAULT NULL";
+    }
+
+    if (typeof defaultValue === "boolean") {
+      return ` DEFAULT ${this.convertBooleans(defaultValue)}`;
+    }
+
+    if (typeof defaultValue === "number" || typeof defaultValue === "bigint") {
+      return ` DEFAULT ${String(defaultValue)}`;
+    }
+
+    return ` DEFAULT ${this.quoteStringLiteral(String(defaultValue))}`;
+  }
+
+  public getCheckDeclarationSQL(definition: Array<string | Record<string, unknown>>): string {
+    const constraints: string[] = [];
+
+    for (const item of definition) {
+      if (typeof item === "string") {
+        constraints.push(`CHECK (${item})`);
+        continue;
+      }
+
+      const name = String(item.name ?? "");
+      if (item.min !== undefined) {
+        constraints.push(`CHECK (${name} >= ${String(item.min)})`);
+      }
+      if (item.max !== undefined) {
+        constraints.push(`CHECK (${name} <= ${String(item.max)})`);
+      }
+    }
+
+    return constraints.join(", ");
+  }
+
+  public getUniqueConstraintDeclarationSQL(constraint: unknown): string {
+    const quotedColumns = this.getQuotedColumns(constraint);
+    if (quotedColumns.length === 0) {
+      throw new Error('Incomplete definition. "columns" required.');
+    }
+
+    const chunks: string[] = [];
+    const name = this.invokeMethod<string>(constraint, "getName") ?? "";
+    if (name !== "") {
+      chunks.push("CONSTRAINT");
+      chunks.push(
+        this.invokeMethod<string>(constraint, "getQuotedName", this) ?? this.quoteIdentifier(name),
+      );
+    }
+
+    chunks.push("UNIQUE");
+    if (this.invokeMethod<boolean>(constraint, "hasFlag", "clustered") === true) {
+      chunks.push("CLUSTERED");
+    }
+    chunks.push(`(${quotedColumns.join(", ")})`);
+
+    return chunks.join(" ");
+  }
+
+  public getIndexDeclarationSQL(index: unknown): string {
+    const quotedColumns = this.getQuotedColumns(index);
+    if (quotedColumns.length === 0) {
+      throw new Error('Incomplete definition. "columns" required.');
+    }
+
+    const indexName =
+      this.invokeMethod<string>(index, "getQuotedName", this) ??
+      this.invokeMethod<string>(index, "getName") ??
+      "index";
+
+    return `${this.getCreateIndexSQLFlags(index)}INDEX ${indexName} (${quotedColumns.join(", ")})${this.getPartialIndexSQL(index)}`;
+  }
+
+  public getTemporaryTableName(tableName: string): string {
+    return tableName;
+  }
+
+  public getForeignKeyDeclarationSQL(foreignKey: unknown): string {
+    return `${this.getForeignKeyBaseDeclarationSQL(foreignKey)}${this.getAdvancedForeignKeyOptionsSQL(foreignKey)}`;
+  }
+
+  public getAdvancedForeignKeyOptionsSQL(foreignKey: unknown): string {
+    let sql = "";
+    if (this.constraintHasOption(foreignKey, "onUpdate")) {
+      sql += ` ON UPDATE ${this.getForeignKeyReferentialActionSQL(String(this.getConstraintOption(foreignKey, "onUpdate")))}`;
+    }
+    if (this.constraintHasOption(foreignKey, "onDelete")) {
+      sql += ` ON DELETE ${this.getForeignKeyReferentialActionSQL(String(this.getConstraintOption(foreignKey, "onDelete")))}`;
+    }
+
+    return sql;
+  }
+
+  public getForeignKeyReferentialActionSQL(action: string): string {
+    const upper = action.toUpperCase();
+    switch (upper) {
+      case "CASCADE":
+      case "SET NULL":
+      case "NO ACTION":
+      case "RESTRICT":
+      case "SET DEFAULT":
+        return upper;
+      default:
+        throw new Error(`Invalid foreign key action "${upper}".`);
+    }
+  }
+
+  public getForeignKeyBaseDeclarationSQL(foreignKey: unknown): string {
+    const localColumns = this.getQuotedLocalColumns(foreignKey);
+    const foreignColumns = this.getQuotedForeignColumns(foreignKey);
+    const foreignTableName =
+      this.invokeMethod<string>(foreignKey, "getQuotedForeignTableName", this) ??
+      this.invokeMethod<string>(foreignKey, "getForeignTableName") ??
+      "";
+
+    if (localColumns.length === 0) {
+      throw new Error('Incomplete definition. "local" required.');
+    }
+    if (foreignColumns.length === 0) {
+      throw new Error('Incomplete definition. "foreign" required.');
+    }
+    if (foreignTableName.length === 0) {
+      throw new Error('Incomplete definition. "foreignTable" required.');
+    }
+
+    let sql = "";
+    const name = this.invokeMethod<string>(foreignKey, "getName") ?? "";
+    if (name !== "") {
+      sql += `CONSTRAINT ${this.invokeMethod<string>(foreignKey, "getQuotedName", this) ?? this.quoteIdentifier(name)} `;
+    }
+
+    return `${sql}FOREIGN KEY (${localColumns.join(", ")}) REFERENCES ${foreignTableName} (${foreignColumns.join(", ")})`;
+  }
+
+  public getColumnCharsetDeclarationSQL(_charset: string): string {
+    return "";
+  }
+
+  public getColumnCollationDeclarationSQL(collation: string): string {
+    return this.supportsColumnCollation() ? `COLLATE ${this.quoteSingleIdentifier(collation)}` : "";
+  }
+
+  public getListDatabasesSQL(): string {
+    throw NotSupported.new("getListDatabasesSQL");
+  }
+
+  public getListSequencesSQL(_database: string): string {
+    throw NotSupported.new("getListSequencesSQL");
+  }
+
+  public getListViewsSQL(_database: string): string {
+    throw NotSupported.new("getListViewsSQL");
+  }
+
+  public getCreateViewSQL(name: string, sql: string): string {
+    return `CREATE VIEW ${name} AS ${sql}`;
+  }
+
+  public getDropViewSQL(name: string): string {
+    return `DROP VIEW ${name}`;
+  }
+
+  public getSequenceNextValSQL(_sequence: string): string {
+    throw NotSupported.new("getSequenceNextValSQL");
+  }
+
+  public getCreateDatabaseSQL(name: string): string {
+    return `CREATE DATABASE ${name}`;
+  }
+
+  public getDropDatabaseSQL(name: string): string {
+    return `DROP DATABASE ${name}`;
+  }
+
+  public supportsPartialIndexes(): boolean {
+    return false;
+  }
+
+  public supportsColumnLengthIndexes(): boolean {
+    return false;
+  }
+
+  public createSQLParser(): Parser {
+    return new Parser(false);
+  }
+
+  public columnsEqual(column1: unknown, column2: unknown): boolean {
+    const left = this.normalizeColumnForComparison(column1);
+    const right = this.normalizeColumnForComparison(column2);
+
+    try {
+      if (
+        this.getColumnDeclarationSQL(String(left.name ?? ""), left) !==
+        this.getColumnDeclarationSQL(String(right.name ?? ""), right)
+      ) {
+        return false;
+      }
+    } catch {
+      return JSON.stringify(left) === JSON.stringify(right);
+    }
+
+    if (this.supportsInlineColumnComments()) {
+      return true;
+    }
+
+    return (left.comment ?? null) === (right.comment ?? null);
+  }
+
+  public createMetadataProvider(_connection: Connection): MetadataProvider {
+    throw NotSupported.new("createMetadataProvider");
   }
 
   public getDateTimeFormatString(): string {
@@ -573,8 +1047,213 @@ export abstract class AbstractPlatform {
     throw NotSupported.new("createSchemaManager");
   }
 
+  /**
+   * Doctrine parity helper used by create-table SQL generation paths.
+   * Throws when a table-like object has no columns configured.
+   */
+  protected assertCreateTableHasColumns(table: {
+    getColumns(): readonly unknown[];
+    getName(): string;
+  }): void {
+    if (table.getColumns().length === 0) {
+      throw NoColumnsSpecifiedForTable.new(table.getName());
+    }
+  }
+
+  protected getPartialIndexSQL(index: unknown): string {
+    if (this.supportsPartialIndexes() && this.constraintHasOption(index, "where")) {
+      return ` WHERE ${String(this.getConstraintOption(index, "where"))}`;
+    }
+
+    return "";
+  }
+
+  protected getCreateIndexSQLFlags(index: unknown): string {
+    return this.invokeMethod<boolean>(index, "isUnique") === true ? "UNIQUE " : "";
+  }
+
   private readLength(column: Record<string, unknown>): number | undefined {
     return this.readNumber(column, "length");
+  }
+
+  private buildCreateTableSQL(
+    table: { getColumns(): readonly unknown[]; getName(): string } | unknown,
+    createForeignKeys: boolean,
+  ): string[] {
+    const createTableLike = this.asCreateTableLike(table);
+    this.assertCreateTableHasColumns(createTableLike);
+
+    const tableName = this.getDynamicTableSQLName(table);
+    const columns = createTableLike
+      .getColumns()
+      .map((column) => this.columnToCreateTableArray(column));
+    let columnListSql = this.getColumnDeclarationListSQL(columns);
+
+    const indexes = this.invokeMethod<unknown[]>(table, "getIndexes") ?? [];
+    let primaryColumns: string[] = [];
+    for (const index of indexes) {
+      if (this.invokeMethod<boolean>(index, "isPrimary") === true) {
+        primaryColumns = this.getQuotedColumns(index);
+        continue;
+      }
+
+      columnListSql += `, ${this.getIndexDeclarationSQL(index)}`;
+    }
+
+    if (primaryColumns.length > 0) {
+      columnListSql += `, PRIMARY KEY (${[...new Set(primaryColumns)].join(", ")})`;
+    }
+
+    const check = this.getCheckDeclarationSQL(columns);
+    let query = `CREATE TABLE ${tableName} (${columnListSql}`;
+    if (check.length > 0) {
+      query += `, ${check}`;
+    }
+    query += ")";
+
+    const sql = [query];
+    if (!createForeignKeys) {
+      return sql;
+    }
+
+    const foreignKeys = this.invokeMethod<unknown[]>(table, "getForeignKeys") ?? [];
+    for (const foreignKey of foreignKeys) {
+      sql.push(this.getCreateForeignKeySQL(foreignKey, tableName));
+    }
+
+    return sql;
+  }
+
+  private asCreateTableLike(table: unknown): {
+    getColumns(): readonly unknown[];
+    getName(): string;
+  } {
+    const columns = this.invokeMethod<unknown[]>(table, "getColumns");
+    const name = this.invokeMethod<string>(table, "getName");
+    if (columns === undefined || name === undefined) {
+      throw NotSupported.new("getCreateTableSQL");
+    }
+
+    return {
+      getColumns: () => columns,
+      getName: () => name,
+    };
+  }
+
+  private columnToCreateTableArray(column: unknown): Record<string, unknown> {
+    const definition =
+      this.invokeMethod<Record<string, unknown>>(column, "toArray") ??
+      (column !== null && typeof column === "object"
+        ? { ...(column as Record<string, unknown>) }
+        : {});
+
+    const quotedName = this.invokeMethod<string>(column, "getQuotedName", this);
+    if (quotedName !== undefined) {
+      definition.name = quotedName;
+    } else if (definition.name !== undefined) {
+      definition.name = String(definition.name);
+    }
+
+    const comment = this.invokeMethod<string>(column, "getComment");
+    if (comment !== undefined) {
+      definition.comment = comment;
+    }
+
+    return definition;
+  }
+
+  private getDynamicTableSQLName(table: unknown): string {
+    return (
+      this.invokeMethod<string>(table, "getQuotedName", this) ??
+      this.invokeMethod<string>(table, "getName") ??
+      String(table)
+    );
+  }
+
+  private invokeMethod<T>(target: unknown, methodName: string, ...args: unknown[]): T | undefined {
+    if (target === null || typeof target !== "object") {
+      return undefined;
+    }
+
+    const fn = (target as Record<string, unknown>)[methodName];
+    if (typeof fn !== "function") {
+      return undefined;
+    }
+
+    return (fn as (...methodArgs: unknown[]) => T).apply(target, args);
+  }
+
+  private constraintHasOption(target: unknown, name: string): boolean {
+    return this.invokeMethod<boolean>(target, "hasOption", name) === true;
+  }
+
+  private getConstraintOption(target: unknown, name: string): unknown {
+    return this.invokeMethod<unknown>(target, "getOption", name);
+  }
+
+  private getQuotedColumns(target: unknown): string[] {
+    const quoted = this.invokeMethod<string[]>(target, "getQuotedColumns", this);
+    if (Array.isArray(quoted)) {
+      return quoted;
+    }
+
+    const columns = this.invokeMethod<string[]>(target, "getColumns");
+    return Array.isArray(columns) ? columns.map((column) => String(column)) : [];
+  }
+
+  private getQuotedLocalColumns(target: unknown): string[] {
+    const quoted = this.invokeMethod<string[]>(target, "getQuotedLocalColumns", this);
+    if (Array.isArray(quoted)) {
+      return quoted;
+    }
+
+    const columns = this.invokeMethod<string[]>(target, "getLocalColumns");
+    return Array.isArray(columns) ? columns.map((column) => String(column)) : [];
+  }
+
+  private getQuotedForeignColumns(target: unknown): string[] {
+    const quoted = this.invokeMethod<string[]>(target, "getQuotedForeignColumns", this);
+    if (Array.isArray(quoted)) {
+      return quoted;
+    }
+
+    const columns = this.invokeMethod<string[]>(target, "getForeignColumns");
+    return Array.isArray(columns) ? columns.map((column) => String(column)) : [];
+  }
+
+  private resolveColumnTypeDeclaration(column: Record<string, unknown>): string {
+    const type = column.type;
+    if (type !== null && typeof type === "object") {
+      const declaration = this.invokeMethod<string>(type, "getSQLDeclaration", column, this);
+      if (typeof declaration === "string" && declaration.length > 0) {
+        return declaration;
+      }
+    }
+
+    if (typeof type === "string") {
+      return type.toUpperCase();
+    }
+
+    return "TEXT";
+  }
+
+  private normalizeColumnForComparison(column: unknown): Record<string, unknown> {
+    let normalized: Record<string, unknown>;
+
+    if (column !== null && typeof column === "object") {
+      const toArray = this.invokeMethod<Record<string, unknown>>(column, "toArray");
+      normalized =
+        toArray === undefined ? { ...(column as Record<string, unknown>) } : { ...toArray };
+      const comment = this.invokeMethod<unknown>(column, "getComment");
+      if (comment !== undefined) {
+        normalized.comment = comment;
+      }
+    } else {
+      normalized = { value: column };
+    }
+
+    normalized.columnDefinition = null;
+    return normalized;
   }
 
   private readNumber(column: Record<string, unknown>, key: string): number | undefined {

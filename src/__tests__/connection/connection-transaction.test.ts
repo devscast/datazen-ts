@@ -16,6 +16,7 @@ import { NoActiveTransaction } from "../../exception/no-active-transaction";
 import { SavepointsNotSupported } from "../../exception/savepoints-not-supported";
 import { AbstractPlatform } from "../../platforms/abstract-platform";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
+import { TransactionIsolationLevel } from "../../transaction-isolation-level";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -134,6 +135,12 @@ class SpyDriver implements Driver {
 
   public getDatabasePlatform(): AbstractPlatform {
     return this.platform;
+  }
+}
+
+class ExposedConnection extends Connection {
+  public getNestedTransactionSavePointNameForTest(level: number): string {
+    return this._getNestedTransactionSavePointName(level);
   }
 }
 
@@ -419,5 +426,83 @@ describe("Connection transactions and state", () => {
       u1: { active: true, name: "Alice" },
       u2: { active: false, name: "Bob" },
     });
+  });
+
+  it("supports Datazen compatibility connection aliases and savepoint settings", async () => {
+    const driverConnection = new SpyDriverConnection();
+    const connection = new ExposedConnection({ dbname: "app_db" }, new SpyDriver(driverConnection));
+    const platform = connection.getDatabasePlatform();
+
+    expect(connection.getDatabase()).toBe("app_db");
+    expect(connection.getNestTransactionsWithSavepoints()).toBe(true);
+    connection.setNestTransactionsWithSavepoints(false);
+    expect(connection.getNestTransactionsWithSavepoints()).toBe(false);
+
+    expect(connection.getTransactionIsolation()).toBe(
+      platform.getDefaultTransactionIsolationLevel(),
+    );
+    await connection.setTransactionIsolation(TransactionIsolationLevel.READ_COMMITTED);
+    expect(connection.getTransactionIsolation()).toBe(TransactionIsolationLevel.READ_COMMITTED);
+    expect(driverConnection.execCalls).toContain(
+      platform.getSetTransactionIsolationSQL(TransactionIsolationLevel.READ_COMMITTED),
+    );
+
+    expect(connection.quoteIdentifier("users")).toBe(platform.quoteIdentifier("users"));
+    expect(connection.quoteSingleIdentifier("users")).toBe(platform.quoteSingleIdentifier("users"));
+    expect(connection.getNestedTransactionSavePointNameForTest(3)).toBe("DATAZEN_3");
+  });
+
+  it("iterates rows using Datazen-style connection iterator helpers", async () => {
+    const connection = new Connection({}, new SpyDriver(new MultiColumnDriverConnection()));
+    const sql = "SELECT id, name, active FROM users";
+
+    const numericRows: Array<[string, string, boolean]> = [];
+    for await (const row of connection.iterateNumeric<[string, string, boolean]>(sql)) {
+      numericRows.push(row);
+    }
+
+    const associativeRows: Array<{ id: string; name: string; active: boolean }> = [];
+    for await (const row of connection.iterateAssociative<{
+      id: string;
+      name: string;
+      active: boolean;
+    }>(sql)) {
+      associativeRows.push(row);
+    }
+
+    const keyValueRows: Array<[string, string]> = [];
+    for await (const row of connection.iterateKeyValue<string>(sql)) {
+      keyValueRows.push(row);
+    }
+
+    const indexedRows: Array<[string, { name: string; active: boolean }]> = [];
+    for await (const row of connection.iterateAssociativeIndexed<{ name: string; active: boolean }>(
+      sql,
+    )) {
+      indexedRows.push(row);
+    }
+
+    const columnRows: string[] = [];
+    for await (const value of connection.iterateColumn<string>(sql)) {
+      columnRows.push(value);
+    }
+
+    expect(numericRows).toEqual([
+      ["u1", "Alice", true],
+      ["u2", "Bob", false],
+    ]);
+    expect(associativeRows).toEqual([
+      { id: "u1", name: "Alice", active: true },
+      { id: "u2", name: "Bob", active: false },
+    ]);
+    expect(keyValueRows).toEqual([
+      ["u1", "Alice"],
+      ["u2", "Bob"],
+    ]);
+    expect(indexedRows).toEqual([
+      ["u1", { active: true, name: "Alice" }],
+      ["u2", { active: false, name: "Bob" }],
+    ]);
+    expect(columnRows).toEqual(["u1", "u2"]);
   });
 });

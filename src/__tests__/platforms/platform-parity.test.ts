@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest";
 import { LockMode } from "../../lock-mode";
 import { AbstractPlatform } from "../../platforms/abstract-platform";
 import { DB2Platform } from "../../platforms/db2-platform";
+import { NoColumnsSpecifiedForTable } from "../../platforms/exception/no-columns-specified-for-table";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { OraclePlatform } from "../../platforms/oracle-platform";
 import { SQLServerPlatform } from "../../platforms/sql-server-platform";
 import { TrimMode } from "../../platforms/trim-mode";
+import { Table } from "../../schema/table";
+import { Parser } from "../../sql/parser";
 import { TransactionIsolationLevel } from "../../transaction-isolation-level";
 import { Types } from "../../types/types";
 
@@ -25,6 +28,13 @@ class DummyPlatform extends AbstractPlatform {
 
   public getSetTransactionIsolationSQL(level: TransactionIsolationLevel): string {
     return `SET TRANSACTION ISOLATION LEVEL ${level}`;
+  }
+
+  public assertCreateTableColumnsForTest(table: {
+    getColumns(): readonly unknown[];
+    getName(): string;
+  }): void {
+    this.assertCreateTableHasColumns(table);
   }
 }
 
@@ -61,6 +71,13 @@ describe("Platform parity extensions", () => {
     expect(platform.getTrimExpression("name", TrimMode.TRAILING, "'x'")).toBe(
       "TRIM(TRAILING 'x' FROM name)",
     );
+  });
+
+  it("exposes Doctrine-style default bitwise comparison expressions", () => {
+    const platform = new DummyPlatform();
+
+    expect(platform.getBitAndComparisonExpression("flags", "4")).toBe("(flags & 4)");
+    expect(platform.getBitOrComparisonExpression("flags", "2")).toBe("(flags | 2)");
   });
 
   it("converts booleans according to base and sqlserver rules", () => {
@@ -155,11 +172,122 @@ describe("Platform parity extensions", () => {
     expect(platform.getDatazenTypeMapping("custom_json")).toBe(Types.JSON);
   });
 
+  it("exposes Doctrine-style aliases for type mappings and date plural helpers", () => {
+    const platform = new DummyPlatform();
+
+    platform.registerDoctrineTypeMapping("custom_alias", Types.STRING);
+    expect(platform.hasDoctrineTypeMappingFor("custom_alias")).toBe(true);
+    expect(platform.getDoctrineTypeMapping("custom_alias")).toBe(Types.STRING);
+
+    expect(platform.getDateAddQuartersExpression("created_at", "2")).toBe(
+      platform.getDateAddQuarterExpression("created_at", "2"),
+    );
+    expect(platform.getDateSubQuartersExpression("created_at", "2")).toBe(
+      platform.getDateSubQuarterExpression("created_at", "2"),
+    );
+    expect(platform.getDateAddYearsExpression("created_at", "1")).toBe(
+      platform.getDateAddYearExpression("created_at", "1"),
+    );
+    expect(platform.getDateSubYearsExpression("created_at", "1")).toBe(
+      platform.getDateSubYearExpression("created_at", "1"),
+    );
+  });
+
   it("throws for unknown database type mappings", () => {
     const platform = new MySQLPlatform();
 
     expect(() => platform.getDatazenTypeMapping("definitely_unknown_type")).toThrowError(
       'Unknown database type "definitely_unknown_type" requested',
     );
+  });
+
+  it("exposes Doctrine-style default drop SQL helpers", () => {
+    const platform = new DummyPlatform();
+
+    expect(platform.getDropTableSQL("users")).toBe("DROP TABLE users");
+    expect(platform.getDropTemporaryTableSQL("tmp_users")).toBe("DROP TABLE tmp_users");
+    expect(platform.getDropIndexSQL("idx_users_email", "users")).toBe("DROP INDEX idx_users_email");
+    expect(platform.getDropForeignKeySQL("fk_users_roles", "users")).toBe(
+      "ALTER TABLE users DROP FOREIGN KEY fk_users_roles",
+    );
+    expect(platform.getDropUniqueConstraintSQL("uniq_users_email", "users")).toBe(
+      "ALTER TABLE users DROP CONSTRAINT uniq_users_email",
+    );
+  });
+
+  it("creates a Doctrine-style SQL parser instance", () => {
+    const platform = new DummyPlatform();
+
+    expect(platform.createSQLParser()).toBeInstanceOf(Parser);
+  });
+
+  it("builds create-table SQL with primary keys, indexes, and foreign keys", () => {
+    const platform = new DummyPlatform();
+    const table = new Table("users");
+
+    table.addColumn("id", Types.INTEGER, { columnDefinition: "INT" });
+    table.addColumn("role_id", Types.INTEGER, { columnDefinition: "INT" });
+    table.setPrimaryKey(["id"]);
+    table.addIndex(["role_id"], "idx_users_role_id");
+    table.addForeignKeyConstraint(
+      "roles",
+      ["role_id"],
+      ["id"],
+      { onDelete: "cascade" },
+      "fk_users_roles",
+    );
+
+    expect(platform.getCreateTableSQL(table)).toEqual([
+      "CREATE TABLE users (id INT, role_id INT, INDEX idx_users_role_id (role_id), PRIMARY KEY (id))",
+      "ALTER TABLE users ADD CONSTRAINT fk_users_roles FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE CASCADE",
+    ]);
+  });
+
+  it("defers foreign keys in getCreateTablesSQL like Doctrine", () => {
+    const platform = new DummyPlatform();
+
+    const roles = new Table("roles");
+    roles.addColumn("id", Types.INTEGER, { columnDefinition: "INT" });
+    roles.setPrimaryKey(["id"]);
+
+    const users = new Table("users");
+    users.addColumn("id", Types.INTEGER, { columnDefinition: "INT" });
+    users.addColumn("role_id", Types.INTEGER, { columnDefinition: "INT" });
+    users.setPrimaryKey(["id"]);
+    users.addForeignKeyConstraint("roles", ["role_id"], ["id"], {}, "fk_users_roles");
+
+    const sql = platform.getCreateTablesSQL([users, roles]);
+
+    expect(sql.slice(0, 2)).toEqual([
+      "CREATE TABLE users (id INT, role_id INT, PRIMARY KEY (id))",
+      "CREATE TABLE roles (id INT, PRIMARY KEY (id))",
+    ]);
+    expect(sql[2]).toBe(
+      "ALTER TABLE users ADD CONSTRAINT fk_users_roles FOREIGN KEY (role_id) REFERENCES roles (id)",
+    );
+  });
+
+  it("throws Doctrine-style NoColumnsSpecifiedForTable for empty create-table input", () => {
+    const platform = new DummyPlatform();
+
+    expect(() =>
+      platform.assertCreateTableColumnsForTest({
+        getColumns: () => [],
+        getName: () => "users",
+      }),
+    ).toThrow(NoColumnsSpecifiedForTable);
+    expect(() =>
+      platform.assertCreateTableColumnsForTest({
+        getColumns: () => [],
+        getName: () => "users",
+      }),
+    ).toThrowError('No columns specified for table "users".');
+
+    expect(() =>
+      platform.assertCreateTableColumnsForTest({
+        getColumns: () => [{ name: "id" }],
+        getName: () => "users",
+      }),
+    ).not.toThrow();
   });
 });

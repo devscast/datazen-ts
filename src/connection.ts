@@ -32,6 +32,7 @@ import type { SchemaManagerFactory } from "./schema/schema-manager-factory";
 import type { ServerVersionProvider } from "./server-version-provider";
 import { Parser, type SQLParser, type Visitor } from "./sql/parser";
 import { Statement } from "./statement";
+import { TransactionIsolationLevel } from "./transaction-isolation-level";
 import { Type } from "./types/type";
 
 type AssociativeRow = Record<string, unknown>;
@@ -51,6 +52,8 @@ export class Connection {
   private databasePlatform: AbstractPlatform | null = null;
   private parser: SQLParser | null = null;
   private readonly schemaManagerFactory: SchemaManagerFactory;
+  private nestTransactionsWithSavepoints = true;
+  private transactionIsolationLevel: TransactionIsolationLevel | null = null;
 
   constructor(
     private readonly params: AssociativeRow,
@@ -68,6 +71,11 @@ export class Connection {
 
   public getDriver(): Driver {
     return this.driver;
+  }
+
+  public getDatabase(): string | null {
+    const dbname = this.params.dbname;
+    return typeof dbname === "string" ? dbname : null;
   }
 
   public getConfiguration(): Configuration {
@@ -259,6 +267,51 @@ export class Connection {
     types: QueryParameterTypes = [],
   ): Promise<T[]> {
     return (await this.executeQuery(sql, params, types)).fetchFirstColumn<T>();
+  }
+
+  public async *iterateNumeric<T extends unknown[] = unknown[]>(
+    sql: string,
+    params: QueryParameters = [],
+    types: QueryParameterTypes = [],
+  ): AsyncIterableIterator<T> {
+    const result = await this.executeQuery(sql, params, types);
+    yield* result.iterateNumeric<T>();
+  }
+
+  public async *iterateAssociative<T extends AssociativeRow = AssociativeRow>(
+    sql: string,
+    params: QueryParameters = [],
+    types: QueryParameterTypes = [],
+  ): AsyncIterableIterator<T> {
+    const result = await this.executeQuery<T>(sql, params, types);
+    yield* result.iterateAssociative<T>();
+  }
+
+  public async *iterateKeyValue<T = unknown>(
+    sql: string,
+    params: QueryParameters = [],
+    types: QueryParameterTypes = [],
+  ): AsyncIterableIterator<[string, T]> {
+    const result = await this.executeQuery(sql, params, types);
+    yield* result.iterateKeyValue<T>();
+  }
+
+  public async *iterateAssociativeIndexed<T extends AssociativeRow = AssociativeRow>(
+    sql: string,
+    params: QueryParameters = [],
+    types: QueryParameterTypes = [],
+  ): AsyncIterableIterator<[string, T]> {
+    const result = await this.executeQuery(sql, params, types);
+    yield* result.iterateAssociativeIndexed<T>();
+  }
+
+  public async *iterateColumn<T = unknown>(
+    sql: string,
+    params: QueryParameters = [],
+    types: QueryParameterTypes = [],
+  ): AsyncIterableIterator<T> {
+    const result = await this.executeQuery(sql, params, types);
+    yield* result.iterateColumn<T>();
   }
 
   public async delete(
@@ -516,8 +569,40 @@ export class Connection {
     return this.schemaManagerFactory.createSchemaManager(this);
   }
 
+  public async setTransactionIsolation(level: TransactionIsolationLevel): Promise<void> {
+    await this.executeStatement(this.getDatabasePlatform().getSetTransactionIsolationSQL(level));
+    this.transactionIsolationLevel = level;
+  }
+
+  public getTransactionIsolation(): TransactionIsolationLevel {
+    return (
+      this.transactionIsolationLevel ??
+      this.getDatabasePlatform().getDefaultTransactionIsolationLevel()
+    );
+  }
+
+  public quoteIdentifier(identifier: string): string {
+    return this.getDatabasePlatform().quoteIdentifier(identifier);
+  }
+
+  public quoteSingleIdentifier(identifier: string): string {
+    return this.getDatabasePlatform().quoteSingleIdentifier(identifier);
+  }
+
+  public setNestTransactionsWithSavepoints(flag: boolean): void {
+    this.nestTransactionsWithSavepoints = flag;
+  }
+
+  public getNestTransactionsWithSavepoints(): boolean {
+    return this.nestTransactionsWithSavepoints;
+  }
+
   private getNestedTransactionSavePointName(level: number): string {
     return `DATAZEN_${level}`;
+  }
+
+  protected _getNestedTransactionSavePointName(level: number): string {
+    return this.getNestedTransactionSavePointName(level);
   }
 
   private getCriteriaCondition(criteria: AssociativeRow): [string[], unknown[], string[]] {
@@ -626,6 +711,14 @@ export class Connection {
 
       return;
     }
+  }
+
+  private bindParameters(
+    statement: DriverStatement,
+    parameters: Query["parameters"],
+    types: Query["types"],
+  ): void {
+    this.bindDriverParameters(statement, parameters, types);
   }
 
   private hasBoundParameters(parameters: Query["parameters"]): boolean {
@@ -782,6 +875,10 @@ export class Connection {
     return Type.getType(type).convertToNodeValue(value, this.getDatabasePlatform());
   }
 
+  public convertToPHPValue(value: unknown, type: string): unknown {
+    return this.convertToNodeValue(value, type);
+  }
+
   public convertExceptionDuringQuery(
     error: unknown,
     sql: string,
@@ -869,6 +966,10 @@ export class Connection {
     }
 
     return converted;
+  }
+
+  private handleDriverException(error: unknown, operation: string, query?: Query): Exception {
+    return this.convertException(error, operation, query);
   }
 
   private normalizeParameters(

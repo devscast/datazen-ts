@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { ArrayParameterType } from "../../array-parameter-type";
-import { MissingNamedParameter } from "../../array-parameters/exception/missing-named-parameter";
-import { MissingPositionalParameter } from "../../array-parameters/exception/missing-positional-parameter";
-import { ExpandArrayParameters } from "../../expand-array-parameters";
-import { ParameterType } from "../../parameter-type";
-import type { QueryParameterTypes, QueryParameters, QueryScalarParameterType } from "../../query";
-import { Parser } from "../../sql/parser";
+import { ArrayParameterType } from "../array-parameter-type";
+import { MissingNamedParameter } from "../array-parameters/exception/missing-named-parameter";
+import { MissingPositionalParameter } from "../array-parameters/exception/missing-positional-parameter";
+import { ExpandArrayParameters } from "../expand-array-parameters";
+import { ParameterType } from "../parameter-type";
+import type { QueryParameterTypes, QueryParameters, QueryScalarParameterType } from "../query";
+import { Parser } from "../sql/parser";
 
 function expand(
   sql: string,

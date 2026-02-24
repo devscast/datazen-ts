@@ -150,6 +150,61 @@ describe("Result", () => {
     expect(result.rowCount()).toBe(0);
   });
 
+  it("iterates rows and columns using Doctrine-style iterator helpers", () => {
+    const numericResult = createResult(
+      new ArrayResult([
+        { id: "u1", name: "Alice", active: true },
+        { id: "u2", name: "Bob", active: false },
+      ]),
+    );
+    const associativeResult = createResult(
+      new ArrayResult([
+        { id: "u1", name: "Alice", active: true },
+        { id: "u2", name: "Bob", active: false },
+      ]),
+    );
+    const keyValueResult = createResult(
+      new ArrayResult([
+        { id: "u1", name: "Alice", active: true },
+        { id: "u2", name: "Bob", active: false },
+      ]),
+    );
+    const indexedResult = createResult(
+      new ArrayResult([
+        { id: "u1", name: "Alice", active: true },
+        { id: "u2", name: "Bob", active: false },
+      ]),
+    );
+    const columnResult = createResult(
+      new ArrayResult([
+        { id: "u1", name: "Alice", active: true },
+        { id: "u2", name: "Bob", active: false },
+      ]),
+    );
+
+    expect([...numericResult.iterateNumeric<[string, string, boolean]>()]).toEqual([
+      ["u1", "Alice", true],
+      ["u2", "Bob", false],
+    ]);
+    expect([
+      ...associativeResult.iterateAssociative<{ id: string; name: string; active: boolean }>(),
+    ]).toEqual([
+      { id: "u1", name: "Alice", active: true },
+      { id: "u2", name: "Bob", active: false },
+    ]);
+    expect([...keyValueResult.iterateKeyValue<string>()]).toEqual([
+      ["u1", "Alice"],
+      ["u2", "Bob"],
+    ]);
+    expect([
+      ...indexedResult.iterateAssociativeIndexed<{ name: string; active: boolean }>(),
+    ]).toEqual([
+      ["u1", { active: true, name: "Alice" }],
+      ["u2", { active: false, name: "Bob" }],
+    ]);
+    expect([...columnResult.iterateColumn<string>()]).toEqual(["u1", "u2"]);
+  });
+
   it("converts driver exceptions using the connection", () => {
     const driverError = new Error("driver failure");
     const convertedError = new Error("converted failure");
