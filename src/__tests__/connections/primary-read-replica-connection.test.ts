@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { Driver, DriverConnection } from "../../driver";
+import type { Driver } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { DriverManager } from "../../driver-manager";
 import { DriverException } from "../../exception/driver-exception";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
@@ -143,6 +144,18 @@ describe("PrimaryReadReplicaConnection", () => {
     expect(driver.connections[0]?.querySql).toEqual(["SELECT 1"]);
   });
 
+  it("does not switch to primary on fetchAllAssociative reads (Doctrine parity)", async () => {
+    const driver = new SpyDriver();
+    const connection = createPrimaryReplicaConnection(driver);
+
+    await expect(connection.fetchAllAssociative<{ value: string }>("SELECT 1")).resolves.toEqual([
+      { value: "replica" },
+    ]);
+
+    expect(connection.isConnectedToPrimary()).toBe(false);
+    expect(driver.connectParams.map((params) => params.role)).toEqual(["replica"]);
+  });
+
   it("switches to primary on write operations and stays there for later reads", async () => {
     const driver = new SpyDriver();
     const connection = createPrimaryReplicaConnection(driver);
@@ -234,17 +247,34 @@ describe("PrimaryReadReplicaConnection", () => {
     expect(connection.isConnectedToPrimary()).toBe(false);
   });
 
-  it("inherits charset from primary when replica charset is missing", async () => {
+  it("switches to primary on insert and keeps reads on primary afterwards (Doctrine parity)", async () => {
     const driver = new SpyDriver();
-    const connection = DriverManager.getPrimaryReadReplicaConnection({
-      driverInstance: driver,
-      primary: { charset: "utf8mb4", role: "primary" },
-      replica: [{ role: "replica" }],
-    });
+    const connection = createPrimaryReplicaConnection(driver);
 
-    await connection.ensureConnectedToReplica();
+    await connection.insert("users", { id: 30 });
 
-    expect(driver.connectParams[0]).toMatchObject({ charset: "utf8mb4", role: "replica" });
+    expect(connection.isConnectedToPrimary()).toBe(true);
+    await expect(connection.fetchAllAssociative<{ value: string }>("SELECT 1")).resolves.toEqual([
+      { value: "primary" },
+    ]);
+    expect(connection.isConnectedToPrimary()).toBe(true);
+  });
+
+  it("inherits charset from primary when replica charset is missing (Doctrine parity charsets)", async () => {
+    for (const charset of ["utf8mb4", "latin1"]) {
+      const driver = new SpyDriver();
+      const connection = DriverManager.getPrimaryReadReplicaConnection({
+        driverInstance: driver,
+        primary: { charset, role: "primary" },
+        replica: [{ role: "replica-a" }, { role: "replica-b" }],
+      });
+
+      await connection.ensureConnectedToReplica();
+
+      expect(driver.connectParams[0]).toMatchObject({ charset });
+      expect(String(driver.connectParams[0]?.role)).toMatch(/^replica-/);
+      expect(connection.isConnectedToPrimary()).toBe(false);
+    }
   });
 
   it("closes both cached connections and can reconnect", async () => {
@@ -283,5 +313,20 @@ describe("PrimaryReadReplicaConnection", () => {
     await expect(connection.fetchOne("SELECT 1")).resolves.toBe("replica");
 
     expect(driver.connectParams.map((params) => params.role)).toEqual(["primary", "replica"]);
+  });
+
+  it("close clears primary selection and reconnect to primary works (Doctrine parity)", async () => {
+    const driver = new SpyDriver();
+    const connection = createPrimaryReplicaConnection(driver);
+
+    await connection.ensureConnectedToPrimary();
+    expect(connection.isConnectedToPrimary()).toBe(true);
+
+    await connection.close();
+    expect(connection.isConnectedToPrimary()).toBe(false);
+
+    await connection.ensureConnectedToPrimary();
+    expect(connection.isConnectedToPrimary()).toBe(true);
+    expect(driver.connectParams.map((params) => params.role)).toEqual(["primary", "primary"]);
   });
 });

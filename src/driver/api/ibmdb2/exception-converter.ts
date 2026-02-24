@@ -10,12 +10,12 @@ import { TableNotFoundException } from "../../../exception/table-not-found-excep
 import { UniqueConstraintViolationException } from "../../../exception/unique-constraint-violation-exception";
 import type {
   ExceptionConverterContext,
-  ExceptionConverter as ExceptionConverterContract,
+  ExceptionConverter as ExceptionConverterInterface,
 } from "../exception-converter";
 
 const FOREIGN_KEY_CONSTRAINT_CODES = new Set([-530, -531, -532, -20356]);
 const CONNECTION_CODES = new Set([-1336, -30082]);
-export class ExceptionConverter implements ExceptionConverterContract {
+export class ExceptionConverter implements ExceptionConverterInterface {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
     const details = this.createDetails(error, context);
 

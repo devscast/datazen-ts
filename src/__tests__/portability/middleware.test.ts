@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { ColumnCase } from "../../column-case";
 import { Configuration } from "../../configuration";
-import { type Driver, type DriverConnection } from "../../driver";
+import type { Driver } from "../../driver";
 import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { DriverManager } from "../../driver-manager";
 import { DriverException } from "../../exception/driver-exception";
 import { OraclePlatform } from "../../platforms/oracle-platform";

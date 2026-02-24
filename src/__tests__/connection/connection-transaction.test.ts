@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
 import { Connection } from "../../connection";
-import { type Driver, type DriverConnection } from "../../driver";
+import type { Driver } from "../../driver";
 import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { CommitFailedRollbackOnly } from "../../exception/commit-failed-rollback-only";
 import { DriverException } from "../../exception/driver-exception";
 import { NoActiveTransaction } from "../../exception/no-active-transaction";

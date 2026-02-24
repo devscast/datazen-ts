@@ -7,10 +7,10 @@ import { SyntaxErrorException } from "../../../exception/syntax-error-exception"
 import { UniqueConstraintViolationException } from "../../../exception/unique-constraint-violation-exception";
 import type {
   ExceptionConverterContext,
-  ExceptionConverter as ExceptionConverterContract,
+  ExceptionConverter as ExceptionConverterInterface,
 } from "../exception-converter";
 
-export class ExceptionConverter implements ExceptionConverterContract {
+export class ExceptionConverter implements ExceptionConverterInterface {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
     const details = this.createDetails(error, context);
     const code = typeof details.code === "string" ? details.code.toUpperCase() : undefined;

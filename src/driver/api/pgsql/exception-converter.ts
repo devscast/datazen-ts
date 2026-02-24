@@ -7,7 +7,7 @@ import { SyntaxErrorException } from "../../../exception/syntax-error-exception"
 import { UniqueConstraintViolationException } from "../../../exception/unique-constraint-violation-exception";
 import type {
   ExceptionConverterContext,
-  ExceptionConverter as ExceptionConverterContract,
+  ExceptionConverter as ExceptionConverterInterface,
 } from "../exception-converter";
 
 const UNIQUE_CONSTRAINT_SQLSTATES = new Set(["23505"]);
@@ -16,7 +16,7 @@ const NOT_NULL_CONSTRAINT_SQLSTATES = new Set(["23502"]);
 const SYNTAX_SQLSTATES = new Set(["42601", "42703", "42P01"]);
 const CONNECTION_SQLSTATES = new Set(["57P01", "57P02", "57P03"]);
 
-export class ExceptionConverter implements ExceptionConverterContract {
+export class ExceptionConverter implements ExceptionConverterInterface {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
     const details = this.createDetails(error, context);
 

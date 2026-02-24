@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
 import { Connection } from "../../connection";
-import { type Driver, type DriverConnection } from "../../driver";
+import type { Driver } from "../../driver";
 import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { DriverException } from "../../exception/driver-exception";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { AbstractSchemaManager } from "../../schema/abstract-schema-manager";

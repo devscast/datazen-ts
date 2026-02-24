@@ -7,7 +7,7 @@ import { SyntaxErrorException } from "../../../exception/syntax-error-exception"
 import { UniqueConstraintViolationException } from "../../../exception/unique-constraint-violation-exception";
 import type {
   ExceptionConverterContext,
-  ExceptionConverter as ExceptionConverterContract,
+  ExceptionConverter as ExceptionConverterInterface,
 } from "../exception-converter";
 
 const FOREIGN_KEY_CONSTRAINT_CODES = new Set([1216, 1217, 1451, 1452, 1701]);
@@ -29,7 +29,7 @@ const CONNECTION_ERROR_STRINGS = new Set([
   "ETIMEDOUT",
 ]);
 
-export class ExceptionConverter implements ExceptionConverterContract {
+export class ExceptionConverter implements ExceptionConverterInterface {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
     const details = this.createDetails(error, context);
 

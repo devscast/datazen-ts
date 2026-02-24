@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { StaticServerVersionProvider } from "../../connection/static-server-version-provider";
-import { type Driver, type DriverConnection } from "../../driver";
+import type { Driver } from "../../driver";
 import { EnableForeignKeys } from "../../driver/abstract-sqlite-driver/middleware/enable-foreign-keys";
 import type { ExceptionConverter } from "../../driver/api/exception-converter";
 import { ExceptionConverter as SQLiteExceptionConverter } from "../../driver/api/sqlite/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { SQLitePlatform } from "../../platforms/sqlite-platform";
 
 class SpyConnection implements DriverConnection {
