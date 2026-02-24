@@ -5,4 +5,8 @@ export class MalformedDsnException extends Error {
     super(message);
     initializeException(this, new.target);
   }
+
+  public static new(): MalformedDsnException {
+    return new MalformedDsnException();
+  }
 }

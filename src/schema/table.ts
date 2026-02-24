@@ -9,16 +9,25 @@ import { IndexAlreadyExists } from "./exception/index-already-exists";
 import { IndexDoesNotExist } from "./exception/index-does-not-exist";
 import { InvalidState } from "./exception/invalid-state";
 import { PrimaryKeyAlreadyExists } from "./exception/primary-key-already-exists";
+import { UniqueConstraintDoesNotExist } from "./exception/unique-constraint-does-not-exist";
 import { ForeignKeyConstraint } from "./foreign-key-constraint";
 import { Index } from "./index";
+import type { OptionallyQualifiedNameParser } from "./name/parser/optionally-qualified-name-parser";
+import { Parsers } from "./name/parsers";
+import { PrimaryKeyConstraint } from "./primary-key-constraint";
+import { SchemaConfig } from "./schema-config";
 import { TableEditor } from "./table-editor";
+import { UniqueConstraint } from "./unique-constraint";
 
 export class Table extends AbstractAsset {
   private readonly columns: Record<string, Column> = {};
   private readonly indexes: Record<string, Index> = {};
   private readonly foreignKeys: Record<string, ForeignKeyConstraint> = {};
+  private readonly uniqueConstraints: Record<string, UniqueConstraint> = {};
+  private readonly renamedColumns: Record<string, string> = {};
   private options: Record<string, unknown>;
   private primaryKeyName: string | null = null;
+  private schemaConfig: SchemaConfig | null = null;
 
   constructor(
     name: string,
@@ -59,6 +68,11 @@ export class Table extends AbstractAsset {
     return column;
   }
 
+  public modifyColumn(name: string, options: ColumnOptions): this {
+    this.changeColumn(name, options);
+    return this;
+  }
+
   public hasColumn(name: string): boolean {
     return Object.hasOwn(this.columns, getAssetKey(name));
   }
@@ -78,8 +92,9 @@ export class Table extends AbstractAsset {
     return Object.values(this.columns);
   }
 
-  public dropColumn(name: string): void {
+  public dropColumn(name: string): this {
     delete this.columns[getAssetKey(name)];
+    return this;
   }
 
   public addIndex(
@@ -117,6 +132,26 @@ export class Table extends AbstractAsset {
     return index;
   }
 
+  public addPrimaryKeyConstraint(primaryKeyConstraint: PrimaryKeyConstraint): this {
+    const indexName = primaryKeyConstraint.getObjectName() ?? undefined;
+    this.setPrimaryKey(primaryKeyConstraint.getColumnNames(), indexName);
+
+    if (!primaryKeyConstraint.isClustered() && this.hasPrimaryKey()) {
+      this.getPrimaryKey().addFlag("nonclustered");
+    }
+
+    return this;
+  }
+
+  public dropPrimaryKey(): void {
+    if (this.primaryKeyName === null) {
+      return;
+    }
+
+    this.dropIndex(this.primaryKeyName);
+    this.primaryKeyName = null;
+  }
+
   public hasPrimaryKey(): boolean {
     return this.primaryKeyName !== null && this.hasIndex(this.primaryKeyName);
   }
@@ -135,6 +170,20 @@ export class Table extends AbstractAsset {
     }
 
     return this.getPrimaryKey().getColumns();
+  }
+
+  public getPrimaryKeyConstraint(): PrimaryKeyConstraint | null {
+    if (!this.hasPrimaryKey()) {
+      return null;
+    }
+
+    const primaryKey = this.getPrimaryKey();
+
+    return new PrimaryKeyConstraint(
+      primaryKey.getName(),
+      primaryKey.getColumns(),
+      !primaryKey.hasFlag("nonclustered"),
+    );
   }
 
   public addIndexObject(index: Index): void {
@@ -179,6 +228,36 @@ export class Table extends AbstractAsset {
     }
 
     delete this.indexes[getAssetKey(name)];
+  }
+
+  public renameIndex(oldName: string, newName?: string | null): this {
+    const oldIndex = this.getIndex(oldName);
+    const normalizedOldName = getAssetKey(oldIndex.getName());
+    const targetName =
+      newName ??
+      this._generateIdentifierName(oldIndex.getColumns(), oldIndex.isUnique() ? "uniq" : "idx", 30);
+
+    if (getAssetKey(oldIndex.getName()) === getAssetKey(targetName)) {
+      return this;
+    }
+
+    if (this.hasIndex(targetName)) {
+      throw IndexAlreadyExists.new(targetName, this.getName());
+    }
+
+    const replacement = oldIndex.edit().setName(targetName).create();
+    delete this.indexes[normalizedOldName];
+    this.indexes[getAssetKey(targetName)] = replacement;
+
+    if (this.primaryKeyName !== null && getAssetKey(this.primaryKeyName) === normalizedOldName) {
+      this.primaryKeyName = targetName;
+    }
+
+    return this;
+  }
+
+  public columnsAreIndexed(columnNames: string[]): boolean {
+    return this.getIndexes().some((index) => index.spansColumns(columnNames));
   }
 
   public addForeignKeyConstraint(
@@ -234,6 +313,77 @@ export class Table extends AbstractAsset {
     delete this.foreignKeys[getAssetKey(name)];
   }
 
+  public dropForeignKey(name: string): void {
+    this.removeForeignKey(name);
+  }
+
+  public addUniqueConstraint(uniqueConstraint: UniqueConstraint): this {
+    const explicitName = uniqueConstraint.getObjectName();
+    const resolvedName =
+      explicitName.length > 0
+        ? explicitName
+        : this._generateIdentifierName(uniqueConstraint.getColumnNames(), "uniq", 30);
+
+    const key = getAssetKey(resolvedName);
+    if (Object.hasOwn(this.uniqueConstraints, key)) {
+      throw IndexAlreadyExists.new(resolvedName, this.getName());
+    }
+
+    if (resolvedName !== explicitName && explicitName.length === 0) {
+      uniqueConstraint = uniqueConstraint
+        .edit()
+        .setName(resolvedName)
+        .setColumnNames(...uniqueConstraint.getColumnNames())
+        .create();
+    }
+
+    this.uniqueConstraints[key] = uniqueConstraint;
+
+    const hasBackingIndex = this.getIndexes().some(
+      (index) => index.isUnique() && index.spansColumns(uniqueConstraint.getColumnNames()),
+    );
+
+    if (!hasBackingIndex) {
+      this.addUniqueIndex(
+        uniqueConstraint.getColumnNames(),
+        uniqueConstraint.getObjectName() || undefined,
+        uniqueConstraint.getOptions(),
+      );
+    }
+
+    return this;
+  }
+
+  public hasUniqueConstraint(name: string): boolean {
+    return Object.hasOwn(this.uniqueConstraints, getAssetKey(name));
+  }
+
+  public getUniqueConstraint(name: string): UniqueConstraint {
+    const uniqueConstraint = this.uniqueConstraints[getAssetKey(name)];
+    if (uniqueConstraint === undefined) {
+      throw UniqueConstraintDoesNotExist.new(name, this.getName());
+    }
+
+    return uniqueConstraint;
+  }
+
+  public removeUniqueConstraint(name: string): void {
+    this.dropUniqueConstraint(name);
+  }
+
+  public dropUniqueConstraint(name: string): void {
+    const key = getAssetKey(name);
+    if (!Object.hasOwn(this.uniqueConstraints, key)) {
+      throw UniqueConstraintDoesNotExist.new(name, this.getName());
+    }
+
+    delete this.uniqueConstraints[key];
+  }
+
+  public getUniqueConstraints(): UniqueConstraint[] {
+    return Object.values(this.uniqueConstraints);
+  }
+
   public addOption(name: string, value: unknown): this {
     this.options[name] = value;
     return this;
@@ -251,17 +401,176 @@ export class Table extends AbstractAsset {
     return { ...this.options };
   }
 
+  public setComment(comment: string): this {
+    return this.addOption("comment", comment);
+  }
+
+  public getComment(): string | null {
+    const comment = this.options.comment;
+    return typeof comment === "string" ? comment : null;
+  }
+
+  public setSchemaConfig(schemaConfig: SchemaConfig): void {
+    this.schemaConfig = schemaConfig;
+  }
+
+  public getRenamedColumns(): Record<string, string> {
+    return { ...this.renamedColumns };
+  }
+
+  public renameColumn(oldName: string, newName: string): Column {
+    const oldKey = getAssetKey(oldName);
+    const newKey = getAssetKey(newName);
+
+    if (oldKey === newKey) {
+      throw new Error(`Attempt to rename column "${this.getName()}.${oldName}" to the same name.`);
+    }
+
+    const column = this.getColumn(oldName);
+    const renamedColumn = column.edit().setName(newName).create();
+    delete this.columns[oldKey];
+
+    if (Object.hasOwn(this.columns, newKey)) {
+      throw ColumnAlreadyExists.new(this.getName(), newName);
+    }
+
+    this.columns[newKey] = renamedColumn;
+
+    this.renameColumnInIndexes(oldName, newName);
+    this.renameColumnInForeignKeyConstraints(oldName, newName);
+    this.renameColumnInUniqueConstraints(oldName, newName);
+
+    if (Object.hasOwn(this.renamedColumns, oldKey)) {
+      const original = this.renamedColumns[oldKey];
+      if (original !== undefined) {
+        delete this.renamedColumns[oldKey];
+        this.renamedColumns[newKey] = original;
+      }
+    } else {
+      this.renamedColumns[newKey] = oldKey;
+    }
+
+    return renamedColumn;
+  }
+
   public static editor(): TableEditor {
     return new TableEditor();
   }
 
   public edit(): TableEditor {
-    return Table.editor()
+    const editor = Table.editor()
       .setName(this.getName())
       .setColumns(...this.getColumns())
       .setIndexes(...this.getIndexes())
       .setForeignKeyConstraints(...this.getForeignKeys())
+      .setUniqueConstraints(...this.getUniqueConstraints())
       .setOptions(this.getOptions());
+
+    if (this.getComment() !== null) {
+      editor.setComment(this.getComment() ?? "");
+    }
+
+    if (this.schemaConfig !== null) {
+      editor.setConfiguration(this.schemaConfig);
+    }
+
+    return editor;
+  }
+
+  protected getNameParser(): OptionallyQualifiedNameParser {
+    return Parsers.getOptionallyQualifiedNameParser();
+  }
+
+  protected _getMaxIdentifierLength(): number {
+    return this.schemaConfig?.getMaxIdentifierLength() ?? 63;
+  }
+
+  protected _addColumn(column: Column): void {
+    this.columns[getAssetKey(column.getName())] = column;
+  }
+
+  protected _addIndex(index: Index): this {
+    this.addIndexObject(index);
+    return this;
+  }
+
+  protected _addUniqueConstraint(constraint: UniqueConstraint): this {
+    this.addUniqueConstraint(constraint);
+    return this;
+  }
+
+  protected _addForeignKeyConstraint(constraint: ForeignKeyConstraint): this {
+    this.addForeignKeyObject(constraint);
+    return this;
+  }
+
+  private renameColumnInIndexes(oldName: string, newName: string): void {
+    for (const [key, index] of Object.entries(this.indexes)) {
+      const originalColumns = index.getColumns();
+      const columns = originalColumns.map((columnName) =>
+        getAssetKey(columnName) === getAssetKey(oldName) ? newName : columnName,
+      );
+
+      const changed = originalColumns.some(
+        (columnName, indexPosition) =>
+          getAssetKey(columnName) !== getAssetKey(columns[indexPosition] ?? columnName),
+      );
+
+      if (!changed) {
+        continue;
+      }
+
+      this.indexes[key] = index
+        .edit()
+        .setColumns(...columns)
+        .create();
+    }
+  }
+
+  private renameColumnInForeignKeyConstraints(oldName: string, newName: string): void {
+    for (const [key, constraint] of Object.entries(this.foreignKeys)) {
+      const originalColumns = constraint.getColumns();
+      const localColumns = originalColumns.map((columnName) =>
+        getAssetKey(columnName) === getAssetKey(oldName) ? newName : columnName,
+      );
+
+      const changed = originalColumns.some(
+        (columnName, indexPosition) =>
+          getAssetKey(columnName) !== getAssetKey(localColumns[indexPosition] ?? columnName),
+      );
+
+      if (!changed) {
+        continue;
+      }
+
+      this.foreignKeys[key] = constraint
+        .edit()
+        .setReferencingColumnNames(...localColumns)
+        .create();
+    }
+  }
+
+  private renameColumnInUniqueConstraints(oldName: string, newName: string): void {
+    for (const [key, constraint] of Object.entries(this.uniqueConstraints)) {
+      const originalColumns = constraint.getColumnNames();
+      const columns = originalColumns.map((columnName) =>
+        getAssetKey(columnName) === getAssetKey(oldName) ? newName : columnName,
+      );
+
+      const changed = originalColumns.some(
+        (columnName, indexPosition) =>
+          getAssetKey(columnName) !== getAssetKey(columns[indexPosition] ?? columnName),
+      );
+
+      if (!changed) {
+        continue;
+      }
+
+      this.uniqueConstraints[key] = constraint
+        .edit()
+        .setColumnNames(...columns)
+        .create();
+    }
   }
 }
 

@@ -1,9 +1,12 @@
+import type { AbstractPlatform } from "../platforms/abstract-platform";
 import { AbstractAsset } from "./abstract-asset";
 import { NamespaceAlreadyExists } from "./exception/namespace-already-exists";
 import { SequenceAlreadyExists } from "./exception/sequence-already-exists";
 import { SequenceDoesNotExist } from "./exception/sequence-does-not-exist";
 import { TableAlreadyExists } from "./exception/table-already-exists";
 import { TableDoesNotExist } from "./exception/table-does-not-exist";
+import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
+import { Parsers } from "./name/parsers";
 import { SchemaConfig } from "./schema-config";
 import { Sequence } from "./sequence";
 import { Table } from "./table";
@@ -38,6 +41,10 @@ export class Schema extends AbstractAsset {
     return this.schemaConfig;
   }
 
+  public getName(): string {
+    return super.getName();
+  }
+
   public createNamespace(namespace: string): void {
     if (this.hasNamespace(namespace)) {
       throw NamespaceAlreadyExists.new(namespace);
@@ -66,6 +73,7 @@ export class Schema extends AbstractAsset {
       throw TableAlreadyExists.new(table.getName());
     }
 
+    table.setSchemaConfig(this.schemaConfig);
     this.tables[key] = table;
   }
 
@@ -128,6 +136,85 @@ export class Schema extends AbstractAsset {
 
   public dropSequence(name: string): void {
     delete this.sequences[getSchemaAssetKey(name)];
+  }
+
+  public renameTable(oldName: string, newName: string): this {
+    const table = this.getTable(oldName);
+    const oldKey = getSchemaAssetKey(oldName);
+    const newKey = getSchemaAssetKey(newName);
+
+    if (oldKey === newKey) {
+      (table as unknown as { _setName(name: string): void })._setName(newName);
+      return this;
+    }
+
+    if (Object.hasOwn(this.tables, newKey)) {
+      throw TableAlreadyExists.new(newName);
+    }
+
+    delete this.tables[oldKey];
+
+    try {
+      (table as unknown as { _setName(name: string): void })._setName(newName);
+      table.setSchemaConfig(this.schemaConfig);
+      this.tables[newKey] = table;
+    } catch (error) {
+      (table as unknown as { _setName(name: string): void })._setName(oldName);
+      this.tables[oldKey] = table;
+      throw error;
+    }
+
+    return this;
+  }
+
+  public toSql(platform: AbstractPlatform): string[] {
+    const sql: string[] = [];
+
+    if (platform.supportsSchemas()) {
+      for (const namespace of this.getNamespaces()) {
+        sql.push(platform.getCreateSchemaSQL(namespace));
+      }
+    }
+
+    for (const sequence of this.getSequences()) {
+      sql.push(platform.getCreateSequenceSQL(sequence));
+    }
+
+    sql.push(...platform.getCreateTablesSQL(this.getTables()));
+
+    return sql;
+  }
+
+  public toDropSql(platform: AbstractPlatform): string[] {
+    const sql: string[] = [];
+
+    sql.push(...platform.getDropTablesSQL(this.getTables()));
+
+    for (const sequence of this.getSequences()) {
+      sql.push(platform.getDropSequenceSQL(sequence.getQuotedName(platform)));
+    }
+
+    if (platform.supportsSchemas()) {
+      for (const namespace of [...this.getNamespaces()].reverse()) {
+        sql.push(platform.getDropSchemaSQL(namespace));
+      }
+    }
+
+    return sql;
+  }
+
+  protected getNameParser(): UnqualifiedNameParser {
+    return Parsers.getUnqualifiedNameParser();
+  }
+
+  protected setName(_name: unknown): void {}
+
+  protected _addTable(table: Table): void {
+    this.addTable(table);
+  }
+
+  protected _addSequence(sequence: Sequence): void {
+    this.addSequence(sequence);
   }
 }
 

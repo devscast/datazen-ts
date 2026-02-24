@@ -1,3 +1,5 @@
+import { TableConfiguration } from "./table-configuration";
+
 export class SchemaConfig {
   private name: string | null = null;
   private defaultTableOptions: Record<string, unknown> = {};
@@ -28,5 +30,9 @@ export class SchemaConfig {
   public setMaxIdentifierLength(maxIdentifierLength: number): this {
     this.maxIdentifierLength = maxIdentifierLength;
     return this;
+  }
+
+  public toTableConfiguration(): TableConfiguration {
+    return new TableConfiguration(this.maxIdentifierLength);
   }
 }

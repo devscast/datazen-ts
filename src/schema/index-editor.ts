@@ -17,9 +17,29 @@ export class IndexEditor {
     return this;
   }
 
+  public setUnquotedName(name: string): this {
+    return this.setName(name);
+  }
+
+  public setQuotedName(name: string): this {
+    return this.setName(`"${name}"`);
+  }
+
   public setColumns(...columnNames: string[]): this {
     this.columns = [...columnNames];
     return this;
+  }
+
+  public setColumnNames(...columnNames: string[]): this {
+    return this.setColumns(...columnNames);
+  }
+
+  public setUnquotedColumnNames(...columnNames: string[]): this {
+    return this.setColumns(...columnNames);
+  }
+
+  public setQuotedColumnNames(...columnNames: string[]): this {
+    return this.setColumns(...columnNames.map((columnName) => `"${columnName}"`));
   }
 
   public setIsUnique(unique: boolean): this {

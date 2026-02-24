@@ -76,11 +76,48 @@ export class PostgreSQLPlatform extends AbstractPlatform {
     return true;
   }
 
+  public setUseBooleanTrueFalseStrings(flag: boolean): void {
+    this.useBooleanTrueFalseStrings = flag;
+  }
+
+  public getDefaultColumnValueSQLSnippet(): string {
+    return [
+      "SELECT",
+      "    pg_get_expr(adbin, adrelid)",
+      " FROM pg_attrdef",
+      " WHERE c.oid = pg_attrdef.adrelid",
+      "    AND pg_attrdef.adnum=a.attnum",
+    ].join("\n");
+  }
+
   protected createReservedKeywordsList(): KeywordList {
     return new PostgreSQLKeywords();
   }
 
   public createSchemaManager(connection: Connection): PostgreSQLSchemaManager {
     return new PostgreSQLSchemaManager(connection, this);
+  }
+
+  private convertSingleBooleanValue(
+    value: unknown,
+    callback: (booleanValue: boolean) => unknown,
+  ): unknown {
+    if (typeof value === "boolean") {
+      return callback(value);
+    }
+
+    if (value === 0 || value === 1) {
+      return callback(value === 1);
+    }
+
+    return value;
+  }
+
+  private doConvertBooleans(item: unknown, callback: (booleanValue: boolean) => unknown): unknown {
+    if (Array.isArray(item)) {
+      return item.map((value) => this.doConvertBooleans(value, callback));
+    }
+
+    return this.convertSingleBooleanValue(item, callback);
   }
 }

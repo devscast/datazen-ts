@@ -1,4 +1,6 @@
 import { AbstractAsset } from "./abstract-asset";
+import type { OptionallyQualifiedNameParser } from "./name/parser/optionally-qualified-name-parser";
+import { Parsers } from "./name/parsers";
 import { ViewEditor } from "./view-editor";
 
 export class View extends AbstractAsset {
@@ -19,5 +21,9 @@ export class View extends AbstractAsset {
 
   public edit(): ViewEditor {
     return View.editor().setName(this.getName()).setSQL(this.sql);
+  }
+
+  protected getNameParser(): OptionallyQualifiedNameParser {
+    return Parsers.getOptionallyQualifiedNameParser();
   }
 }

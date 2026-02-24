@@ -12,6 +12,14 @@ export class ColumnEditor {
     return this;
   }
 
+  public setUnquotedName(name: string): this {
+    return this.setName(name);
+  }
+
+  public setQuotedName(name: string): this {
+    return this.setName(`"${name}"`);
+  }
+
   public setType(type: Type): this {
     this.type = type;
     return this;
@@ -57,6 +65,21 @@ export class ColumnEditor {
     return this;
   }
 
+  public setMinimumValue(minimumValue: unknown): this {
+    this.options.min = minimumValue;
+    return this;
+  }
+
+  public setMaximumValue(maximumValue: unknown): this {
+    this.options.max = maximumValue;
+    return this;
+  }
+
+  public setEnumType(enumType: string | null): this {
+    this.options.enumType = enumType;
+    return this;
+  }
+
   public setAutoincrement(autoincrement: boolean): this {
     this.options.autoincrement = autoincrement;
     return this;
@@ -79,6 +102,11 @@ export class ColumnEditor {
 
   public setCollation(collation: string | null): this {
     this.options.collation = collation;
+    return this;
+  }
+
+  public setDefaultConstraintName(defaultConstraintName: string | null): this {
+    this.options.default_constraint_name = defaultConstraintName;
     return this;
   }
 

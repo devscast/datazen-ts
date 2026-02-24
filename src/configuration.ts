@@ -3,6 +3,7 @@ import type { SchemaManagerFactory } from "./schema/schema-manager-factory";
 
 interface ConfigurationOptions {
   autoCommit?: boolean;
+  disableTypeComments?: boolean;
   middlewares?: DriverMiddleware[];
   schemaAssetsFilter?: (assetName: string) => boolean;
   schemaManagerFactory?: SchemaManagerFactory;
@@ -10,12 +11,14 @@ interface ConfigurationOptions {
 
 export class Configuration {
   private autoCommit: boolean = true;
+  private disableTypeComments: boolean = false;
   private middlewares: DriverMiddleware[] = [];
   protected schemaAssetsFilter: (assetName: string) => boolean;
   private schemaManagerFactory: SchemaManagerFactory | null = null;
 
   constructor(options?: ConfigurationOptions) {
     this.autoCommit = options?.autoCommit ?? true;
+    this.disableTypeComments = options?.disableTypeComments ?? false;
     this.middlewares = options?.middlewares ?? [];
     this.schemaAssetsFilter = options?.schemaAssetsFilter ?? (() => true);
     this.schemaManagerFactory = options?.schemaManagerFactory ?? null;
@@ -27,6 +30,15 @@ export class Configuration {
 
   public setAutoCommit(autoCommit: boolean): this {
     this.autoCommit = autoCommit;
+    return this;
+  }
+
+  public getDisableTypeComments(): boolean {
+    return this.disableTypeComments;
+  }
+
+  public setDisableTypeComments(disableTypeComments: boolean): this {
+    this.disableTypeComments = disableTypeComments;
     return this;
   }
 

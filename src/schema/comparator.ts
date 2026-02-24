@@ -1,8 +1,11 @@
 import { Column } from "./column";
 import { ColumnDiff } from "./column-diff";
 import { ComparatorConfig } from "./comparator-config";
+import { ForeignKeyConstraint } from "./foreign-key-constraint";
+import { Index } from "./index";
 import { Schema } from "./schema";
 import { SchemaDiff } from "./schema-diff";
+import { Sequence } from "./sequence";
 import { Table } from "./table";
 import { TableDiff } from "./table-diff";
 
@@ -44,14 +47,35 @@ export class Comparator {
     );
 
     const createdSequences = [...newSequencesByName.entries()]
-      .filter(([name]) => !oldSequencesByName.has(name))
+      .filter(
+        ([name, sequence]) =>
+          !oldSequencesByName.has(name) &&
+          !this.isAutoIncrementSequenceInSchema(oldSchema, sequence),
+      )
       .map(([, sequence]) => sequence);
 
+    const alteredSequences = [...newSequencesByName.entries()]
+      .filter(([name]) => oldSequencesByName.has(name))
+      .map(([name, sequence]) => {
+        const oldSequence = oldSequencesByName.get(name);
+        if (oldSequence === undefined) {
+          return null;
+        }
+
+        return this.diffSequence(sequence, oldSequence) ? sequence : null;
+      })
+      .filter((sequence): sequence is Sequence => sequence !== null);
+
     const droppedSequences = [...oldSequencesByName.entries()]
-      .filter(([name]) => !newSequencesByName.has(name))
+      .filter(
+        ([name, sequence]) =>
+          !newSequencesByName.has(name) &&
+          !this.isAutoIncrementSequenceInSchema(newSchema, sequence),
+      )
       .map(([, sequence]) => sequence);
 
     return new SchemaDiff({
+      alteredSequences,
       alteredTables,
       createdSequences,
       createdTables,
@@ -182,5 +206,35 @@ export class Comparator {
     }
 
     return new ColumnDiff(oldColumn, newColumn, changedProperties);
+  }
+
+  public diffSequence(sequence1: Sequence, sequence2: Sequence): boolean {
+    if (sequence1.getAllocationSize() !== sequence2.getAllocationSize()) {
+      return true;
+    }
+
+    return sequence1.getInitialValue() !== sequence2.getInitialValue();
+  }
+
+  protected columnsEqual(column1: Column, column2: Column): boolean {
+    return this.compareColumns(column1, column2) === null;
+  }
+
+  protected diffForeignKey(key1: ForeignKeyConstraint, key2: ForeignKeyConstraint): boolean {
+    return (
+      key1.getForeignTableName() !== key2.getForeignTableName() ||
+      JSON.stringify(key1.getColumns()) !== JSON.stringify(key2.getColumns()) ||
+      JSON.stringify(key1.getForeignColumns()) !== JSON.stringify(key2.getForeignColumns()) ||
+      key1.onUpdate() !== key2.onUpdate() ||
+      key1.onDelete() !== key2.onDelete()
+    );
+  }
+
+  protected diffIndex(index1: Index, index2: Index): boolean {
+    return !(index1.isFulfilledBy(index2) && index2.isFulfilledBy(index1));
+  }
+
+  private isAutoIncrementSequenceInSchema(schema: Schema, sequence: Sequence): boolean {
+    return schema.getTables().some((table) => sequence.isAutoIncrementsFor(table));
   }
 }

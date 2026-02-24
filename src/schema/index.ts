@@ -1,7 +1,11 @@
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 import { AbstractAsset } from "./abstract-asset";
 import { Identifier } from "./identifier";
+import { IndexType } from "./index/index-type";
+import { IndexedColumn } from "./index/indexed-column";
 import { IndexEditor } from "./index-editor";
+import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
+import { Parsers } from "./name/parsers";
 
 export class Index extends AbstractAsset {
   private readonly columns: Identifier[] = [];
@@ -52,6 +56,41 @@ export class Index extends AbstractAsset {
 
   public getUnquotedColumns(): string[] {
     return this.getColumns().map((column) => column.replaceAll(/[`"[\]]/g, ""));
+  }
+
+  public getIndexedColumns(): IndexedColumn[] {
+    const lengths = Array.isArray(this.options.lengths) ? this.options.lengths : [];
+
+    return this.columns.map((column, index) => {
+      const rawLength = lengths[index];
+      const length = typeof rawLength === "number" ? rawLength : null;
+      return new IndexedColumn(column.getName(), length);
+    });
+  }
+
+  public getType(): IndexType {
+    if (this.unique) {
+      return IndexType.UNIQUE;
+    }
+
+    if (this.hasFlag("fulltext")) {
+      return IndexType.FULLTEXT;
+    }
+
+    if (this.hasFlag("spatial")) {
+      return IndexType.SPATIAL;
+    }
+
+    return IndexType.REGULAR;
+  }
+
+  public isClustered(): boolean {
+    return this.hasFlag("clustered");
+  }
+
+  public getPredicate(): string | null {
+    const predicate = this.options.where;
+    return typeof predicate === "string" && predicate.length > 0 ? predicate : null;
   }
 
   public isSimpleIndex(): boolean {
@@ -116,6 +155,10 @@ export class Index extends AbstractAsset {
     return [...this.flags];
   }
 
+  public removeFlag(flag: string): void {
+    this.flags.delete(flag.toLowerCase());
+  }
+
   public hasOption(name: string): boolean {
     return Object.hasOwn(this.options, name);
   }
@@ -126,6 +169,22 @@ export class Index extends AbstractAsset {
 
   public getOptions(): Record<string, unknown> {
     return { ...this.options };
+  }
+
+  public overrules(other: Index): boolean {
+    if (other.isPrimary()) {
+      return false;
+    }
+
+    if (this.isSimpleIndex() && other.isUnique()) {
+      return false;
+    }
+
+    return (
+      this.spansColumns(other.getColumns()) &&
+      (this.isPrimary() || this.isUnique()) &&
+      this.getPredicate() === other.getPredicate()
+    );
   }
 
   public static editor(): IndexEditor {
@@ -140,6 +199,14 @@ export class Index extends AbstractAsset {
       .setIsPrimary(this.primary)
       .setFlags(...this.getFlags())
       .setOptions(this.getOptions());
+  }
+
+  protected getNameParser(): UnqualifiedNameParser {
+    return Parsers.getUnqualifiedNameParser();
+  }
+
+  protected _addColumn(column: string): void {
+    this.columns.push(new Identifier(column));
   }
 }
 

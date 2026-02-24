@@ -713,14 +713,6 @@ export class Connection {
     }
   }
 
-  private bindParameters(
-    statement: DriverStatement,
-    parameters: Query["parameters"],
-    types: Query["types"],
-  ): void {
-    this.bindDriverParameters(statement, parameters, types);
-  }
-
   private hasBoundParameters(parameters: Query["parameters"]): boolean {
     if (Array.isArray(parameters)) {
       return parameters.length > 0;
@@ -966,10 +958,6 @@ export class Connection {
     }
 
     return converted;
-  }
-
-  private handleDriverException(error: unknown, operation: string, query?: Query): Exception {
-    return this.convertException(error, operation, query);
   }
 
   private normalizeParameters(

@@ -2,19 +2,19 @@ import { Connection } from "../../connection";
 import { CompositeExpression } from "../expression/composite-expression";
 
 export class ExpressionBuilder {
-  static readonly EQ = "=";
-  static readonly NEQ = "<>";
-  static readonly LT = "<";
-  static readonly LTE = "<=";
-  static readonly GT = ">";
-  static readonly GTE = ">=";
+  public static readonly EQ = "=";
+  public static readonly NEQ = "<>";
+  public static readonly LT = "<";
+  public static readonly LTE = "<=";
+  public static readonly GT = ">";
+  public static readonly GTE = ">=";
 
   constructor(private readonly connection: Connection) {}
 
   /**
    * Creates a conjunction of the given expressions.
    */
-  and(
+  public and(
     expr: string | CompositeExpression,
     ...rest: (string | CompositeExpression)[]
   ): CompositeExpression {
@@ -24,7 +24,7 @@ export class ExpressionBuilder {
   /**
    * Creates a disjunction of the given expressions.
    */
-  or(
+  public or(
     expr: string | CompositeExpression,
     ...rest: (string | CompositeExpression)[]
   ): CompositeExpression {
@@ -34,7 +34,7 @@ export class ExpressionBuilder {
   /**
    * Creates a comparison expression with the given arguments.
    */
-  comparison(x: string, operator: string, y: string): string {
+  public comparison(x: string, operator: string, y: string): string {
     return `${x} ${operator} ${y}`;
   }
 
@@ -43,7 +43,7 @@ export class ExpressionBuilder {
    * First argument is considered the left expression and the second is the right expression.
    * When converted to string, it will generate a <left expr> = <right expr>.
    */
-  eq(x: string, y: string): string {
+  public eq(x: string, y: string): string {
     return this.comparison(x, ExpressionBuilder.EQ, y);
   }
 
@@ -52,7 +52,7 @@ export class ExpressionBuilder {
    * First argument is considered the left expression and the second is the right expression.
    * When converted to string, it will generate a <left expr> <> <right expr>.
    */
-  neq(x: string, y: string): string {
+  public neq(x: string, y: string): string {
     return this.comparison(x, ExpressionBuilder.NEQ, y);
   }
 
@@ -61,7 +61,7 @@ export class ExpressionBuilder {
    * First argument is considered the left expression and the second is the right expression.
    * When converted to string, it will generate a <left expr> < <right expr>.
    */
-  lt(x: string, y: string): string {
+  public lt(x: string, y: string): string {
     return this.comparison(x, ExpressionBuilder.LT, y);
   }
 
@@ -70,7 +70,7 @@ export class ExpressionBuilder {
    * First argument is considered the left expression and the second is the right expression.
    * When converted to string, it will generate a <left expr> <= <right expr>.
    */
-  lte(x: string, y: string): string {
+  public lte(x: string, y: string): string {
     return this.comparison(x, ExpressionBuilder.LTE, y);
   }
 
@@ -79,7 +79,7 @@ export class ExpressionBuilder {
    * First argument is considered the left expression and the second is the right expression.
    * When converted to string, it will generate a <left expr> > <right expr>.
    */
-  gt(x: string, y: string): string {
+  public gt(x: string, y: string): string {
     return this.comparison(x, ExpressionBuilder.GT, y);
   }
 
@@ -88,7 +88,7 @@ export class ExpressionBuilder {
    * First argument is considered the left expression and the second is the right expression.
    * When converted to string, it will generate a <left expr> >= <right expr>.
    */
-  gte(x: string, y: string): string {
+  public gte(x: string, y: string): string {
     return this.comparison(x, ExpressionBuilder.GTE, y);
   }
 
@@ -97,7 +97,7 @@ export class ExpressionBuilder {
    *
    * @param x The expression to be restricted by IS NULL.
    */
-  isNull(x: string): string {
+  public isNull(x: string): string {
     return `${x} IS NULL`;
   }
 
@@ -106,7 +106,7 @@ export class ExpressionBuilder {
    *
    * @param x The expression to be restricted by IS NOT NULL.
    */
-  isNotNull(x: string): string {
+  public isNotNull(x: string): string {
     return `${x} IS NOT NULL`;
   }
 
@@ -117,7 +117,7 @@ export class ExpressionBuilder {
    * @param pattern The pattern to compare against
    * @param escapeChar Optional escape character for special characters in the pattern.
    */
-  like(expr: string, pattern: string, escapeChar?: string): string {
+  public like(expr: string, pattern: string, escapeChar?: string): string {
     return this.comparison(expr, "LIKE", pattern) + (escapeChar ? ` ESCAPE ${escapeChar}` : "");
   }
 
@@ -128,7 +128,7 @@ export class ExpressionBuilder {
    * @param pattern The pattern to compare against
    * @param escapeChar Optional escape character for special characters in the pattern.
    */
-  notLike(expr: string, pattern: string, escapeChar?: string): string {
+  public notLike(expr: string, pattern: string, escapeChar?: string): string {
     return this.comparison(expr, "NOT LIKE", pattern) + (escapeChar ? ` ESCAPE ${escapeChar}` : "");
   }
 
@@ -138,7 +138,7 @@ export class ExpressionBuilder {
    * @param x The SQL expression to be matched against the set.
    * @param y The SQL expression or an array of SQL expressions representing the set.
    */
-  in(x: string, y: string | string[]): string {
+  public in(x: string, y: string | string[]): string {
     const values = Array.isArray(y) ? y : [y];
     return this.comparison(x, "IN", `(${values.join(", ")})`);
   }
@@ -149,7 +149,7 @@ export class ExpressionBuilder {
    * @param x The SQL expression to be matched against the set.
    * @param y The SQL expression or an array of SQL expressions representing the set.
    */
-  notIn(x: string, y: string | string[]): string {
+  public notIn(x: string, y: string | string[]): string {
     const values = Array.isArray(y) ? y : [y];
     return this.comparison(x, "NOT IN", `(${values.join(", ")})`);
   }
@@ -159,7 +159,7 @@ export class ExpressionBuilder {
    *
    * The usage of this method is discouraged. Use prepared statements
    */
-  async literal(input: string): Promise<string> {
+  public async literal(input: string): Promise<string> {
     return await this.connection.quote(input);
   }
 }

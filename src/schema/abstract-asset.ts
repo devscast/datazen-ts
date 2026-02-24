@@ -29,6 +29,12 @@ export abstract class AbstractAsset {
     this._name = normalized;
   }
 
+  protected getNameParser(): unknown {
+    return null;
+  }
+
+  protected setName(_name: unknown): void {}
+
   public getName(): string {
     if (this._namespace === null) {
       return this._name;

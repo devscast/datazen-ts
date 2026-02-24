@@ -312,4 +312,80 @@ export class SQLServerPlatform extends AbstractPlatform {
   protected getLikeWildcardCharacters(): string {
     return `${super.getLikeWildcardCharacters()}[`;
   }
+
+  protected getCreateColumnCommentSQL(
+    tableName: string,
+    columnName: string,
+    comment: string,
+  ): string {
+    return this.getAddExtendedPropertySQL("MS_Description", comment, tableName, columnName);
+  }
+
+  protected getDefaultConstraintDeclarationSQL(column: Record<string, unknown>): string {
+    return this.getDefaultValueDeclarationSQL(column).trim();
+  }
+
+  protected getAlterColumnCommentSQL(
+    tableName: string,
+    columnName: string,
+    comment: string,
+  ): string {
+    return this.getUpdateExtendedPropertySQL("MS_Description", comment, tableName, columnName);
+  }
+
+  protected getDropColumnCommentSQL(tableName: string, columnName: string): string {
+    return this.getDropExtendedPropertySQL("MS_Description", tableName, columnName);
+  }
+
+  protected getAddExtendedPropertySQL(
+    propertyName: string,
+    propertyValue: unknown,
+    ...arguments_: string[]
+  ): string {
+    const value =
+      propertyValue === null || propertyValue === undefined
+        ? "NULL"
+        : this.quoteNationalStringLiteral(String(propertyValue));
+    return this.getExecSQL(
+      "sp_addextendedproperty",
+      this.quoteNationalStringLiteral(propertyName),
+      value,
+      ...arguments_,
+    );
+  }
+
+  protected getDropExtendedPropertySQL(propertyName: string, ...arguments_: string[]): string {
+    return this.getExecSQL(
+      "sp_dropextendedproperty",
+      this.quoteNationalStringLiteral(propertyName),
+      ...arguments_,
+    );
+  }
+
+  protected getUpdateExtendedPropertySQL(
+    propertyName: string,
+    propertyValue: unknown,
+    ...arguments_: string[]
+  ): string {
+    const value =
+      propertyValue === null || propertyValue === undefined
+        ? "NULL"
+        : this.quoteNationalStringLiteral(String(propertyValue));
+    return this.getExecSQL(
+      "sp_updateextendedproperty",
+      this.quoteNationalStringLiteral(propertyName),
+      value,
+      ...arguments_,
+    );
+  }
+
+  private getExecSQL(procedureName: string, ...arguments_: string[]): string {
+    return arguments_.length > 0
+      ? `EXEC ${procedureName} ${arguments_.join(", ")}`
+      : `EXEC ${procedureName}`;
+  }
+
+  private quoteNationalStringLiteral(value: string): string {
+    return `N${this.quoteStringLiteral(value)}`;
+  }
 }

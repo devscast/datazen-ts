@@ -11,7 +11,7 @@ export class DefaultSelectSQLBuilder implements SelectSQLBuilder {
     private readonly skipLockedSQL: string | null,
   ) {}
 
-  buildSQL(query: SelectQuery): string {
+  public buildSQL(query: SelectQuery): string {
     const parts: string[] = ["SELECT"];
 
     if (query.distinct) {
