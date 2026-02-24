@@ -20,6 +20,6 @@ export function initializeException(error: Error, ctor: ErrorConstructorLike): v
   });
 }
 
-export function isDoctrineException(error: unknown): error is Error {
+export function isDatazenException(error: unknown): error is Error {
   return error instanceof Error && (error as MarkedException)[DBAL_EXCEPTION_MARKER] === true;
 }

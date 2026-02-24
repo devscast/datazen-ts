@@ -1,10 +1,8 @@
-import {
-  TypeAlreadyRegistered,
-  TypeNotFound,
-  TypeNotRegistered,
-  TypesAlreadyExists,
-  UnknownColumnType,
-} from "./exception/index";
+import { TypeAlreadyRegistered } from "./exception/type-already-registered";
+import { TypeNotFound } from "./exception/type-not-found";
+import { TypeNotRegistered } from "./exception/type-not-registered";
+import { TypesAlreadyExists } from "./exception/types-already-exists";
+import { UnknownColumnType } from "./exception/unknown-column-type";
 import { Type } from "./type";
 
 export class TypeRegistry {

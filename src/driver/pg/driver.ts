@@ -1,6 +1,6 @@
-import type { DriverConnection } from "../../driver";
+import type { Connection as DriverConnection } from "../../driver/connection";
+import { ParameterBindingStyle } from "../_internal";
 import { AbstractPostgreSQLDriver } from "../abstract-postgre-sql-driver";
-import { ParameterBindingStyle } from "../internal-parameter-binding-style";
 import { PgConnection } from "./connection";
 import type { PgConnectionParams } from "./types";
 

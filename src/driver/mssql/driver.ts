@@ -1,6 +1,6 @@
-import type { DriverConnection } from "../../driver";
+import type { Connection as DriverConnection } from "../../driver/connection";
+import { ParameterBindingStyle } from "../_internal";
 import { AbstractSQLServerDriver } from "../abstract-sql-server-driver";
-import { ParameterBindingStyle } from "../internal-parameter-binding-style";
 import { MSSQLConnection } from "./connection";
 import type { MSSQLConnectionParams } from "./types";
 

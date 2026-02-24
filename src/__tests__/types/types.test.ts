@@ -2,13 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { DateTimeType } from "../../types/date-time-type";
-import {
-  SerializationFailed,
-  TypeAlreadyRegistered,
-  TypeNotRegistered,
-  TypesAlreadyExists,
-  UnknownColumnType,
-} from "../../types/exception/index";
+import { SerializationFailed } from "../../types/exception/serialization-failed";
+import { TypeAlreadyRegistered } from "../../types/exception/type-already-registered";
+import { TypeNotRegistered } from "../../types/exception/type-not-registered";
+import { TypesAlreadyExists } from "../../types/exception/types-already-exists";
+import { UnknownColumnType } from "../../types/exception/unknown-column-type";
 import { JsonType } from "../../types/json-type";
 import { registerBuiltInTypes } from "../../types/register-built-in-types";
 import { SimpleArrayType } from "../../types/simple-array-type";

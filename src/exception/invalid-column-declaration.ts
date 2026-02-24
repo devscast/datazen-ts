@@ -1,4 +1,4 @@
-import { initializeException } from "./_util";
+import { initializeException } from "./_internal";
 import { InvalidColumnType } from "./invalid-column-type";
 
 export class InvalidColumnDeclaration extends Error {

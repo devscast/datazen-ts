@@ -1,4 +1,4 @@
-import { initializeException } from "./_util";
+import { initializeException } from "./_internal";
 
 export class InvalidParameterException extends Error {
   constructor(message = "Invalid parameter.") {

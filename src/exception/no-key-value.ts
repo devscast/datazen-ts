@@ -1,4 +1,4 @@
-import { initializeException } from "./_util";
+import { initializeException } from "./_internal";
 
 export class NoKeyValue extends Error {
   public static fromColumnCount(columnCount: number): NoKeyValue {

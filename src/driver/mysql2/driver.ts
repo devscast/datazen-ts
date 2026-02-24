@@ -1,6 +1,6 @@
-import type { DriverConnection } from "../../driver";
+import type { Connection as DriverConnection } from "../../driver/connection";
+import { ParameterBindingStyle } from "../_internal";
 import { AbstractMySQLDriver } from "../abstract-mysql-driver";
-import { ParameterBindingStyle } from "../internal-parameter-binding-style";
 import { MySQL2Connection } from "./connection";
 import type { MySQL2ConnectionParams } from "./types";
 

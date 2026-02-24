@@ -1,4 +1,5 @@
-import type { Driver, DriverConnection } from "../../../driver";
+import type { Driver } from "../../../driver";
+import type { Connection as DriverConnection } from "../../../driver/connection";
 import type { Middleware } from "../../../driver/middleware";
 import { AbstractDriverMiddleware } from "../../../driver/middleware/abstract-driver-middleware";
 

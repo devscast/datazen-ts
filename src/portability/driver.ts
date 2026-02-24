@@ -1,6 +1,7 @@
 import { ColumnCase } from "../column-case";
-import { type DriverConnection, type Driver as DriverInterface } from "../driver";
+import type { Driver as DriverInterface } from "../driver";
 import type { ExceptionConverter } from "../driver/api/exception-converter";
+import type { Connection as DriverConnection } from "../driver/connection";
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 import type { ServerVersionProvider } from "../server-version-provider";
 import { Connection } from "./connection";

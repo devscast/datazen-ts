@@ -1,6 +1,6 @@
-import type { DriverConnection } from "../../driver";
+import type { Connection as DriverConnection } from "../../driver/connection";
+import { ParameterBindingStyle } from "../_internal";
 import { AbstractSQLiteDriver } from "../abstract-sqlite-driver";
-import { ParameterBindingStyle } from "../internal-parameter-binding-style";
 import { SQLite3Connection } from "./connection";
 import type { SQLite3ConnectionParams } from "./types";
 

@@ -1,5 +1,5 @@
 import type { ParserException } from "../sql/parser";
-import { initializeException } from "./_util";
+import { initializeException } from "./_internal";
 
 export class ParseError extends Error {
   public static fromParserException(exception: ParserException): ParseError {

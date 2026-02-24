@@ -1,10 +1,10 @@
 import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
 import { Parser, type Visitor } from "../../sql/parser";
-import { ArrayResult } from "../array-result";
 import type { Connection as DriverConnection } from "../connection";
 import { IdentityColumnsNotSupported } from "../exception/identity-columns-not-supported";
 import type { Result as DriverResult } from "../result";
 import type { Statement as DriverStatement } from "../statement";
+import { Result as PgResult } from "./result";
 import { PgStatement } from "./statement";
 import type { PgPoolClientLike, PgPoolLike, PgQueryResultLike, PgQueryableLike } from "./types";
 
@@ -165,11 +165,7 @@ export class PgConnection implements DriverConnection {
     const rows = this.toRows(payload);
     const firstRow = rows[0];
 
-    return new ArrayResult(
-      rows,
-      this.toColumns(payload, firstRow),
-      payload.rowCount ?? rows.length,
-    );
+    return new PgResult(rows, this.toColumns(payload, firstRow), payload.rowCount ?? rows.length);
   }
 
   private toRows(payload: PgQueryResultLike): Array<Record<string, unknown>> {

@@ -1,4 +1,4 @@
-import type { DriverConnection } from "../driver";
+import type { Connection as DriverConnection } from "../driver/connection";
 import { Converter } from "./converter";
 import { Result } from "./result";
 import { DriverStatementWrapper } from "./statement";

@@ -1,3 +1,4 @@
+import type { Connection } from "./connection";
 import type { Result as DriverResult } from "./driver/result";
 import { NoKeyValue } from "./exception/no-key-value";
 
@@ -9,26 +10,37 @@ type DriverResultWithColumnName = DriverResult & {
 };
 
 export class Result<TRow extends AssociativeRow = AssociativeRow> {
-  constructor(private readonly result: DriverResult) {}
+  constructor(
+    private readonly result: DriverResult,
+    private readonly connection: Connection,
+  ) {}
 
   public fetchNumeric<T extends NumericRow = NumericRow>(): T | false {
-    return this.result.fetchNumeric<unknown>() as T | false;
+    return this.convertDriverException(
+      "fetchNumeric",
+      () => this.result.fetchNumeric<unknown>() as T | false,
+    );
   }
 
   public fetchAssociative<T extends AssociativeRow = TRow>(): T | false {
-    return this.result.fetchAssociative<T>();
+    return this.convertDriverException("fetchAssociative", () => this.result.fetchAssociative<T>());
   }
 
   public fetchOne<T = unknown>(): T | false {
-    return this.result.fetchOne<T>();
+    return this.convertDriverException("fetchOne", () => this.result.fetchOne<T>());
   }
 
   public fetchAllNumeric<T extends NumericRow = NumericRow>(): T[] {
-    return this.result.fetchAllNumeric<unknown>() as T[];
+    return this.convertDriverException(
+      "fetchAllNumeric",
+      () => this.result.fetchAllNumeric<unknown>() as T[],
+    );
   }
 
   public fetchAllAssociative<T extends AssociativeRow = TRow>(): T[] {
-    return this.result.fetchAllAssociative<T>();
+    return this.convertDriverException("fetchAllAssociative", () =>
+      this.result.fetchAllAssociative<T>(),
+    );
   }
 
   public fetchAllKeyValue<T = unknown>(): Record<string, T> {
@@ -68,22 +80,24 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
   }
 
   public fetchFirstColumn<T = unknown>(): T[] {
-    return this.result.fetchFirstColumn<T>();
+    return this.convertDriverException("fetchFirstColumn", () => this.result.fetchFirstColumn<T>());
   }
 
   public rowCount(): number | string {
-    return this.result.rowCount();
+    return this.convertDriverException("rowCount", () => this.result.rowCount());
   }
 
   public columnCount(): number {
-    return this.result.columnCount();
+    return this.convertDriverException("columnCount", () => this.result.columnCount());
   }
 
   public getColumnName(index: number): string {
     const withColumnName = this.result as DriverResultWithColumnName;
 
     if (typeof withColumnName.getColumnName === "function") {
-      return withColumnName.getColumnName(index);
+      return this.convertDriverException("getColumnName", () =>
+        withColumnName.getColumnName!(index),
+      );
     }
 
     throw new Error("The driver result does not support accessing the column name.");
@@ -98,6 +112,14 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
 
     if (columnCount < 2) {
       throw NoKeyValue.fromColumnCount(columnCount);
+    }
+  }
+
+  private convertDriverException<T>(operation: string, callback: () => T): T {
+    try {
+      return callback();
+    } catch (error) {
+      throw this.connection.convertException(error, operation);
     }
   }
 }

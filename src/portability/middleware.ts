@@ -1,5 +1,6 @@
 import { ColumnCase } from "../column-case";
-import type { Driver as DriverInterface, DriverMiddleware } from "../driver";
+import type { Driver as DriverInterface } from "../driver";
+import type { Middleware as DriverMiddleware } from "../driver/middleware";
 import { Connection } from "./connection";
 import { Driver } from "./driver";
 

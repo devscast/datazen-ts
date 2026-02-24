@@ -1,5 +1,5 @@
 import type { SchemaException } from "../schema-exception";
-import { attachCause, nameToString, previousObjectNameToString } from "./_util";
+import { attachCause, nameToString, previousObjectNameToString } from "./_internal";
 
 export class InvalidTableModification extends Error implements SchemaException {
   constructor(message: string) {

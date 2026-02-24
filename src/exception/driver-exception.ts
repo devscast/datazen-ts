@@ -1,5 +1,5 @@
 import { Query } from "../query";
-import { initializeException } from "./_util";
+import { initializeException } from "./_internal";
 
 export interface DriverExceptionDetails {
   driverName: string;

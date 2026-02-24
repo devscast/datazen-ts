@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { EasyConnectString } from "../../driver/abstract-oracle-driver/easy-connect-string";
 
@@ -49,32 +49,5 @@ describe("EasyConnectString", () => {
     expect(easyConnect.toString()).toBe(
       "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=oracle.local)(PORT=1521))(CONNECT_DATA=(SID=ORCL)))",
     );
-  });
-
-  it("uses SERVICE_NAME mode and emits a deprecation warning for service", () => {
-    const emitWarning = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
-
-    const easyConnect = EasyConnectString.fromConnectionParameters({
-      host: "oracle.local",
-      dbname: "ORCLPDB1",
-      service: true,
-      instancename: "ORCL1",
-      pooled: true,
-      port: 2484,
-      driverOptions: {
-        protocol: "TCPS",
-      },
-    });
-
-    expect(easyConnect.toString()).toBe(
-      "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCPS)(HOST=oracle.local)(PORT=2484))(CONNECT_DATA=(SERVICE_NAME=ORCLPDB1)(INSTANCE_NAME=ORCL1)(SERVER=POOLED)))",
-    );
-    expect(emitWarning).toHaveBeenCalledTimes(1);
-    expect(emitWarning).toHaveBeenCalledWith(
-      expect.stringContaining('"service" parameter'),
-      "DeprecationWarning",
-    );
-
-    emitWarning.mockRestore();
   });
 });

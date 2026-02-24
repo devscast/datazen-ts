@@ -1,12 +1,13 @@
 import { ArrayParameterType } from "./array-parameter-type";
 import { Configuration } from "./configuration";
 import { StaticServerVersionProvider } from "./connection/static-server-version-provider";
-import { type Driver, type DriverConnection } from "./driver";
+import type { Driver } from "./driver";
+import { ParameterBindingStyle } from "./driver/_internal";
 import type { ExceptionConverter } from "./driver/api/exception-converter";
-import { ParameterBindingStyle } from "./driver/internal-parameter-binding-style";
+import type { Connection as DriverConnection } from "./driver/connection";
 import type { Statement as DriverStatement } from "./driver/statement";
-import type { Exception as DoctrineException } from "./exception";
-import { isDoctrineException } from "./exception/_util";
+import type { Exception } from "./exception";
+import { isDatazenException } from "./exception/_internal";
 import { CommitFailedRollbackOnly } from "./exception/commit-failed-rollback-only";
 import { ConnectionException } from "./exception/connection-exception";
 import { MissingPositionalParameterException } from "./exception/missing-positional-parameter-exception";
@@ -30,10 +31,10 @@ import { DefaultSchemaManagerFactory } from "./schema/default-schema-manager-fac
 import type { SchemaManagerFactory } from "./schema/schema-manager-factory";
 import type { ServerVersionProvider } from "./server-version-provider";
 import { Parser, type SQLParser, type Visitor } from "./sql/parser";
-import { Statement, type StatementExecutor } from "./statement";
+import { Statement } from "./statement";
 import { Type } from "./types/type";
 
-type DataMap = Record<string, unknown>;
+type AssociativeRow = Record<string, unknown>;
 
 interface CompiledPositionalQuery {
   sql: string;
@@ -41,7 +42,7 @@ interface CompiledPositionalQuery {
   types: QueryScalarParameterType[];
 }
 
-export class Connection implements StatementExecutor {
+export class Connection {
   private autoCommit: boolean;
   private driverConnection: DriverConnection | null = null;
   private transactionNestingLevel = 0;
@@ -52,7 +53,7 @@ export class Connection implements StatementExecutor {
   private readonly schemaManagerFactory: SchemaManagerFactory;
 
   constructor(
-    private readonly params: DataMap,
+    private readonly params: AssociativeRow,
     private readonly driver: Driver,
     private readonly configuration: Configuration = new Configuration(),
   ) {
@@ -61,7 +62,7 @@ export class Connection implements StatementExecutor {
       this.configuration.getSchemaManagerFactory() ?? new DefaultSchemaManagerFactory();
   }
 
-  public getParams(): DataMap {
+  public getParams(): AssociativeRow {
     return this.params;
   }
 
@@ -121,8 +122,8 @@ export class Connection implements StatementExecutor {
 
   public async prepare(sql: string): Promise<Statement> {
     try {
-      await this.connect();
-      return new Statement(this, sql);
+      const statement = await (await this.connect()).prepare(sql);
+      return new Statement(this, statement, sql);
     } catch (error) {
       throw this.convertException(error, "prepare", new Query(sql));
     }
@@ -133,7 +134,7 @@ export class Connection implements StatementExecutor {
     params?: QueryParameters,
     types?: QueryParameterTypes,
   ): Promise<Result>;
-  public async executeQuery<T extends DataMap>(
+  public async executeQuery<T extends AssociativeRow>(
     sql: string,
     params?: QueryParameters,
     types?: QueryParameterTypes,
@@ -149,21 +150,21 @@ export class Connection implements StatementExecutor {
 
     try {
       const result = await this.executeDriverQuery(compiledQuery);
-      return new Result(result);
+      return new Result(result, this);
     } catch (error) {
       throw this.convertException(error, "executeQuery", query);
     }
   }
 
   public async executeQueryObject(query: Query): Promise<Result>;
-  public async executeQueryObject<T extends DataMap>(query: Query): Promise<Result<T>>;
+  public async executeQueryObject<T extends AssociativeRow>(query: Query): Promise<Result<T>>;
   public async executeQueryObject(query: Query): Promise<Result> {
     const [boundParams, boundTypes] = this.normalizeParameters(query.parameters, query.types);
     const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
 
     try {
       const result = await this.executeDriverQuery(compiledQuery);
-      return new Result(result);
+      return new Result(result, this);
     } catch (error) {
       throw this.convertException(error, "executeQuery", query);
     }
@@ -196,7 +197,7 @@ export class Connection implements StatementExecutor {
     }
   }
 
-  public async fetchAssociative<T extends DataMap = DataMap>(
+  public async fetchAssociative<T extends AssociativeRow = AssociativeRow>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
@@ -220,7 +221,7 @@ export class Connection implements StatementExecutor {
     return (await this.executeQuery(sql, params, types)).fetchOne<T>();
   }
 
-  public async fetchAllAssociative<T extends DataMap = DataMap>(
+  public async fetchAllAssociative<T extends AssociativeRow = AssociativeRow>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
@@ -244,7 +245,7 @@ export class Connection implements StatementExecutor {
     return (await this.executeQuery(sql, params, types)).fetchAllKeyValue<T>();
   }
 
-  public async fetchAllAssociativeIndexed<T extends DataMap = DataMap>(
+  public async fetchAllAssociativeIndexed<T extends AssociativeRow = AssociativeRow>(
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
@@ -262,7 +263,7 @@ export class Connection implements StatementExecutor {
 
   public async delete(
     table: string,
-    criteria: DataMap = {},
+    criteria: AssociativeRow = {},
     types: QueryParameterTypes = [],
   ): Promise<number> {
     const [columns, values, conditions] = this.getCriteriaCondition(criteria);
@@ -278,8 +279,8 @@ export class Connection implements StatementExecutor {
 
   public async update(
     table: string,
-    data: DataMap,
-    criteria: DataMap = {},
+    data: AssociativeRow,
+    criteria: AssociativeRow = {},
     types: QueryParameterTypes = [],
   ): Promise<number> {
     const columns: string[] = [];
@@ -308,7 +309,7 @@ export class Connection implements StatementExecutor {
 
   public async insert(
     table: string,
-    data: DataMap,
+    data: AssociativeRow,
     types: QueryParameterTypes = [],
   ): Promise<number> {
     const columns = Object.keys(data);
@@ -519,7 +520,7 @@ export class Connection implements StatementExecutor {
     return `DATAZEN_${level}`;
   }
 
-  private getCriteriaCondition(criteria: DataMap): [string[], unknown[], string[]] {
+  private getCriteriaCondition(criteria: AssociativeRow): [string[], unknown[], string[]] {
     const columns: string[] = [];
     const values: unknown[] = [];
     const conditions: string[] = [];
@@ -678,7 +679,7 @@ export class Connection implements StatementExecutor {
     types: QueryScalarParameterType[],
   ): Query {
     const sqlParts: string[] = [];
-    const namedParameters: DataMap = {};
+    const namedParameters: AssociativeRow = {};
     const namedTypes: Record<string, QueryScalarParameterType> = {};
     let parameterIndex = 0;
     let bindCounter = 0;
@@ -781,6 +782,15 @@ export class Connection implements StatementExecutor {
     return Type.getType(type).convertToNodeValue(value, this.getDatabasePlatform());
   }
 
+  public convertExceptionDuringQuery(
+    error: unknown,
+    sql: string,
+    params: QueryParameters = [],
+    types: QueryParameterTypes = [],
+  ): Exception {
+    return this.convertException(error, "query", new Query(sql, params, types));
+  }
+
   public getDatabasePlatform(): AbstractPlatform {
     if (this.databasePlatform !== null) {
       return this.databasePlatform;
@@ -846,8 +856,8 @@ export class Connection implements StatementExecutor {
     this.rollbackOnly = false;
   }
 
-  protected convertException(error: unknown, operation: string, query?: Query): DoctrineException {
-    if (isDoctrineException(error)) {
+  public convertException(error: unknown, operation: string, query?: Query): Exception {
+    if (isDatazenException(error)) {
       return error;
     }
 
@@ -889,7 +899,7 @@ export class Connection implements StatementExecutor {
     }
 
     if (!Array.isArray(params) && !Array.isArray(types)) {
-      const normalizedParams: DataMap = { ...params };
+      const normalizedParams: AssociativeRow = { ...params };
       const normalizedTypes: Record<string, QueryParameterType> = { ...types };
 
       for (const [name, value] of Object.entries(normalizedParams)) {
