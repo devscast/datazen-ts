@@ -7,6 +7,8 @@ import type { KeywordList } from "./keywords/keyword-list";
 import { PostgreSQLKeywords } from "./keywords/postgresql-keywords";
 
 export class PostgreSQLPlatform extends AbstractPlatform {
+  protected useBooleanTrueFalseStrings = false;
+
   protected initializeDatazenTypeMappings(): Record<string, string> {
     return {
       bigint: Types.BIGINT,
