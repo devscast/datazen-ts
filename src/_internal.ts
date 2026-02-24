@@ -91,7 +91,9 @@ export function key(value: unknown[] | Record<string, unknown>): PortingArrayKey
     return null;
   }
 
-  return toArrayKey(keys[0]);
+  const firstKey = keys[0];
+
+  return firstKey === undefined ? null : toArrayKey(firstKey);
 }
 
 export function array_key_exists(keyValue: PortingArrayKey, value: unknown): boolean {
@@ -115,7 +117,7 @@ export function array_fill<T>(startIndex: number, count: number, value: T): T[] 
 
   for (let offset = 0; offset < count; offset += 1) {
     const index = startIndex + offset;
-    (output as Record<string, T>)[String(index)] = value;
+    (output as unknown as Record<string, T>)[String(index)] = value;
   }
 
   return output;
@@ -329,9 +331,12 @@ function normalizePhpVersionToSemver(input: string): string {
     return base;
   }
 
-  const label = suffixMatch.groups.label.toLowerCase();
+  const label = (suffixMatch.groups.label ?? "").toLowerCase();
   const iteration = Number.parseInt(suffixMatch.groups.n ?? "1", 10);
-  const [major, minor, patch] = base.split(".").map((part) => Number.parseInt(part, 10));
+  const [majorPart, minorPart, patchPart] = base.split(".");
+  const major = Number.parseInt(majorPart ?? "0", 10);
+  const minor = Number.parseInt(minorPart ?? "0", 10);
+  const patch = Number.parseInt(patchPart ?? "0", 10);
 
   switch (label) {
     case "dev":
@@ -348,4 +353,6 @@ function normalizePhpVersionToSemver(input: string): string {
     case "p":
       return `${major}.${minor}.${patch + 1}-0.pl.${iteration}`;
   }
+
+  return base;
 }
