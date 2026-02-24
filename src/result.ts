@@ -83,6 +83,76 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
     return this.convertDriverException("fetchFirstColumn", () => this.result.fetchFirstColumn<T>());
   }
 
+  public *iterateNumeric<T extends NumericRow = NumericRow>(): IterableIterator<T> {
+    try {
+      let row = this.fetchNumeric<T>();
+      while (row !== false) {
+        yield row;
+        row = this.fetchNumeric<T>();
+      }
+    } finally {
+      this.free();
+    }
+  }
+
+  public *iterateAssociative<T extends AssociativeRow = TRow>(): IterableIterator<T> {
+    try {
+      let row = this.fetchAssociative<T>();
+      while (row !== false) {
+        yield row;
+        row = this.fetchAssociative<T>();
+      }
+    } finally {
+      this.free();
+    }
+  }
+
+  public *iterateKeyValue<T = unknown>(): IterableIterator<[string, T]> {
+    this.ensureHasKeyValue();
+
+    try {
+      for (const row of this.iterateNumeric()) {
+        const key = row[0];
+        if (key === undefined) {
+          continue;
+        }
+
+        yield [String(key), row[1] as T];
+      }
+    } finally {
+      this.free();
+    }
+  }
+
+  public *iterateAssociativeIndexed<T extends AssociativeRow = AssociativeRow>(): IterableIterator<
+    [string, T]
+  > {
+    try {
+      for (const row of this.iterateAssociative<AssociativeRow>()) {
+        const keyColumn = this.getColumnName(0);
+        const key = row[keyColumn];
+        const clone = { ...row };
+        delete clone[keyColumn];
+        yield [String(key), clone as T];
+      }
+    } finally {
+      this.free();
+    }
+  }
+
+  public *iterateColumn<T = unknown>(): IterableIterator<T> {
+    try {
+      for (const value of this.iterateNumeric()) {
+        const first = value[0];
+        if (first !== undefined) {
+          yield first as T;
+        }
+      }
+    } finally {
+      this.free();
+    }
+  }
+
   public rowCount(): number | string {
     return this.convertDriverException("rowCount", () => this.result.rowCount());
   }
