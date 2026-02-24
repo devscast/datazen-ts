@@ -4,6 +4,7 @@ import { ExceptionConverter as OCIExceptionConverter } from "../../driver/api/oc
 import { ConnectionException } from "../../exception/connection-exception";
 import { DatabaseDoesNotExist } from "../../exception/database-does-not-exist";
 import { DatabaseObjectNotFoundException } from "../../exception/database-object-not-found-exception";
+import { DriverException } from "../../exception/driver-exception";
 import { ForeignKeyConstraintViolationException } from "../../exception/foreign-key-constraint-violation-exception";
 import { InvalidFieldNameException } from "../../exception/invalid-field-name-exception";
 import { NonUniqueFieldNameException } from "../../exception/non-unique-field-name-exception";
@@ -11,108 +12,42 @@ import { NotNullConstraintViolationException } from "../../exception/not-null-co
 import { SyntaxErrorException } from "../../exception/syntax-error-exception";
 import { TableExistsException } from "../../exception/table-exists-exception";
 import { TableNotFoundException } from "../../exception/table-not-found-exception";
+import { TransactionRolledBack } from "../../exception/transaction-rolled-back";
 import { UniqueConstraintViolationException } from "../../exception/unique-constraint-violation-exception";
 import { Query } from "../../query";
 
 describe("OCI ExceptionConverter", () => {
-  it("maps Oracle codes to DBAL exceptions", () => {
+  it.each([
+    [1, UniqueConstraintViolationException],
+    [2299, UniqueConstraintViolationException],
+    [38911, UniqueConstraintViolationException],
+    [904, InvalidFieldNameException],
+    [918, NonUniqueFieldNameException],
+    [960, NonUniqueFieldNameException],
+    [923, SyntaxErrorException],
+    [942, TableNotFoundException],
+    [955, TableExistsException],
+    [1017, ConnectionException],
+    [12545, ConnectionException],
+    [1400, NotNullConstraintViolationException],
+    [1918, DatabaseDoesNotExist],
+    [2289, DatabaseObjectNotFoundException],
+    [2443, DatabaseObjectNotFoundException],
+    [4080, DatabaseObjectNotFoundException],
+    [2266, ForeignKeyConstraintViolationException],
+    [2291, ForeignKeyConstraintViolationException],
+    [2292, ForeignKeyConstraintViolationException],
+  ])("maps Oracle code %s to %p", (code, expectedClass) => {
     const converter = new OCIExceptionConverter();
+    const operation = code === 1017 || code === 12545 ? "connect" : "executeQuery";
+    const error = Object.assign(new Error(`ORA-${String(code).padStart(5, "0")}: test`), {
+      errorNum: code,
+    });
 
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-00001: unique constraint violated"), { code: 1 }),
-        {
-          operation: "executeStatement",
-        },
-      ),
-    ).toBeInstanceOf(UniqueConstraintViolationException);
+    const converted = converter.convert(error, { operation });
 
-    expect(
-      converter.convert(Object.assign(new Error("ORA-00904: invalid identifier"), { code: 904 }), {
-        operation: "executeQuery",
-      }),
-    ).toBeInstanceOf(InvalidFieldNameException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-00918: column ambiguously defined"), { errorNum: 918 }),
-        {
-          operation: "executeQuery",
-        },
-      ),
-    ).toBeInstanceOf(NonUniqueFieldNameException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-00923: FROM keyword not found"), { errorNum: 923 }),
-        {
-          operation: "executeQuery",
-        },
-      ),
-    ).toBeInstanceOf(SyntaxErrorException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-00942: table or view does not exist"), { code: 942 }),
-        {
-          operation: "executeQuery",
-        },
-      ),
-    ).toBeInstanceOf(TableNotFoundException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-00955: name is already used"), { errorNum: 955 }),
-        {
-          operation: "executeStatement",
-        },
-      ),
-    ).toBeInstanceOf(TableExistsException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-01400: cannot insert NULL"), { code: "ORA-01400" }),
-        {
-          operation: "executeStatement",
-        },
-      ),
-    ).toBeInstanceOf(NotNullConstraintViolationException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-01918: user does not exist"), { errorNum: 1918 }),
-        {
-          operation: "connect",
-        },
-      ),
-    ).toBeInstanceOf(DatabaseDoesNotExist);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-02291: integrity constraint violated"), { errorNum: 2291 }),
-        {
-          operation: "executeStatement",
-        },
-      ),
-    ).toBeInstanceOf(ForeignKeyConstraintViolationException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-02289: sequence does not exist"), { errorNum: 2289 }),
-        {
-          operation: "executeQuery",
-        },
-      ),
-    ).toBeInstanceOf(DatabaseObjectNotFoundException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("ORA-01017: invalid username/password"), { errorNum: 1017 }),
-        {
-          operation: "connect",
-        },
-      ),
-    ).toBeInstanceOf(ConnectionException);
+    expect(converted).toBeInstanceOf(expectedClass);
+    expect(converted.code).toBe(code);
   });
 
   it("captures query metadata and SQLSTATE for mapped Oracle errors", () => {
@@ -131,7 +66,7 @@ describe("OCI ExceptionConverter", () => {
     expect(converted.driverName).toBe("oci8");
   });
 
-  it("unwraps ORA-02091 and converts the nested Oracle error", () => {
+  it("wraps ORA-02091 as TransactionRolledBack with converted nested Oracle cause", () => {
     const converter = new OCIExceptionConverter();
     const error = new Error(
       "ORA-02091: transaction rolled back\nORA-00001: unique constraint (APP.USERS_PK) violated",
@@ -143,9 +78,24 @@ describe("OCI ExceptionConverter", () => {
       query,
     });
 
-    expect(converted).toBeInstanceOf(UniqueConstraintViolationException);
-    expect(converted.code).toBe(1);
+    expect(converted).toBeInstanceOf(TransactionRolledBack);
+    expect(converted.code).toBe(2091);
     expect(converted.operation).toBe("commit");
     expect(converted.sql).toBe("COMMIT");
+
+    const cause = (converted as Error & { cause?: unknown }).cause;
+    expect(cause).toBeInstanceOf(UniqueConstraintViolationException);
+    expect((cause as DriverException).code).toBe(1);
+  });
+
+  it("falls back to DriverException for unknown codes", () => {
+    const converter = new OCIExceptionConverter();
+    const error = Object.assign(new Error("ORA-99999: unknown"), { errorNum: 99999 });
+
+    const converted = converter.convert(error, { operation: "executeQuery" });
+
+    expect(converted).toBeInstanceOf(DriverException);
+    expect(converted).not.toBeInstanceOf(ConnectionException);
+    expect(converted.code).toBe(99999);
   });
 });

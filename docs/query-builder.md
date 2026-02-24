@@ -4,6 +4,9 @@ SQL Query Builder
 DataZen provides a Doctrine-inspired SQL Query Builder in `@devscast/datazen/query`.
 It builds SQL incrementally and executes through the `Connection` it belongs to.
 
+Doctrine/Datazen async note: builder mutation methods are synchronous, but
+execution/fetch helpers perform I/O and therefore return promises in this port.
+
 ```ts
 import { DriverManager } from "@devscast/datazen";
 
@@ -246,16 +249,16 @@ Execution API
 
 `QueryBuilder` execution methods:
 
-- `executeQuery()`
-- `executeStatement()`
-- `fetchAssociative()`
-- `fetchNumeric()`
-- `fetchOne()`
-- `fetchAllNumeric()`
-- `fetchAllAssociative()`
-- `fetchAllKeyValue()`
-- `fetchAllAssociativeIndexed()`
-- `fetchFirstColumn()`
+- `executeQuery()` (async)
+- `executeStatement()` (async)
+- `fetchAssociative()` (async)
+- `fetchNumeric()` (async)
+- `fetchOne()` (async)
+- `fetchAllNumeric()` (async)
+- `fetchAllAssociative()` (async)
+- `fetchAllKeyValue()` (async)
+- `fetchAllAssociativeIndexed()` (async)
+- `fetchFirstColumn()` (async)
 
 Not Implemented
 ---------------

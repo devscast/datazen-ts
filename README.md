@@ -32,6 +32,7 @@ control driver versions.
 ## Documentation
 
 - [Introduction](docs/introduction.md)
+- [Doctrine/Datazen Parity Notes](docs/parity-matrix.md)
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
 - [Data Retrieval and Manipulation](docs/data-retrieval-and-manipulation.md)
@@ -42,7 +43,6 @@ control driver versions.
 - [Transactions](docs/transactions.md)
 - [Security](docs/security.md)
 - [Known Vendor Issues](docs/known-vendor-issues.md)
-- [Parity Matrix (Best Effort)](docs/parity-matrix.md)
 - [Supporting Other Databases](docs/supporting-other-databases.md)
 
 ## Quick Start (MySQL)
@@ -65,6 +65,10 @@ const conn = DriverManager.getConnection({
 
 const value = await conn.fetchOne("SELECT 1");
 ```
+
+Doctrine examples are often synchronous (PHP request model). In DataZen/Node,
+I/O methods are async (`await` connection/statement/query-builder execution),
+while `Result` fetch/iterate methods are synchronous once a result is available.
 
 ## Quick Start (SQL Server)
 

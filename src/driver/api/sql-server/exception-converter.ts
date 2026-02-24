@@ -1,9 +1,14 @@
 import { ConnectionException } from "../../../exception/connection-exception";
+import { DatabaseObjectNotFoundException } from "../../../exception/database-object-not-found-exception";
 import { DeadlockException } from "../../../exception/deadlock-exception";
 import { DriverException, type DriverExceptionDetails } from "../../../exception/driver-exception";
 import { ForeignKeyConstraintViolationException } from "../../../exception/foreign-key-constraint-violation-exception";
+import { InvalidFieldNameException } from "../../../exception/invalid-field-name-exception";
+import { NonUniqueFieldNameException } from "../../../exception/non-unique-field-name-exception";
 import { NotNullConstraintViolationException } from "../../../exception/not-null-constraint-violation-exception";
 import { SyntaxErrorException } from "../../../exception/syntax-error-exception";
+import { TableExistsException } from "../../../exception/table-exists-exception";
+import { TableNotFoundException } from "../../../exception/table-not-found-exception";
 import { UniqueConstraintViolationException } from "../../../exception/unique-constraint-violation-exception";
 import type {
   ExceptionConverterContext,
@@ -12,6 +17,7 @@ import type {
 
 const FOREIGN_KEY_CONSTRAINT_CODES = new Set([547, 4712]);
 const UNIQUE_CONSTRAINT_CODES = new Set([2601, 2627]);
+const DATABASE_OBJECT_NOT_FOUND_CODES = new Set([3701, 15151]);
 const CONNECTION_ERROR_CODES = new Set([11001, 18456]);
 const CONNECTION_ERROR_STRINGS = new Set([
   "EALREADYBEGUN",
@@ -24,7 +30,7 @@ const CONNECTION_ERROR_STRINGS = new Set([
   "ESOCKET",
   "ETIMEOUT",
 ]);
-const SQL_SYNTAX_CODES = new Set([102, 156, 207, 208, 209]);
+const SQL_SYNTAX_CODES = new Set([102, 156]);
 
 export class ExceptionConverter implements ExceptionConverterInterface {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -38,12 +44,32 @@ export class ExceptionConverter implements ExceptionConverterInterface {
       return new NotNullConstraintViolationException(details.message, details);
     }
 
+    if (details.code === 207) {
+      return new InvalidFieldNameException(details.message, details);
+    }
+
+    if (details.code === 208) {
+      return new TableNotFoundException(details.message, details);
+    }
+
+    if (details.code === 209) {
+      return new NonUniqueFieldNameException(details.message, details);
+    }
+
     if (typeof details.code === "number" && FOREIGN_KEY_CONSTRAINT_CODES.has(details.code)) {
       return new ForeignKeyConstraintViolationException(details.message, details);
     }
 
     if (typeof details.code === "number" && UNIQUE_CONSTRAINT_CODES.has(details.code)) {
       return new UniqueConstraintViolationException(details.message, details);
+    }
+
+    if (details.code === 2714) {
+      return new TableExistsException(details.message, details);
+    }
+
+    if (typeof details.code === "number" && DATABASE_OBJECT_NOT_FOUND_CODES.has(details.code)) {
+      return new DatabaseObjectNotFoundException(details.message, details);
     }
 
     if (typeof details.code === "number" && SQL_SYNTAX_CODES.has(details.code)) {

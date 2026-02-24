@@ -38,11 +38,10 @@ Concrete adapters:
 
 - MySQL2, MSSQL, pg, and sqlite3 adapters are exposed through `@devscast/datazen/driver`
 
-Doctrine has separate low-level `Driver\Statement` and `Driver\Result`
-interfaces. In this Node port, the low-level contract is simplified to
-`executeQuery()` / `executeStatement()` on `DriverConnection` and normalized
-result payloads (`DriverQueryResult`, `DriverExecutionResult`), because this
-maps better to Node driver APIs.
+Like Datazen/Doctrine, this port keeps separate low-level driver contracts for
+`Driver\Connection`, `Driver\Statement`, and `Driver\Result`. The Node port's
+main difference is async I/O: driver connection methods such as `prepare()`,
+`query()`, and `exec()` return promises to match Node client behavior.
 
 Driver Manager
 --------------
@@ -98,7 +97,7 @@ Query Layer
 
 The query API (`@devscast/datazen/query`) includes a Doctrine-inspired QueryBuilder and
 related expression/query objects. Query generation and execution remain
-separated: generated SQL is executed through `Connection`.
+separated: generated SQL is executed through async `Connection` methods.
 
 Schema Layer (Partial)
 ----------------------

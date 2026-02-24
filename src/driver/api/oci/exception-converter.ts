@@ -9,6 +9,7 @@ import { NotNullConstraintViolationException } from "../../../exception/not-null
 import { SyntaxErrorException } from "../../../exception/syntax-error-exception";
 import { TableExistsException } from "../../../exception/table-exists-exception";
 import { TableNotFoundException } from "../../../exception/table-not-found-exception";
+import { TransactionRolledBack } from "../../../exception/transaction-rolled-back";
 import { UniqueConstraintViolationException } from "../../../exception/unique-constraint-violation-exception";
 import type {
   ExceptionConverterContext,
@@ -16,6 +17,7 @@ import type {
 } from "../exception-converter";
 
 const UNIQUE_CONSTRAINT_CODES = new Set([1, 2299, 38911]);
+const NON_UNIQUE_FIELD_NAME_CODES = new Set([918, 960]);
 const CONNECTION_CODES = new Set([1017, 12545]);
 const FOREIGN_KEY_CONSTRAINT_CODES = new Set([2266, 2291, 2292]);
 const DATABASE_OBJECT_NOT_FOUND_CODES = new Set([2289, 2443, 4080]);
@@ -36,7 +38,7 @@ export class ExceptionConverter implements ExceptionConverterInterface {
       return new InvalidFieldNameException(details.message, details);
     }
 
-    if (details.code === 918) {
+    if (typeof details.code === "number" && NON_UNIQUE_FIELD_NAME_CODES.has(details.code)) {
       return new NonUniqueFieldNameException(details.message, details);
     }
 
@@ -63,7 +65,10 @@ export class ExceptionConverter implements ExceptionConverterInterface {
     if (details.code === 2091) {
       const rolledBackReason = this.convertRolledBackCause(error, context);
       if (rolledBackReason !== null) {
-        return rolledBackReason;
+        return new TransactionRolledBack(details.message, {
+          ...details,
+          cause: rolledBackReason,
+        });
       }
 
       return new DriverException(details.message, details);

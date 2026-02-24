@@ -1,9 +1,16 @@
 import { ConnectionException } from "../../../exception/connection-exception";
+import { ConnectionLost } from "../../../exception/connection-lost";
+import { DatabaseDoesNotExist } from "../../../exception/database-does-not-exist";
 import { DeadlockException } from "../../../exception/deadlock-exception";
 import { DriverException, type DriverExceptionDetails } from "../../../exception/driver-exception";
 import { ForeignKeyConstraintViolationException } from "../../../exception/foreign-key-constraint-violation-exception";
+import { InvalidFieldNameException } from "../../../exception/invalid-field-name-exception";
+import { NonUniqueFieldNameException } from "../../../exception/non-unique-field-name-exception";
 import { NotNullConstraintViolationException } from "../../../exception/not-null-constraint-violation-exception";
+import { SchemaDoesNotExist } from "../../../exception/schema-does-not-exist";
 import { SyntaxErrorException } from "../../../exception/syntax-error-exception";
+import { TableExistsException } from "../../../exception/table-exists-exception";
+import { TableNotFoundException } from "../../../exception/table-not-found-exception";
 import { UniqueConstraintViolationException } from "../../../exception/unique-constraint-violation-exception";
 import type {
   ExceptionConverterContext,
@@ -13,15 +20,20 @@ import type {
 const UNIQUE_CONSTRAINT_SQLSTATES = new Set(["23505"]);
 const FOREIGN_KEY_CONSTRAINT_SQLSTATES = new Set(["23503"]);
 const NOT_NULL_CONSTRAINT_SQLSTATES = new Set(["23502"]);
-const SYNTAX_SQLSTATES = new Set(["42601", "42703", "42P01"]);
+const DEADLOCK_SQLSTATES = new Set(["40001", "40P01"]);
+const SYNTAX_SQLSTATES = new Set(["42601"]);
 const CONNECTION_SQLSTATES = new Set(["57P01", "57P02", "57P03"]);
 
 export class ExceptionConverter implements ExceptionConverterInterface {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
     const details = this.createDetails(error, context);
 
-    if (details.sqlState === "40P01") {
+    if (details.sqlState !== undefined && DEADLOCK_SQLSTATES.has(details.sqlState)) {
       return new DeadlockException(details.message, details);
+    }
+
+    if (details.sqlState === "0A000" && details.message.toLowerCase().includes("truncate")) {
+      return new ForeignKeyConstraintViolationException(details.message, details);
     }
 
     if (details.sqlState !== undefined && UNIQUE_CONSTRAINT_SQLSTATES.has(details.sqlState)) {
@@ -38,6 +50,38 @@ export class ExceptionConverter implements ExceptionConverterInterface {
 
     if (details.sqlState !== undefined && SYNTAX_SQLSTATES.has(details.sqlState)) {
       return new SyntaxErrorException(details.message, details);
+    }
+
+    if (details.sqlState === "42702") {
+      return new NonUniqueFieldNameException(details.message, details);
+    }
+
+    if (details.sqlState === "42703") {
+      return new InvalidFieldNameException(details.message, details);
+    }
+
+    if (details.sqlState === "42P01") {
+      return new TableNotFoundException(details.message, details);
+    }
+
+    if (details.sqlState === "42P07") {
+      return new TableExistsException(details.message, details);
+    }
+
+    if (details.sqlState === "3D000") {
+      return new DatabaseDoesNotExist(details.message, details);
+    }
+
+    if (details.sqlState === "3F000") {
+      return new SchemaDoesNotExist(details.message, details);
+    }
+
+    if (details.sqlState === "08006") {
+      return new ConnectionException(details.message, details);
+    }
+
+    if (details.message.toLowerCase().includes("terminating connection")) {
+      return new ConnectionLost(details.message, details);
     }
 
     if (this.isConnectionError(details)) {

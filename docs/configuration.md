@@ -24,6 +24,8 @@ const conn = DriverManager.getConnection({
 ```
 
 `DriverManager.getConnection()` returns a wrapper `Connection` instance.
+Creating the wrapper is synchronous; actual database I/O begins when you call an
+async connection method (for example `await conn.connect()` or `await conn.executeQuery(...)`).
 
 Using a DSN
 -----------------

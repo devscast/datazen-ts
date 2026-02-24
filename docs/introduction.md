@@ -8,6 +8,14 @@ binding, transactions, type conversion, and SQL dialect abstraction.
 Like Doctrine DBAL, Datazen separates wrapper APIs from concrete drivers through
 interfaces, so you can use built-in adapters or implement custom drivers.
 
+Async API note
+--------------
+
+Doctrine examples are commonly synchronous. In this Node port, database I/O is
+async: `Connection`, `Statement`, and `QueryBuilder` execution methods return
+promises and should be awaited. `Result` fetch methods are synchronous after an
+`await conn.executeQuery(...)` call returns a `Result`.
+
 Supported Vendors
 -----------------
 
@@ -76,5 +84,6 @@ const conn = DriverManager.getConnection({
 });
 ```
 
-From there, use `executeQuery()`, `executeStatement()`, and `createQueryBuilder()`
+From there, use `await executeQuery()`, `await executeStatement()`, and
+`createQueryBuilder()`
 to build and run SQL through a portable DBAL API.

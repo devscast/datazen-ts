@@ -7,6 +7,10 @@ Data Retrieval
 DataZen provides a DBAL-style data access API around Node low-level drivers.
 Once you have a `Connection` from `DriverManager`, you can execute SQL directly.
 
+Doctrine/Datazen async note: query execution is async in this Node port, but
+`Result` fetch and iterator methods are synchronous once a `Result` has been
+created.
+
 ```ts
 import { DriverManager } from "@devscast/datazen";
 
@@ -65,8 +69,8 @@ Statement API
 
 - `bindValue(param, value, type?)`
 - `setParameters(params, types?)`
-- `executeQuery()`
-- `executeStatement()`
+- `executeQuery()` (async)
+- `executeStatement()` (async)
 
 Unlike Doctrine/PHP, there is no by-reference `bindParam()` equivalent in this port.
 
@@ -75,20 +79,25 @@ Connection Execution API
 
 Main low-level methods:
 
-- `prepare(sql)`
-- `executeQuery(sql, params?, types?)` for result-set queries
-- `executeStatement(sql, params?, types?)` for write/DDL statements (returns affected rows)
+- `prepare(sql)` (async)
+- `executeQuery(sql, params?, types?)` (async) for result-set queries
+- `executeStatement(sql, params?, types?)` (async) for write/DDL statements (returns affected rows)
 
 Convenience fetch methods on `Connection`:
 
-- `fetchNumeric()`
-- `fetchAssociative()`
-- `fetchOne()`
-- `fetchAllNumeric()`
-- `fetchAllAssociative()`
-- `fetchAllKeyValue()`
-- `fetchAllAssociativeIndexed()`
-- `fetchFirstColumn()`
+- `fetchNumeric()` (async)
+- `fetchAssociative()` (async)
+- `fetchOne()` (async)
+- `fetchAllNumeric()` (async)
+- `fetchAllAssociative()` (async)
+- `fetchAllKeyValue()` (async)
+- `fetchAllAssociativeIndexed()` (async)
+- `fetchFirstColumn()` (async)
+- `iterateNumeric()` (async iterator)
+- `iterateAssociative()` (async iterator)
+- `iterateKeyValue()` (async iterator)
+- `iterateAssociativeIndexed()` (async iterator)
+- `iterateColumn()` (async iterator)
 
 Result API
 ----------
@@ -103,6 +112,11 @@ Result API
 - `fetchAllKeyValue()`
 - `fetchAllAssociativeIndexed()`
 - `fetchFirstColumn()`
+- `iterateNumeric()`
+- `iterateAssociative()`
+- `iterateKeyValue()`
+- `iterateAssociativeIndexed()`
+- `iterateColumn()`
 - `rowCount()`
 - `columnCount()`
 - `getColumnName(index)`
@@ -176,7 +190,6 @@ Currently implemented data manipulation primitives are:
 - `update(table, data, criteria, types?)`
 - `delete(table, criteria, types?)`
 
-Still not implemented in this port:
-
-- `iterateKeyValue()`
-- `iterateAssociativeIndexed()`
+Result iterators are available via `Result#iterate*()`, and `Connection` also
+exposes async iterator convenience methods (`for await ... of`) that execute a
+query and stream rows from the returned `Result`.
