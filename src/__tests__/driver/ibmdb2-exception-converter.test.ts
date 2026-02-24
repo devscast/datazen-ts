@@ -14,65 +14,31 @@ import { UniqueConstraintViolationException } from "../../exception/unique-const
 import { Query } from "../../query";
 
 describe("IBMDB2 ExceptionConverter", () => {
-  it("maps DB2 SQLCODE values to supported DBAL exceptions", () => {
+  it.each([
+    [-104, SyntaxErrorException],
+    [-203, NonUniqueFieldNameException],
+    [-204, TableNotFoundException],
+    [-206, InvalidFieldNameException],
+    [-407, NotNullConstraintViolationException],
+    [-530, ForeignKeyConstraintViolationException],
+    [-531, ForeignKeyConstraintViolationException],
+    [-532, ForeignKeyConstraintViolationException],
+    [-20356, ForeignKeyConstraintViolationException],
+    [-601, TableExistsException],
+    [-803, UniqueConstraintViolationException],
+    [-1336, ConnectionException],
+    [-30082, ConnectionException],
+  ])("maps DB2 SQLCODE %s to %p", (sqlcode, expectedClass) => {
     const converter = new IBMDB2ExceptionConverter();
+    const converted = converter.convert(
+      Object.assign(new Error(`DB2 SQLCODE ${sqlcode}`), { sqlcode }),
+      {
+        operation: sqlcode === -1336 || sqlcode === -30082 ? "connect" : "executeQuery",
+      },
+    );
 
-    expect(
-      converter.convert(Object.assign(new Error("SQL0104N syntax"), { sqlcode: -104 }), {
-        operation: "executeQuery",
-      }),
-    ).toBeInstanceOf(SyntaxErrorException);
-
-    expect(
-      converter.convert(Object.assign(new Error("SQL0203N column ambiguous"), { sqlcode: -203 }), {
-        operation: "executeQuery",
-      }),
-    ).toBeInstanceOf(NonUniqueFieldNameException);
-
-    expect(
-      converter.convert(Object.assign(new Error("SQL0204N table not found"), { sqlcode: -204 }), {
-        operation: "executeQuery",
-      }),
-    ).toBeInstanceOf(TableNotFoundException);
-
-    expect(
-      converter.convert(Object.assign(new Error("SQL0206N column not valid"), { sqlcode: -206 }), {
-        operation: "executeQuery",
-      }),
-    ).toBeInstanceOf(InvalidFieldNameException);
-
-    expect(
-      converter.convert(Object.assign(new Error("SQL0407N null not allowed"), { sqlcode: -407 }), {
-        operation: "executeStatement",
-      }),
-    ).toBeInstanceOf(NotNullConstraintViolationException);
-
-    expect(
-      converter.convert(Object.assign(new Error("SQL0530N foreign key"), { sqlcode: -530 }), {
-        operation: "executeStatement",
-      }),
-    ).toBeInstanceOf(ForeignKeyConstraintViolationException);
-
-    expect(
-      converter.convert(Object.assign(new Error("SQL0601N object exists"), { sqlcode: -601 }), {
-        operation: "executeStatement",
-      }),
-    ).toBeInstanceOf(TableExistsException);
-
-    expect(
-      converter.convert(Object.assign(new Error("SQL0803N duplicate key"), { sqlcode: -803 }), {
-        operation: "executeStatement",
-      }),
-    ).toBeInstanceOf(UniqueConstraintViolationException);
-
-    expect(
-      converter.convert(
-        Object.assign(new Error("SQL30082N connection failed"), { sqlcode: -30082 }),
-        {
-          operation: "connect",
-        },
-      ),
-    ).toBeInstanceOf(ConnectionException);
+    expect(converted).toBeInstanceOf(expectedClass);
+    expect(converted.code).toBe(sqlcode);
   });
 
   it("captures query metadata and sqlstate", () => {

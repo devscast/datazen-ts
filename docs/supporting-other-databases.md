@@ -33,21 +33,26 @@ Driver/Connection contracts
 
 `DriverConnection` must provide:
 
-- `executeQuery(query)`
-- `executeStatement(query)`
+- `prepare(sql)` -> `Promise<DriverStatement>`
+- `query(sql)` -> `Promise<DriverResult>`
+- `exec(sql)` -> `Promise<number | string>`
+- `quote(value)` -> `string`
+- `lastInsertId()` -> `Promise<number | string>`
 - transaction APIs (`beginTransaction`, `commit`, `rollBack`)
 - optional savepoint APIs (`createSavepoint`, `releaseSavepoint`, `rollbackSavepoint`)
-- `getServerVersion()`
+- `getServerVersion()` (`string | Promise<string>`)
 - `close()`
 - `getNativeConnection()`
 
 `Driver` must provide:
 
-- `name`
-- `bindingStyle` (`POSITIONAL` or `NAMED`)
-- `connect(params)`
+- `connect(params)` (async)
 - `getExceptionConverter()`
-- optional `getDatabasePlatform()`
+- `getDatabasePlatform(versionProvider)`
+
+Note: built-in drivers also expose a `bindingStyle` property used by `Connection`
+for placeholder compilation, but this is currently a convention (duck-typed) and
+not part of the exported `Driver` interface.
 
 If your driver is named-binding, `Connection` will compile positional SQL
 placeholders into named placeholders automatically.

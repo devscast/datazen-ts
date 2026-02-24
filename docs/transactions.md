@@ -8,6 +8,9 @@ Datazen `Connection` provides transaction management with:
 - `rollBack()`
 - `transactional(fn)`
 
+Doctrine/Datazen async note: transaction methods are async in this Node port,
+and `transactional(fn)` expects an async callback.
+
 Manual transaction demarcation looks like this:
 
 ```ts
@@ -37,7 +40,7 @@ The callback return value is propagated:
 
 ```ts
 const one = await conn.transactional(async (tx) => {
-  return tx.fetchOne("SELECT 1");
+  return await tx.fetchOne("SELECT 1");
 });
 ```
 
@@ -101,8 +104,10 @@ Isolation Levels
 - `REPEATABLE_READ`
 - `SERIALIZABLE`
 
-Current parity note: Datazen does not yet expose
-`Connection#setTransactionIsolation()` / `Connection#getTransactionIsolation()`.
+Datazen exposes transaction isolation APIs on `Connection`:
+
+- `await conn.setTransactionIsolation(level)`
+- `conn.getTransactionIsolation()`
 
 Platform classes do provide isolation SQL generation:
 
@@ -161,9 +166,6 @@ apply your own retry policy at the application level.
 Not Implemented
 ---------------
 
-The following Doctrine transaction features are not implemented yet in
-`Connection`:
+Remaining parity gaps include:
 
-- `setTransactionIsolation()`
-- `getTransactionIsolation()`
 - `RetryableException` marker interface and lock-wait-timeout-specific exception

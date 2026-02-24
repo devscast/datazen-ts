@@ -103,29 +103,25 @@ Option 2: override platform through driver middleware.
 
 ```ts
 import {
+  type Driver
   Configuration,
   DriverManager,
 } from "@devscast/datazen";
 import {
-  ParameterBindingStyle,
-  type Driver,
-  type DriverConnection,
-  type DriverMiddleware,
+  type Connection as DriverConnection,
+  type Middleware as DriverMiddleware,
 } from "@devscast/datazen/driver";
 import { SQLServerPlatform } from "@devscast/datazen/platforms";
 
 class CustomSQLServerPlatform extends SQLServerPlatform {}
 
+type DriverConnection = Awaited<ReturnType<Driver["connect"]>>;
+
 class PlatformOverridingDriver implements Driver {
   constructor(private readonly inner: Driver) {}
 
-  public get name(): string {
-    return this.inner.name;
-  }
-
-  public get bindingStyle(): ParameterBindingStyle {
-    return this.inner.bindingStyle;
-  }
+  // Preserve optional binding-style convention for drivers like `mssql`.
+  public readonly bindingStyle = (this.inner as { bindingStyle?: unknown }).bindingStyle;
 
   public async connect(params: Record<string, unknown>): Promise<DriverConnection> {
     return this.inner.connect(params);
@@ -135,7 +131,7 @@ class PlatformOverridingDriver implements Driver {
     return this.inner.getExceptionConverter();
   }
 
-  public getDatabasePlatform(): CustomSQLServerPlatform {
+  public getDatabasePlatform(_versionProvider: unknown): CustomSQLServerPlatform {
     return new CustomSQLServerPlatform();
   }
 }
@@ -149,6 +145,8 @@ class PlatformMiddleware implements DriverMiddleware {
 const configuration = new Configuration().addMiddleware(new PlatformMiddleware());
 const conn = DriverManager.getConnection({ driver: "mssql", pool }, configuration);
 ```
+
+In this port, `connect()` remains async in custom drivers/middleware wrappers.
 
 Practical Note
 --------------

@@ -10,6 +10,10 @@ changes query semantics.
 Datazen helps by supporting prepared statements, but it cannot protect you if
 you build SQL unsafely.
 
+Doctrine/Datazen async note: query execution and statement preparation are async
+in this port (`await conn.executeQuery(...)`, `await conn.prepare(...)`), while
+`Result` fetch methods are synchronous once you have a `Result`.
+
 SQL Injection: Safe and Unsafe APIs for User Input
 --------------------------------------------------
 
