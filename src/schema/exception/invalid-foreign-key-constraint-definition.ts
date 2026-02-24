@@ -11,7 +11,7 @@ export class InvalidForeignKeyConstraintDefinition extends Error implements Sche
     constraintName: unknown,
   ): InvalidForeignKeyConstraintDefinition {
     return new InvalidForeignKeyConstraintDefinition(
-      `Referenced table name is not set for foreign key constraint ${nameToString(constraintName)}.`,
+      `Referenced table name is not set for foreign key constraint ${InvalidForeignKeyConstraintDefinition.formatName(constraintName)}.`,
     );
   }
 
@@ -19,7 +19,7 @@ export class InvalidForeignKeyConstraintDefinition extends Error implements Sche
     constraintName: unknown,
   ): InvalidForeignKeyConstraintDefinition {
     return new InvalidForeignKeyConstraintDefinition(
-      `Referencing column names are not set for foreign key constraint ${nameToString(constraintName)}.`,
+      `Referencing column names are not set for foreign key constraint ${InvalidForeignKeyConstraintDefinition.formatName(constraintName)}.`,
     );
   }
 
@@ -27,7 +27,11 @@ export class InvalidForeignKeyConstraintDefinition extends Error implements Sche
     constraintName: unknown,
   ): InvalidForeignKeyConstraintDefinition {
     return new InvalidForeignKeyConstraintDefinition(
-      `Referenced column names are not set for foreign key constraint ${nameToString(constraintName)}.`,
+      `Referenced column names are not set for foreign key constraint ${InvalidForeignKeyConstraintDefinition.formatName(constraintName)}.`,
     );
+  }
+
+  private static formatName(constraintName: unknown): string {
+    return nameToString(constraintName);
   }
 }

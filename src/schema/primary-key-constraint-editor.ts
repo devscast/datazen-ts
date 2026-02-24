@@ -11,9 +11,25 @@ export class PrimaryKeyConstraintEditor {
     return this;
   }
 
+  public setUnquotedName(name: string): this {
+    return this.setName(name);
+  }
+
+  public setQuotedName(name: string): this {
+    return this.setName(`"${name}"`);
+  }
+
   public setColumnNames(...columnNames: string[]): this {
     this.columnNames = [...columnNames];
     return this;
+  }
+
+  public setUnquotedColumnNames(...columnNames: string[]): this {
+    return this.setColumnNames(...columnNames);
+  }
+
+  public setQuotedColumnNames(...columnNames: string[]): this {
+    return this.setColumnNames(...columnNames.map((columnName) => `"${columnName}"`));
   }
 
   public addColumnName(columnName: string | UnqualifiedName): this {

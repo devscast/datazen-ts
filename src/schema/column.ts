@@ -3,6 +3,8 @@ import { Type } from "../types/type";
 import { AbstractAsset } from "./abstract-asset";
 import { ColumnEditor } from "./column-editor";
 import { UnknownColumnOption } from "./exception/unknown-column-option";
+import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
+import { Parsers } from "./name/parsers";
 
 export type ColumnOptions = Record<string, unknown>;
 
@@ -226,6 +228,19 @@ export class Column extends AbstractAsset {
     return typeof value === "string" ? value : null;
   }
 
+  public getMinimumValue(): unknown {
+    return this.platformOptions.min ?? null;
+  }
+
+  public getMaximumValue(): unknown {
+    return this.platformOptions.max ?? null;
+  }
+
+  public getDefaultConstraintName(): string | null {
+    const value = this.platformOptions.default_constraint_name;
+    return typeof value === "string" ? value : null;
+  }
+
   public setColumnDefinition(columnDefinition: string | null): this {
     this.columnDefinition = columnDefinition;
     return this;
@@ -274,7 +289,15 @@ export class Column extends AbstractAsset {
       .setValues(this.values)
       .setCharset(this.getCharset())
       .setCollation(this.getCollation())
+      .setMinimumValue(this.getMinimumValue())
+      .setMaximumValue(this.getMaximumValue())
+      .setEnumType(this.getEnumType())
+      .setDefaultConstraintName(this.getDefaultConstraintName())
       .setColumnDefinition(this.columnDefinition);
+  }
+
+  protected getNameParser(): UnqualifiedNameParser {
+    return Parsers.getUnqualifiedNameParser();
   }
 }
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { Comparator } from "../../schema/comparator";
 import { ComparatorConfig } from "../../schema/comparator-config";
+import { Schema } from "../../schema/schema";
+import { Sequence } from "../../schema/sequence";
 import { Table } from "../../schema/table";
 import { UniqueConstraint } from "../../schema/unique-constraint";
 import { Types } from "../../types/types";
@@ -29,5 +31,22 @@ describe("Schema comparator and editors", () => {
 
     expect(edited.getObjectName()).toBe("uniq_users_email_v2");
     expect(edited.isClustered()).toBe(true);
+  });
+
+  it("detects altered sequences and exposes diffSequence parity helper", () => {
+    const oldSchema = new Schema([], [new Sequence("users_id_seq", 1, 1)]);
+    const newSchema = new Schema([], [new Sequence("users_id_seq", 5, 1)]);
+
+    const comparator = new Comparator();
+    const diff = comparator.compareSchemas(oldSchema, newSchema);
+
+    expect(
+      comparator.diffSequence(
+        oldSchema.getSequence("users_id_seq"),
+        newSchema.getSequence("users_id_seq"),
+      ),
+    ).toBe(true);
+    expect(diff.getAlteredSequences()).toHaveLength(1);
+    expect(diff.getAlteredSequences()[0]?.getName()).toBe("users_id_seq");
   });
 });

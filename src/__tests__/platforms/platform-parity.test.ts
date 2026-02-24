@@ -4,8 +4,10 @@ import { LockMode } from "../../lock-mode";
 import { AbstractPlatform } from "../../platforms/abstract-platform";
 import { DB2Platform } from "../../platforms/db2-platform";
 import { NoColumnsSpecifiedForTable } from "../../platforms/exception/no-columns-specified-for-table";
+import { NotSupported } from "../../platforms/exception/not-supported";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { OraclePlatform } from "../../platforms/oracle-platform";
+import { PostgreSQL120Platform } from "../../platforms/postgre-sql120-platform";
 import { SQLServerPlatform } from "../../platforms/sql-server-platform";
 import { TrimMode } from "../../platforms/trim-mode";
 import { Table } from "../../schema/table";
@@ -191,6 +193,23 @@ describe("Platform parity extensions", () => {
     expect(platform.getDateSubYearsExpression("created_at", "1")).toBe(
       platform.getDateSubYearExpression("created_at", "1"),
     );
+  });
+
+  it("keeps PG12 default-value snippet and NotSupported factory parity", () => {
+    const pg120 = new PostgreSQL120Platform();
+    expect(pg120.getDefaultColumnValueSQLSnippet()).toContain("a.attgenerated = 's'");
+    expect(pg120.getDefaultColumnValueSQLSnippet()).toContain("pg_get_expr(adbin, adrelid)");
+
+    expect(NotSupported.new("demoMethod")).toBeInstanceOf(NotSupported);
+  });
+
+  it("adds PostgreSQL and Oracle platform parity helper methods", () => {
+    const postgres = new (class extends PostgreSQL120Platform {})();
+    postgres.setUseBooleanTrueFalseStrings(true);
+    expect(postgres.getDefaultColumnValueSQLSnippet()).toContain("pg_get_expr(adbin, adrelid)");
+
+    const oracle = new OraclePlatform();
+    expect(oracle.getDropAutoincrementSql("users")).toEqual(["DROP SEQUENCE USERS_SEQ"]);
   });
 
   it("throws for unknown database type mappings", () => {

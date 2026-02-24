@@ -14,10 +14,14 @@ export class GenericName implements Name {
   }
 
   public toSQL(platform: AbstractPlatform): string {
-    return this.identifiers.map((identifier) => identifier.toSQL(platform)).join(".");
+    return this.joinIdentifiers((identifier) => identifier.toSQL(platform));
   }
 
   public toString(): string {
-    return this.identifiers.map((identifier) => identifier.toString()).join(".");
+    return this.joinIdentifiers((identifier) => identifier.toString());
+  }
+
+  private joinIdentifiers(mapper: (identifier: Identifier) => string): string {
+    return this.identifiers.map(mapper).join(".");
   }
 }

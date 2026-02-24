@@ -85,6 +85,10 @@ export abstract class AbstractPlatform {
     return "INT";
   }
 
+  protected _getCommonIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return this.getIntegerTypeDeclarationSQL(column);
+  }
+
   public getBigIntTypeDeclarationSQL(_column: Record<string, unknown>): string {
     return "BIGINT";
   }
@@ -451,6 +455,10 @@ export abstract class AbstractPlatform {
     }
   }
 
+  protected _getTransactionIsolationLevelSQL(level: TransactionIsolationLevel): string {
+    return this.getTransactionIsolationLevelSQL(level);
+  }
+
   public abstract getSetTransactionIsolationSQL(level: TransactionIsolationLevel): string;
 
   public getDefaultTransactionIsolationLevel(): TransactionIsolationLevel {
@@ -549,6 +557,54 @@ export abstract class AbstractPlatform {
     return this.buildCreateTableSQL(table, true);
   }
 
+  protected getCreateTableWithoutForeignKeysSQL(table: unknown): string[] {
+    return this.buildCreateTableSQL(table, false);
+  }
+
+  protected _getCreateTableSQL(
+    name: string,
+    columns: Array<Record<string, unknown>>,
+    options: Record<string, unknown> = {},
+  ): string[] {
+    this.validateCreateTableOptions(options, "_getCreateTableSQL");
+
+    let columnListSql = this.getColumnDeclarationListSQL(columns);
+
+    const uniqueConstraints = Array.isArray(options.uniqueConstraints)
+      ? (options.uniqueConstraints as unknown[])
+      : [];
+    for (const definition of uniqueConstraints) {
+      columnListSql += `, ${this.getUniqueConstraintDeclarationSQL(definition)}`;
+    }
+
+    const primary = Array.isArray(options.primary) ? options.primary.map(String) : [];
+    if (primary.length > 0) {
+      columnListSql += `, PRIMARY KEY (${[...new Set(primary)].join(", ")})`;
+    }
+
+    const indexes = Array.isArray(options.indexes) ? (options.indexes as unknown[]) : [];
+    for (const definition of indexes) {
+      columnListSql += `, ${this.getIndexDeclarationSQL(definition)}`;
+    }
+
+    const check = this.getCheckDeclarationSQL(columns);
+    let query = `CREATE TABLE ${name} (${columnListSql}`;
+    if (check.length > 0) {
+      query += `, ${check}`;
+    }
+    query += ")";
+
+    const sql = [query];
+    const foreignKeys = Array.isArray(options.foreignKeys)
+      ? (options.foreignKeys as unknown[])
+      : [];
+    for (const definition of foreignKeys) {
+      sql.push(this.getCreateForeignKeySQL(definition, name));
+    }
+
+    return sql;
+  }
+
   public getCreateTablesSQL(tables: Iterable<unknown>): string[] {
     const materializedTables = [...tables];
     const sql: string[] = [];
@@ -592,6 +648,10 @@ export abstract class AbstractPlatform {
 
   public getCommentOnColumnSQL(tableName: string, columnName: string, comment: string): string {
     return `COMMENT ON COLUMN ${tableName}.${columnName} IS ${this.quoteStringLiteral(comment)}`;
+  }
+
+  protected getCommentOnTableSQL(tableName: string, comment: string): string {
+    return `COMMENT ON TABLE ${this.quoteIdentifier(tableName)} IS ${this.quoteStringLiteral(comment)}`;
   }
 
   public getInlineColumnCommentSQL(comment: string): string {
@@ -676,6 +736,14 @@ export abstract class AbstractPlatform {
 
   public getAlterTableSQL(_diff: unknown): string[] {
     throw NotSupported.new("getAlterTableSQL");
+  }
+
+  protected getPreAlterTableIndexForeignKeySQL(_diff: unknown): string[] {
+    return [];
+  }
+
+  protected getPostAlterTableIndexForeignKeySQL(_diff: unknown): string[] {
+    return [];
   }
 
   public getRenameTableSQL(oldName: string, newName: string): string {
@@ -843,6 +911,10 @@ export abstract class AbstractPlatform {
       default:
         throw new Error(`Invalid foreign key action "${upper}".`);
     }
+  }
+
+  protected getConstraintDeferrabilitySQL(_deferrability: unknown): string {
+    return "";
   }
 
   public getForeignKeyBaseDeclarationSQL(foreignKey: unknown): string {
@@ -1072,6 +1144,22 @@ export abstract class AbstractPlatform {
     return this.invokeMethod<boolean>(index, "isUnique") === true ? "UNIQUE " : "";
   }
 
+  protected getRenameIndexSQL(
+    _oldIndexName: string,
+    _index: unknown,
+    _tableName: string,
+  ): string[] {
+    throw NotSupported.new("getRenameIndexSQL");
+  }
+
+  protected getRenameColumnSQL(
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): string[] {
+    return [`ALTER TABLE ${tableName} RENAME COLUMN ${oldColumnName} TO ${newColumnName}`];
+  }
+
   private readLength(column: Record<string, unknown>): number | undefined {
     return this.readNumber(column, "length");
   }
@@ -1275,4 +1363,9 @@ export abstract class AbstractPlatform {
       this.datazenTypeMapping[dbType.toLowerCase()] = datazenType;
     }
   }
+
+  protected validateCreateTableOptions(
+    _options: Record<string, unknown>,
+    _methodName: string,
+  ): void {}
 }

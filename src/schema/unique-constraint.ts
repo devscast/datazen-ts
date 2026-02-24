@@ -1,6 +1,8 @@
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 import { InvalidUniqueConstraintDefinition } from "./exception/invalid-unique-constraint-definition";
 import { Identifier } from "./identifier";
+import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
+import { Parsers } from "./name/parsers";
 import { UniqueConstraintEditor } from "./unique-constraint-editor";
 
 export class UniqueConstraint {
@@ -86,5 +88,13 @@ export class UniqueConstraint {
       .setColumnNames(...this.getColumnNames())
       .setFlags(...this.getFlags())
       .setOptions(this.getOptions());
+  }
+
+  protected addColumn(column: string): void {
+    this.columns.push(new Identifier(column));
+  }
+
+  protected getNameParser(): UnqualifiedNameParser {
+    return Parsers.getUnqualifiedNameParser();
   }
 }

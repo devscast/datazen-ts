@@ -5,7 +5,7 @@ export abstract class AbstractOptionallyNamedObject
   extends AbstractAsset
   implements OptionallyNamedObject<string>
 {
-  private readonly hasName: boolean;
+  private hasName: boolean;
 
   constructor(name: string | null) {
     super(name ?? "");
@@ -18,5 +18,16 @@ export abstract class AbstractOptionallyNamedObject
     }
 
     return this.getName();
+  }
+
+  protected setName(name: string | null): void {
+    if (name === null) {
+      this.hasName = false;
+      this._setName("");
+      return;
+    }
+
+    this.hasName = true;
+    this._setName(name);
   }
 }

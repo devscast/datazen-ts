@@ -16,7 +16,7 @@ export class OptionallyUnqualifiedNamedObjectSet<TObject extends { getObjectName
       return this;
     }
 
-    const key = normalizeName(name);
+    const key = this.getKey(name);
     if (this.namedValues.has(key)) {
       throw ObjectAlreadyExists.new(name);
     }
@@ -26,11 +26,11 @@ export class OptionallyUnqualifiedNamedObjectSet<TObject extends { getObjectName
   }
 
   public hasByName(name: string): boolean {
-    return this.namedValues.has(normalizeName(name));
+    return this.namedValues.has(this.getKey(name));
   }
 
   public getByName(name: string): TObject {
-    const object = this.namedValues.get(normalizeName(name));
+    const object = this.namedValues.get(this.getKey(name));
     if (object === undefined) {
       throw ObjectDoesNotExist.new(name);
     }
@@ -39,10 +39,36 @@ export class OptionallyUnqualifiedNamedObjectSet<TObject extends { getObjectName
   }
 
   public removeByName(name: string): void {
-    const key = normalizeName(name);
+    const key = this.getKey(name);
     if (!this.namedValues.delete(key)) {
       throw ObjectDoesNotExist.new(name);
     }
+  }
+
+  public isEmpty(): boolean {
+    return this.namedValues.size === 0 && this.unnamedValues.length === 0;
+  }
+
+  public get(name: string | { toString(): string }): TObject | null {
+    return this.namedValues.get(this.getKey(name)) ?? null;
+  }
+
+  public remove(name: string | { toString(): string }): void {
+    this.removeByName(String(name));
+  }
+
+  public modify(
+    name: string | { toString(): string },
+    modification: (object: TObject) => TObject,
+  ): void {
+    const key = this.getKey(name);
+    const current = this.namedValues.get(key);
+
+    if (current === undefined) {
+      throw ObjectDoesNotExist.new(String(name));
+    }
+
+    this.replace(key, current, modification);
   }
 
   public clear(): void {
@@ -54,8 +80,35 @@ export class OptionallyUnqualifiedNamedObjectSet<TObject extends { getObjectName
     return [...this.namedValues.values(), ...this.unnamedValues];
   }
 
+  public toList(): TObject[] {
+    return this.toArray();
+  }
+
   public [Symbol.iterator](): Iterator<TObject> {
+    return this.getIterator();
+  }
+
+  public getIterator(): Iterator<TObject> {
     return this.toArray()[Symbol.iterator]();
+  }
+
+  private removeByKey(key: string): void {
+    this.namedValues.delete(key);
+  }
+
+  private replace(key: string, current: TObject, modification: (object: TObject) => TObject): void {
+    this.removeByKey(key);
+
+    try {
+      this.add(modification(current));
+    } catch (error) {
+      this.add(current);
+      throw error;
+    }
+  }
+
+  private getKey(name: string | { toString(): string }): string {
+    return normalizeName(String(name));
   }
 }
 

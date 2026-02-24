@@ -7,7 +7,7 @@ export class NotSupported extends Error implements PlatformException {
     Object.setPrototypeOf(this, NotSupported.prototype); // Fix prototype chain
   }
 
-  static new(method: string): NotSupported {
+  public static new(method: string): NotSupported {
     return new NotSupported(method);
   }
 }

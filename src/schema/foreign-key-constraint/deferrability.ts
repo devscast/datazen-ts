@@ -7,3 +7,9 @@ export enum Deferrability {
 export function deferrabilityToSQL(deferrability: Deferrability): string {
   return deferrability;
 }
+
+export namespace Deferrability {
+  export function toSQL(deferrability: Deferrability): string {
+    return deferrability;
+  }
+}

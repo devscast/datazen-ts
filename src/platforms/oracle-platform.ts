@@ -164,11 +164,43 @@ export class OraclePlatform extends AbstractPlatform {
     return 128;
   }
 
+  public getDropAutoincrementSql(table: string): string[] {
+    return [this.getDropSequenceSQL(this.getAutoincrementIdentifierName(table))];
+  }
+
+  protected getCreateAutoincrementSql(_name: string, table: string, start: number = 1): string[] {
+    return [`CREATE SEQUENCE ${this.getAutoincrementIdentifierName(table)} START WITH ${start}`];
+  }
+
+  protected getIdentitySequenceName(tableName: string): string {
+    return this.addSuffix(this.normalizeIdentifier(tableName), "_SEQ");
+  }
+
   private getOracleIsolationLevelSQL(level: TransactionIsolationLevel): string {
     if (level === TransactionIsolationLevel.REPEATABLE_READ) {
       return "SERIALIZABLE";
     }
 
     return this.getTransactionIsolationLevelSQL(level);
+  }
+
+  private normalizeIdentifier(name: string): string {
+    const unquoted = name.replace(/^"+|"+$/g, "");
+    return unquoted.replace(/\./g, "_").toUpperCase();
+  }
+
+  private addSuffix(identifier: string, suffix: string): string {
+    const normalized = identifier.endsWith(suffix) ? identifier : `${identifier}${suffix}`;
+    const maxLength = this.getMaxIdentifierLength();
+    if (normalized.length <= maxLength) {
+      return normalized;
+    }
+
+    const prefixLength = Math.max(1, maxLength - suffix.length);
+    return `${identifier.slice(0, prefixLength)}${suffix}`;
+  }
+
+  private getAutoincrementIdentifierName(table: string): string {
+    return this.getIdentitySequenceName(table);
   }
 }

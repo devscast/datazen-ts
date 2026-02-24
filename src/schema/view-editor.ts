@@ -15,6 +15,11 @@ export class ViewEditor {
     return this;
   }
 
+  public setUnquotedName(name: string, schemaName: string | null = null): this {
+    this.name = schemaName === null ? name : `${schemaName}.${name}`;
+    return this;
+  }
+
   public setSQL(sql: string): this {
     this.sql = sql;
     return this;

@@ -34,16 +34,52 @@ export class SchemaDiff {
     this.droppedSequences = options.droppedSequences ?? [];
   }
 
+  public getCreatedSchemas(): readonly string[] {
+    return this.createdSchemas;
+  }
+
+  public getDroppedSchemas(): readonly string[] {
+    return this.droppedSchemas;
+  }
+
+  public getCreatedTables(): readonly Table[] {
+    return this.createdTables;
+  }
+
+  public getAlteredTables(): readonly TableDiff[] {
+    return this.alteredTables.filter((diff) => !diff.isEmpty());
+  }
+
+  public getDroppedTables(): readonly Table[] {
+    return this.droppedTables;
+  }
+
+  public getCreatedSequences(): readonly Sequence[] {
+    return this.createdSequences;
+  }
+
+  public getAlteredSequences(): readonly Sequence[] {
+    return this.alteredSequences;
+  }
+
+  public getDroppedSequences(): readonly Sequence[] {
+    return this.droppedSequences;
+  }
+
   public hasChanges(): boolean {
+    return !this.isEmpty();
+  }
+
+  public isEmpty(): boolean {
     return (
-      this.createdSchemas.length > 0 ||
-      this.droppedSchemas.length > 0 ||
-      this.createdTables.length > 0 ||
-      this.alteredTables.length > 0 ||
-      this.droppedTables.length > 0 ||
-      this.createdSequences.length > 0 ||
-      this.alteredSequences.length > 0 ||
-      this.droppedSequences.length > 0
+      this.createdSchemas.length === 0 &&
+      this.droppedSchemas.length === 0 &&
+      this.createdTables.length === 0 &&
+      this.getAlteredTables().length === 0 &&
+      this.droppedTables.length === 0 &&
+      this.createdSequences.length === 0 &&
+      this.alteredSequences.length === 0 &&
+      this.droppedSequences.length === 0
     );
   }
 }

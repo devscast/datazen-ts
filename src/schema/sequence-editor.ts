@@ -17,6 +17,11 @@ export class SequenceEditor {
     return this;
   }
 
+  public setUnquotedName(name: string, schemaName: string | null = null): this {
+    this.name = schemaName === null ? name : `${schemaName}.${name}`;
+    return this;
+  }
+
   public setAllocationSize(allocationSize: number): this {
     this.allocationSize = allocationSize;
     return this;

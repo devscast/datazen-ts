@@ -13,4 +13,16 @@ export class Query {
     public readonly parameters: QueryParameters = [],
     public readonly types: QueryParameterTypes = [],
   ) {}
+
+  public getSQL(): string {
+    return this.sql;
+  }
+
+  public getParams(): QueryParameters {
+    return this.parameters;
+  }
+
+  public getTypes(): QueryParameterTypes {
+    return this.types;
+  }
 }

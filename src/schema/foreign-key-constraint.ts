@@ -1,7 +1,14 @@
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 import { AbstractAsset } from "./abstract-asset";
+import { Deferrability } from "./foreign-key-constraint/deferrability";
+import { MatchType } from "./foreign-key-constraint/match-type";
+import { ReferentialAction } from "./foreign-key-constraint/referential-action";
 import { ForeignKeyConstraintEditor } from "./foreign-key-constraint-editor";
 import { Identifier } from "./identifier";
+import { Index } from "./index";
+import { OptionallyQualifiedName } from "./name/optionally-qualified-name";
+import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
+import { Parsers } from "./name/parsers";
 
 export class ForeignKeyConstraint extends AbstractAsset {
   private readonly localColumns: Identifier[];
@@ -33,11 +40,27 @@ export class ForeignKeyConstraint extends AbstractAsset {
     return this.foreignTableName;
   }
 
+  public getReferencedTableName(): OptionallyQualifiedName {
+    const [first, ...rest] = this.foreignTableName.split(".");
+    if (rest.length === 0) {
+      return OptionallyQualifiedName.unquoted(this.trimQuotes(first ?? ""));
+    }
+
+    return OptionallyQualifiedName.unquoted(
+      this.trimQuotes(rest.join(".")),
+      this.trimQuotes(first ?? ""),
+    );
+  }
+
   public getColumns(): string[] {
     return this.localColumns.map((column) => column.getName());
   }
 
   public getReferencingColumnNames(): string[] {
+    return this.getColumns();
+  }
+
+  public getLocalColumns(): string[] {
     return this.getColumns();
   }
 
@@ -51,6 +74,23 @@ export class ForeignKeyConstraint extends AbstractAsset {
 
   public getReferencedColumnNames(): string[] {
     return this.getForeignColumns();
+  }
+
+  public getUnquotedLocalColumns(): string[] {
+    return this.getLocalColumns().map((column) => this.trimQuotes(column));
+  }
+
+  public getUnquotedForeignColumns(): string[] {
+    return this.getForeignColumns().map((column) => this.trimQuotes(column));
+  }
+
+  public getUnqualifiedForeignTableName(): string {
+    const name = this.foreignTableName.split(".").at(-1) ?? this.foreignTableName;
+    return this.trimQuotes(name).toLowerCase();
+  }
+
+  public getQuotedForeignTableName(platform: AbstractPlatform): string {
+    return new Identifier(this.foreignTableName).getQuotedName(platform);
   }
 
   public getQuotedForeignColumns(platform: AbstractPlatform): string[] {
@@ -67,6 +107,30 @@ export class ForeignKeyConstraint extends AbstractAsset {
     return typeof value === "string" ? value : null;
   }
 
+  public getOnUpdateAction(): ReferentialAction {
+    return parseReferentialAction(this.options.onUpdate);
+  }
+
+  public getOnDeleteAction(): ReferentialAction {
+    return parseReferentialAction(this.options.onDelete);
+  }
+
+  public getMatchType(): MatchType {
+    return parseMatchType(this.options.match);
+  }
+
+  public getDeferrability(): Deferrability {
+    const isDeferred = this.options.deferred !== undefined && this.options.deferred !== false;
+    const isDeferrable =
+      this.options.deferrable !== undefined ? this.options.deferrable !== false : isDeferred;
+
+    if (isDeferred) {
+      return Deferrability.DEFERRED;
+    }
+
+    return isDeferrable ? Deferrability.DEFERRABLE : Deferrability.NOT_DEFERRABLE;
+  }
+
   public hasOption(name: string): boolean {
     return Object.hasOwn(this.options, name);
   }
@@ -79,8 +143,11 @@ export class ForeignKeyConstraint extends AbstractAsset {
     return { ...this.options };
   }
 
-  public intersectsIndexColumns(columnNames: string[]): boolean {
+  public intersectsIndexColumns(indexOrColumnNames: Index | string[]): boolean {
     const local = this.getColumns().map(normalize);
+    const columnNames = Array.isArray(indexOrColumnNames)
+      ? indexOrColumnNames
+      : indexOrColumnNames.getColumns();
     const columns = columnNames.map(normalize);
 
     return columns.some((column) => local.includes(column));
@@ -104,8 +171,40 @@ export class ForeignKeyConstraint extends AbstractAsset {
 
     return editor;
   }
+
+  protected getNameParser(): UnqualifiedNameParser {
+    return Parsers.getUnqualifiedNameParser();
+  }
 }
 
 function normalize(identifier: string): string {
   return identifier.replaceAll(/[`"[\]]/g, "").toLowerCase();
+}
+
+function parseMatchType(value: unknown): MatchType {
+  if (typeof value === "string") {
+    const normalized = value.toUpperCase();
+    if (normalized === MatchType.FULL) {
+      return MatchType.FULL;
+    }
+
+    if (normalized === MatchType.PARTIAL) {
+      return MatchType.PARTIAL;
+    }
+  }
+
+  return MatchType.SIMPLE;
+}
+
+function parseReferentialAction(value: unknown): ReferentialAction {
+  if (typeof value === "string") {
+    const normalized = value.toUpperCase();
+    for (const action of Object.values(ReferentialAction)) {
+      if (normalized === action) {
+        return action;
+      }
+    }
+  }
+
+  return ReferentialAction.NO_ACTION;
 }

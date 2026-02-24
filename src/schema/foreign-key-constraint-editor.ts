@@ -19,9 +19,29 @@ export class ForeignKeyConstraintEditor {
     return this;
   }
 
+  public setUnquotedName(name: string): this {
+    return this.setName(UnqualifiedName.unquoted(name).toString());
+  }
+
+  public setQuotedName(name: string): this {
+    return this.setName(UnqualifiedName.quoted(name).toString());
+  }
+
   public setReferencingColumnNames(...referencingColumnNames: string[]): this {
     this.referencingColumnNames = [...referencingColumnNames];
     return this;
+  }
+
+  public setUnquotedReferencingColumnNames(...referencingColumnNames: string[]): this {
+    return this.setReferencingColumnNames(
+      ...referencingColumnNames.map((name) => UnqualifiedName.unquoted(name).toString()),
+    );
+  }
+
+  public setQuotedReferencingColumnNames(...referencingColumnNames: string[]): this {
+    return this.setReferencingColumnNames(
+      ...referencingColumnNames.map((name) => UnqualifiedName.quoted(name).toString()),
+    );
   }
 
   public setReferencedTableName(referencedTableName: string | OptionallyQualifiedName): this {
@@ -32,9 +52,42 @@ export class ForeignKeyConstraintEditor {
     return this;
   }
 
+  public setUnquotedReferencedTableName(
+    unqualifiedReferencedTableName: string,
+    referencedTableNameQualifier: string | null = null,
+  ): this {
+    return this.setReferencedTableName(
+      OptionallyQualifiedName.unquoted(
+        unqualifiedReferencedTableName,
+        referencedTableNameQualifier,
+      ),
+    );
+  }
+
+  public setQuotedReferencedTableName(
+    unqualifiedReferencedTableName: string,
+    referencedTableNameQualifier: string | null = null,
+  ): this {
+    return this.setReferencedTableName(
+      OptionallyQualifiedName.quoted(unqualifiedReferencedTableName, referencedTableNameQualifier),
+    );
+  }
+
   public setReferencedColumnNames(...referencedColumnNames: string[]): this {
     this.referencedColumnNames = [...referencedColumnNames];
     return this;
+  }
+
+  public setUnquotedReferencedColumnNames(...referencedColumnNames: string[]): this {
+    return this.setReferencedColumnNames(
+      ...referencedColumnNames.map((name) => UnqualifiedName.unquoted(name).toString()),
+    );
+  }
+
+  public setQuotedReferencedColumnNames(...referencedColumnNames: string[]): this {
+    return this.setReferencedColumnNames(
+      ...referencedColumnNames.map((name) => UnqualifiedName.quoted(name).toString()),
+    );
   }
 
   public setOnUpdate(onUpdate: string | null): this {
@@ -96,6 +149,16 @@ export class ForeignKeyConstraintEditor {
 
   public setDeferrability(deferrability: Deferrability): this {
     this.options.deferrability = deferrability;
+    delete this.options.deferrable;
+    delete this.options.deferred;
+
+    if (deferrability === Deferrability.DEFERRABLE) {
+      this.options.deferrable = true;
+    } else if (deferrability === Deferrability.DEFERRED) {
+      this.options.deferrable = true;
+      this.options.deferred = true;
+    }
+
     return this;
   }
 

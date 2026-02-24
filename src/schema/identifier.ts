@@ -1,4 +1,6 @@
 import { AbstractAsset } from "./abstract-asset";
+import type { GenericNameParser } from "./name/parser/generic-name-parser";
+import { Parsers } from "./name/parsers";
 
 /**
  * Wrapper around raw SQL identifiers (table names, column names, etc.).
@@ -10,5 +12,9 @@ export class Identifier extends AbstractAsset {
     if (quote && !this._quoted) {
       this._setName(`"${this.getName()}"`);
     }
+  }
+
+  protected getNameParser(): GenericNameParser {
+    return Parsers.getGenericNameParser();
   }
 }
