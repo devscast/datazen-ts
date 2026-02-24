@@ -1,4 +1,4 @@
-import { initializeException } from "./_util";
+import { initializeException } from "./_internal";
 
 export class InvalidColumnIndex extends Error {
   public static new(index: number, previous?: unknown): InvalidColumnIndex {

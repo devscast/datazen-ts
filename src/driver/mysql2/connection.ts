@@ -1,8 +1,8 @@
-import { ArrayResult } from "../array-result";
 import type { Connection as DriverConnection } from "../connection";
 import { NoIdentityValue } from "../exception/no-identity-value";
 import type { Result as DriverResult } from "../result";
 import type { Statement as DriverStatement } from "../statement";
+import { Result as MySQL2Result } from "./result";
 import { MySQL2Statement } from "./statement";
 import type { MySQL2ConnectionLike, MySQL2PoolLike } from "./types";
 
@@ -165,7 +165,7 @@ export class MySQL2Connection implements DriverConnection {
     if (rows.length > 0) {
       const firstRow = rows[0];
 
-      return new ArrayResult(
+      return new MySQL2Result(
         rows,
         firstRow === undefined ? [] : Object.keys(firstRow),
         rows.length,
@@ -175,7 +175,7 @@ export class MySQL2Connection implements DriverConnection {
     const metadata = this.toMetadata(result);
     this.lastInsertIdValue = metadata.insertId;
 
-    return new ArrayResult([], [], metadata.affectedRows);
+    return new MySQL2Result([], [], metadata.affectedRows);
   }
 
   private toRows(result: unknown): Array<Record<string, unknown>> {

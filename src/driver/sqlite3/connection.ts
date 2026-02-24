@@ -1,8 +1,8 @@
-import { ArrayResult } from "../array-result";
 import type { Connection as DriverConnection } from "../connection";
 import { NoIdentityValue } from "../exception/no-identity-value";
 import type { Result as DriverResult } from "../result";
 import type { Statement as DriverStatement } from "../statement";
+import { Result as SQLite3Result } from "./result";
 import { SQLite3Statement } from "./statement";
 import type { SQLite3DatabaseLike, SQLite3RunContextLike } from "./types";
 
@@ -23,7 +23,11 @@ export class SQLite3Connection implements DriverConnection {
     const rows = await this.queryAll(sql, []);
     const firstRow = rows[0];
 
-    return new ArrayResult(rows, firstRow === undefined ? [] : Object.keys(firstRow), rows.length);
+    return new SQLite3Result(
+      rows,
+      firstRow === undefined ? [] : Object.keys(firstRow),
+      rows.length,
+    );
   }
 
   public quote(value: string): string {
@@ -116,7 +120,7 @@ export class SQLite3Connection implements DriverConnection {
       const rows = await this.queryAll(sql, parameters);
       const firstRow = rows[0];
 
-      return new ArrayResult(
+      return new SQLite3Result(
         rows,
         firstRow === undefined ? [] : Object.keys(firstRow),
         rows.length,
@@ -127,7 +131,7 @@ export class SQLite3Connection implements DriverConnection {
     this.lastInsertIdValue =
       typeof result.lastID === "number" || typeof result.lastID === "string" ? result.lastID : null;
 
-    return new ArrayResult([], [], typeof result.changes === "number" ? result.changes : 0);
+    return new SQLite3Result([], [], typeof result.changes === "number" ? result.changes : 0);
   }
 
   private isResultSetSql(sql: string): boolean {

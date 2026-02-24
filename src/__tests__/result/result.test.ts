@@ -1,14 +1,28 @@
 import { describe, expect, it } from "vitest";
 
+import type { Connection as DBALConnection } from "../../connection";
 import { ArrayResult } from "../../driver/array-result";
+import type { Result as DriverResult } from "../../driver/result";
 import { NoKeyValue } from "../../exception/no-key-value";
 import { Result } from "../../result";
 
 function expectUserRow(_row: { id: number; name: string } | false): void {}
 
+const passthroughConnection = {
+  convertException(error: unknown): never {
+    throw error as Error;
+  },
+} as unknown as DBALConnection;
+
+function createResult<TRow extends Record<string, unknown> = Record<string, unknown>>(
+  driverResult: DriverResult,
+): Result<TRow> {
+  return new Result<TRow>(driverResult, passthroughConnection);
+}
+
 describe("Result", () => {
   it("uses class-level row type for fetchAssociative() by default", () => {
-    const result = new Result<{ id: number; name: string }>(
+    const result = createResult<{ id: number; name: string }>(
       new ArrayResult([{ id: 1, name: "Alice" }]),
     );
 
@@ -18,7 +32,7 @@ describe("Result", () => {
   });
 
   it("fetches associative rows sequentially", () => {
-    const result = new Result(
+    const result = createResult(
       new ArrayResult([
         { id: 1, name: "Alice" },
         { id: 2, name: "Bob" },
@@ -31,7 +45,7 @@ describe("Result", () => {
   });
 
   it("returns a clone when fetching associative rows", () => {
-    const result = new Result(new ArrayResult([{ id: 1, name: "Alice" }]));
+    const result = createResult(new ArrayResult([{ id: 1, name: "Alice" }]));
 
     const row = result.fetchAssociative<{ id: number; name: string }>();
     expect(row).toEqual({ id: 1, name: "Alice" });
@@ -43,13 +57,13 @@ describe("Result", () => {
   });
 
   it("fetches numeric rows using explicit column order", () => {
-    const result = new Result(new ArrayResult([{ id: 7, name: "Carol" }], ["name", "id"]));
+    const result = createResult(new ArrayResult([{ id: 7, name: "Carol" }], ["name", "id"]));
 
     expect(result.fetchNumeric<[string, number]>()).toEqual(["Carol", 7]);
   });
 
   it("fetches single values and first column values", () => {
-    const result = new Result(
+    const result = createResult(
       new ArrayResult([
         { id: 10, name: "A" },
         { id: 20, name: "B" },
@@ -61,14 +75,14 @@ describe("Result", () => {
   });
 
   it("fetches all numeric and associative rows", () => {
-    const resultForNumeric = new Result(
+    const resultForNumeric = createResult(
       new ArrayResult([
         { id: 1, name: "A" },
         { id: 2, name: "B" },
       ]),
     );
 
-    const resultForAssociative = new Result(
+    const resultForAssociative = createResult(
       new ArrayResult([
         { id: 1, name: "A" },
         { id: 2, name: "B" },
@@ -86,7 +100,7 @@ describe("Result", () => {
   });
 
   it("fetches key/value pairs", () => {
-    const result = new Result(
+    const result = createResult(
       new ArrayResult([
         { id: "one", value: 100, extra: "x" },
         { id: "two", value: 200, extra: "y" },
@@ -100,13 +114,13 @@ describe("Result", () => {
   });
 
   it("throws when key/value fetch has less than two columns", () => {
-    const result = new Result(new ArrayResult([{ id: 1 }]));
+    const result = createResult(new ArrayResult([{ id: 1 }]));
 
     expect(() => result.fetchAllKeyValue()).toThrow(NoKeyValue);
   });
 
   it("fetches associative rows indexed by first column", () => {
-    const result = new Result(
+    const result = createResult(
       new ArrayResult([
         { id: "u1", name: "Alice", active: true },
         { id: "u2", name: "Bob", active: false },
@@ -120,7 +134,7 @@ describe("Result", () => {
   });
 
   it("supports explicit row and column metadata", () => {
-    const result = new Result(new ArrayResult([], ["id", "name"], 42));
+    const result = createResult(new ArrayResult([], ["id", "name"], 42));
 
     expect(result.rowCount()).toBe(42);
     expect(result.columnCount()).toBe(2);
@@ -129,10 +143,41 @@ describe("Result", () => {
   });
 
   it("releases rows when free() is called", () => {
-    const result = new Result(new ArrayResult([{ id: 1 }]));
+    const result = createResult(new ArrayResult([{ id: 1 }]));
 
     result.free();
     expect(result.fetchAssociative()).toBe(false);
     expect(result.rowCount()).toBe(0);
+  });
+
+  it("converts driver exceptions using the connection", () => {
+    const driverError = new Error("driver failure");
+    const convertedError = new Error("converted failure");
+    const calls: Array<{ error: unknown; operation: string }> = [];
+    const connection = {
+      convertException(error: unknown, operation: string): Error {
+        calls.push({ error, operation });
+        return convertedError;
+      },
+    } as unknown as DBALConnection;
+
+    const failingResult: DriverResult = {
+      fetchNumeric: () => {
+        throw driverError;
+      },
+      fetchAssociative: () => false,
+      fetchOne: () => false,
+      fetchAllNumeric: () => [],
+      fetchAllAssociative: () => [],
+      fetchFirstColumn: () => [],
+      rowCount: () => 0,
+      columnCount: () => 0,
+      free: () => {},
+    };
+
+    const result = new Result(failingResult, connection);
+
+    expect(() => result.fetchNumeric()).toThrow(convertedError);
+    expect(calls).toEqual([{ error: driverError, operation: "fetchNumeric" }]);
   });
 });

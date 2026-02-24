@@ -1,6 +1,7 @@
 import { Configuration } from "../configuration";
 import { Connection } from "../connection";
-import type { Driver, DriverConnection } from "../driver";
+import type { Driver } from "../driver";
+import type { Connection as DriverConnection } from "../driver/connection";
 import type { QueryParameterTypes, QueryParameters } from "../query";
 import type { Statement } from "../statement";
 
@@ -18,11 +19,18 @@ type NamedConnection = "primary" | "replica";
  * Primary-replica DBAL connection wrapper (Doctrine-style).
  */
 export class PrimaryReadReplicaConnection extends Connection {
+  /**
+   * rimary and Replica connection (one of the randomly picked replicas).
+   */
   protected connections: Record<NamedConnection, DriverConnection | null> = {
     primary: null,
     replica: null,
   };
 
+  /**
+   * You can keep the replica connection and then switch back to it
+   * during the request if you know what you are doing.
+   */
   protected keepReplica = false;
 
   constructor(
@@ -58,6 +66,9 @@ export class PrimaryReadReplicaConnection extends Connection {
     this.keepReplica = Boolean(params.keepReplica);
   }
 
+  /**
+   * Checks if the connection is currently towards the primary or not.
+   */
   public isConnectedToPrimary(): boolean {
     const current = this.getWrappedDriverConnection();
 
@@ -170,8 +181,10 @@ export class PrimaryReadReplicaConnection extends Connection {
       throw new TypeError("Invalid option to connect(), only primary or replica allowed.");
     }
 
+    // If we have a connection open, and this is not an explicit connection
+    // change request, then abort right here, because we are already done.
+    // This prevents writes to the replica in case of "keepReplica" option enabled.
     const current = this.getWrappedDriverConnection();
-
     if (current !== null && !requestedConnectionChange) {
       return current;
     }
@@ -200,6 +213,7 @@ export class PrimaryReadReplicaConnection extends Connection {
       this.connections.primary = primaryConnection;
       this.setWrappedDriverConnection(primaryConnection);
 
+      // Set replica connection to primary to avoid invalid reads
       if (!this.keepReplica) {
         this.connections.replica = primaryConnection;
       }

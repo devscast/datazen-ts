@@ -1,9 +1,9 @@
 import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
-import { ArrayResult } from "../array-result";
 import type { Connection as DriverConnection } from "../connection";
 import { IdentityColumnsNotSupported } from "../exception/identity-columns-not-supported";
 import type { Result as DriverResult } from "../result";
 import type { Statement as DriverStatement } from "../statement";
+import { Result as MSSQLResult } from "./result";
 import { MSSQLStatement } from "./statement";
 import type { MSSQLPoolLike, MSSQLRequestLike, MSSQLTransactionLike } from "./types";
 
@@ -141,7 +141,7 @@ export class MSSQLConnection implements DriverConnection {
     const rows = this.toRows(payload);
     const firstRow = rows[0];
 
-    return new ArrayResult(
+    return new MSSQLResult(
       rows,
       firstRow === undefined ? [] : Object.keys(firstRow),
       rows.length > 0 ? rows.length : this.getRowsAffected(payload),

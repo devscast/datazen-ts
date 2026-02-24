@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
 import { type Driver, type DriverConnection } from "../../driver";
+import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
-import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
 import { DriverManager } from "../../driver-manager";
 import { DriverException } from "../../exception/driver-exception";
 import type { Logger } from "../../logging/logger";

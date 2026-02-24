@@ -14,9 +14,3 @@ export class Query {
     public readonly types: QueryParameterTypes = [],
   ) {}
 }
-
-export interface CompiledQuery {
-  sql: string;
-  parameters: QueryParameters;
-  types: QueryScalarParameterType[] | Record<string, QueryScalarParameterType>;
-}

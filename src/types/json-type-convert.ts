@@ -1,4 +1,5 @@
-import { SerializationFailed, ValueNotConvertible } from "./exception/index";
+import { SerializationFailed } from "./exception/serialization-failed";
+import { ValueNotConvertible } from "./exception/value-not-convertible";
 
 export function convertJsonToDatabaseValue(value: unknown): string | null {
   if (value === null) {

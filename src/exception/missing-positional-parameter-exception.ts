@@ -1,4 +1,4 @@
-import { initializeException } from "./_util";
+import { initializeException } from "./_internal";
 
 export class MissingPositionalParameterException extends Error {
   constructor(index: number) {

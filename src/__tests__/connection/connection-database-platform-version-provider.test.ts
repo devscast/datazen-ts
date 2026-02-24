@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { Connection } from "../../connection";
 import { StaticServerVersionProvider } from "../../connection/static-server-version-provider";
 import { type Driver, type DriverConnection } from "../../driver";
+import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
-import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
 import { DriverException } from "../../exception/driver-exception";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import type { ServerVersionProvider } from "../../server-version-provider";

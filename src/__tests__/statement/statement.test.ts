@@ -1,131 +1,220 @@
 import { describe, expect, it } from "vitest";
 
+import { Connection } from "../../connection";
+import { type Driver, type DriverConnection } from "../../driver";
+import type {
+  ExceptionConverter,
+  ExceptionConverterContext,
+} from "../../driver/api/exception-converter";
+import { ArrayResult } from "../../driver/array-result";
+import type { Statement as DriverStatement } from "../../driver/statement";
+import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";
-import { Result } from "../../result";
-import { Statement, type StatementExecutor } from "../../statement";
-import type { QueryParameterTypes, QueryParameters } from "./query";
+import { MySQLPlatform } from "../../platforms/mysql-platform";
+import { Statement } from "../../statement";
+import { DateType } from "../../types/date-type";
+import { registerBuiltInTypes } from "../../types/register-built-in-types";
+import { Types } from "../../types/types";
 
-class SpyExecutor implements StatementExecutor {
-  public lastQueryCall:
-    | { params: QueryParameters | undefined; sql: string; types: QueryParameterTypes | undefined }
-    | undefined;
-  public lastStatementCall:
-    | { params: QueryParameters | undefined; sql: string; types: QueryParameterTypes | undefined }
-    | undefined;
-
-  public async executeQuery(
-    sql: string,
-    params?: QueryParameters,
-    types?: QueryParameterTypes,
-  ): Promise<Result> {
-    this.lastQueryCall = { params, sql, types };
-    return new Result({ rows: [{ ok: true }] });
+class NoopDriverConnection implements DriverConnection {
+  public async prepare(_sql: string): Promise<DriverStatement> {
+    throw new Error("not used");
   }
 
-  public async executeStatement(
-    sql: string,
-    params?: QueryParameters,
-    types?: QueryParameterTypes,
-  ): Promise<number> {
-    this.lastStatementCall = { params, sql, types };
-    return 3;
+  public async query(_sql: string) {
+    throw new Error("not used");
+  }
+
+  public quote(value: string): string {
+    return `'${value}'`;
+  }
+
+  public async exec(_sql: string): Promise<number | string> {
+    throw new Error("not used");
+  }
+
+  public async lastInsertId(): Promise<number | string> {
+    return 1;
+  }
+
+  public async beginTransaction(): Promise<void> {}
+  public async commit(): Promise<void> {}
+  public async rollBack(): Promise<void> {}
+  public async getServerVersion(): Promise<string> {
+    return "1.0.0";
+  }
+  public getNativeConnection(): unknown {
+    return this;
+  }
+}
+
+class SpyExceptionConverter implements ExceptionConverter {
+  public lastContext: ExceptionConverterContext | undefined;
+
+  public convert(error: unknown, context: ExceptionConverterContext): DriverException {
+    this.lastContext = context;
+
+    return new DriverException("converted", {
+      cause: error,
+      driverName: "spy",
+      operation: context.operation,
+      parameters: context.query?.parameters,
+      sql: context.query?.sql,
+    });
+  }
+}
+
+class SpyDriver implements Driver {
+  constructor(private readonly converter: ExceptionConverter = new SpyExceptionConverter()) {}
+
+  public async connect(_params: Record<string, unknown>): Promise<DriverConnection> {
+    return new NoopDriverConnection();
+  }
+
+  public getExceptionConverter(): ExceptionConverter {
+    return this.converter;
+  }
+
+  public getDatabasePlatform(): MySQLPlatform {
+    return new MySQLPlatform();
+  }
+}
+
+class SpyDriverStatement implements DriverStatement {
+  public readonly boundValues: Array<{
+    param: string | number;
+    type: ParameterType | undefined;
+    value: unknown;
+  }> = [];
+  public bindError: unknown;
+  public executeError: unknown;
+  public executeResult = new ArrayResult([{ ok: true }], ["ok"], 1);
+
+  public bindValue(param: string | number, value: unknown, type?: ParameterType): void {
+    if (this.bindError !== undefined) {
+      throw this.bindError;
+    }
+
+    this.boundValues.push({ param, type, value });
+  }
+
+  public async execute() {
+    if (this.executeError !== undefined) {
+      throw this.executeError;
+    }
+
+    return this.executeResult;
   }
 }
 
 describe("Statement", () => {
-  it("returns original SQL", () => {
-    const statement = new Statement(new SpyExecutor(), "SELECT 1");
+  registerBuiltInTypes();
+
+  it("keeps SQL and exposes wrapped driver statement", () => {
+    const driverStatement = new SpyDriverStatement();
+    const statement = new Statement(
+      new Connection({}, new SpyDriver()),
+      driverStatement,
+      "SELECT 1",
+    );
+
     expect(statement.getSQL()).toBe("SELECT 1");
+    expect(statement.getWrappedStatement()).toBe(driverStatement);
   });
 
-  it("binds positional values using 1-based index", async () => {
-    const executor = new SpyExecutor();
-    const statement = new Statement(executor, "SELECT * FROM users WHERE id = ?");
+  it("binds raw parameter types directly to the driver statement", () => {
+    const driverStatement = new SpyDriverStatement();
+    const statement = new Statement(
+      new Connection({}, new SpyDriver()),
+      driverStatement,
+      "SELECT * FROM users WHERE id = ?",
+    );
 
-    await statement.bindValue(1, 99, ParameterType.INTEGER).executeQuery();
+    statement.bindValue(1, 99, ParameterType.INTEGER);
 
-    expect(executor.lastQueryCall).toEqual({
-      params: [99],
-      sql: "SELECT * FROM users WHERE id = ?",
-      types: [ParameterType.INTEGER],
-    });
+    expect(driverStatement.boundValues).toEqual([
+      { param: 1, type: ParameterType.INTEGER, value: 99 },
+    ]);
   });
 
-  it("binds named values with and without colon prefix", async () => {
-    const executor = new SpyExecutor();
-    const statement = new Statement(executor, "SELECT * FROM users WHERE id = :id");
+  it("converts Datazen type names in bindValue() before driver binding", () => {
+    const driverStatement = new SpyDriverStatement();
+    const statement = new Statement(
+      new Connection({}, new SpyDriver()),
+      driverStatement,
+      "SELECT :active",
+    );
 
-    await statement
-      .bindValue(":id", 10, ParameterType.INTEGER)
-      .bindValue("status", "active", ParameterType.STRING)
-      .executeQuery();
+    statement.bindValue(":active", true, Types.BOOLEAN);
 
-    expect(executor.lastQueryCall).toEqual({
-      params: { id: 10, status: "active" },
-      sql: "SELECT * FROM users WHERE id = :id",
-      types: { id: ParameterType.INTEGER, status: ParameterType.STRING },
-    });
+    expect(driverStatement.boundValues).toEqual([
+      { param: ":active", type: ParameterType.BOOLEAN, value: 1 },
+    ]);
   });
 
-  it("sets positional parameters in bulk", async () => {
-    const executor = new SpyExecutor();
-    const statement = new Statement(executor, "SELECT * FROM users WHERE id = ? AND role = ?");
+  it("converts Datazen Type instances in bindValue() before driver binding", () => {
+    const driverStatement = new SpyDriverStatement();
+    const statement = new Statement(
+      new Connection({}, new SpyDriver()),
+      driverStatement,
+      "SELECT ?",
+    );
 
-    await statement
-      .setParameters([5, "admin"], [ParameterType.INTEGER, ParameterType.STRING])
-      .executeQuery();
+    statement.bindValue(1, new Date(2024, 0, 2), new DateType());
 
-    expect(executor.lastQueryCall).toEqual({
-      params: [5, "admin"],
-      sql: "SELECT * FROM users WHERE id = ? AND role = ?",
-      types: [ParameterType.INTEGER, ParameterType.STRING],
-    });
+    expect(driverStatement.boundValues).toEqual([
+      { param: 1, type: ParameterType.STRING, value: "2024-01-02" },
+    ]);
   });
 
-  it("sets named parameters in bulk", async () => {
-    const executor = new SpyExecutor();
-    const statement = new Statement(executor, "SELECT * FROM users WHERE id = :id");
+  it("wraps driver execute() result for executeQuery()", async () => {
+    const driverStatement = new SpyDriverStatement();
+    driverStatement.executeResult = new ArrayResult([{ ok: true }], ["ok"], 1);
+    const statement = new Statement(
+      new Connection({}, new SpyDriver()),
+      driverStatement,
+      "SELECT 1 AS ok",
+    );
 
-    await statement
-      .setParameters(
-        { id: 7, role: "editor" },
-        { id: ParameterType.INTEGER, role: ParameterType.STRING },
-      )
-      .executeQuery();
+    const result = await statement.executeQuery<{ ok: boolean }>();
 
-    expect(executor.lastQueryCall).toEqual({
-      params: { id: 7, role: "editor" },
-      sql: "SELECT * FROM users WHERE id = :id",
-      types: { id: ParameterType.INTEGER, role: ParameterType.STRING },
-    });
+    expect(result.fetchAssociative()).toEqual({ ok: true });
   });
 
-  it("supports mixed positional and named bindings", async () => {
-    const executor = new SpyExecutor();
-    const mixed = new Statement(executor, "SELECT * FROM users WHERE id = :id AND parent_id = ?");
+  it("returns rowCount() from executeStatement()", async () => {
+    const driverStatement = new SpyDriverStatement();
+    driverStatement.executeResult = new ArrayResult([], [], "3");
+    const statement = new Statement(
+      new Connection({}, new SpyDriver()),
+      driverStatement,
+      "UPDATE users SET active = 1",
+    );
 
-    await mixed.bindValue(1, 10).bindValue("id", 10).executeQuery();
-
-    expect(executor.lastQueryCall).toEqual({
-      params: { 0: 10, id: 10 },
-      sql: "SELECT * FROM users WHERE id = :id AND parent_id = ?",
-      types: { 0: ParameterType.STRING, id: ParameterType.STRING },
-    });
+    await expect(statement.executeStatement()).resolves.toBe("3");
   });
 
-  it("executes statement calls through executor", async () => {
-    const executor = new SpyExecutor();
-    const statement = new Statement(executor, "UPDATE users SET name = ? WHERE id = ?");
+  it("converts driver execution errors with SQL, params, and original types", async () => {
+    const converter = new SpyExceptionConverter();
+    const driverStatement = new SpyDriverStatement();
+    driverStatement.executeError = new Error("driver execute failed");
+    const statement = new Statement(
+      new Connection({}, new SpyDriver(converter)),
+      driverStatement,
+      "SELECT ?",
+    );
 
-    const affectedRows = await statement
-      .setParameters(["Alice", 1], [ParameterType.STRING, ParameterType.INTEGER])
-      .executeStatement();
+    statement.bindValue(1, true, Types.BOOLEAN);
 
-    expect(affectedRows).toBe(3);
-    expect(executor.lastStatementCall).toEqual({
-      params: ["Alice", 1],
-      sql: "UPDATE users SET name = ? WHERE id = ?",
-      types: [ParameterType.STRING, ParameterType.INTEGER],
-    });
+    await expect(statement.executeQuery()).rejects.toBeInstanceOf(DriverException);
+    expect(converter.lastContext?.operation).toBe("query");
+    expect(converter.lastContext?.query?.sql).toBe("SELECT ?");
+
+    const parameters = converter.lastContext?.query?.parameters;
+    expect(Array.isArray(parameters)).toBe(true);
+    expect((parameters as unknown[])[1]).toBe(true);
+
+    const types = converter.lastContext?.query?.types;
+    expect(Array.isArray(types)).toBe(true);
+    expect((types as unknown[])[1]).toBe(Types.BOOLEAN);
   });
 });

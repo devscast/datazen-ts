@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 import { ArrayParameterType } from "../../array-parameter-type";
 import { Connection } from "../../connection";
 import { type Driver, type DriverConnection } from "../../driver";
+import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
-import { ParameterBindingStyle } from "../../driver/internal-parameter-binding-style";
 import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
@@ -120,7 +120,7 @@ class SpyExecutionConnection extends Connection {
     types: QueryParameterTypes = [],
   ): Promise<Result> {
     this.queryCalls.push({ params, sql, types });
-    return new Result(new ArrayResult([...this.queryRows]));
+    return new Result(new ArrayResult([...this.queryRows]), this);
   }
 
   public override async executeStatement(

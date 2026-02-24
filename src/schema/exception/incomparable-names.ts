@@ -1,5 +1,5 @@
 import type { SchemaException } from "../schema-exception";
-import { nameToString } from "./_util";
+import { nameToString } from "./_internal";
 
 export class IncomparableNames extends Error implements SchemaException {
   constructor(message: string) {
