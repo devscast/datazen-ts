@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { StaticServerVersionProvider } from "../../connection/static-server-version-provider";
-import type { DriverConnection } from "../../driver";
 import { AbstractOracleDriver } from "../../driver/abstract-oracle-driver";
 import { ExceptionConverter as OCIExceptionConverter } from "../../driver/api/oci/exception-converter";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { OraclePlatform } from "../../platforms/oracle-platform";
 
 class TestOracleDriver extends AbstractOracleDriver {

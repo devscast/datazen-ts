@@ -1,6 +1,7 @@
 # @devscast/datazen
 
 # Unreleased
+- Tests: expanded `PrimaryReadReplicaConnection` parity coverage to mirror more of Datazen/Doctrine functional expectations, adding explicit `fetchAllAssociative` read-on-replica behavior, `insert()` write pinning/read-after-write on primary, multi-charset replica inheritance checks, and close/reconnect-to-primary assertions in `src/__tests__/connection/primary-read-replica-connection.test.ts`.
 - Driver: implemented per-driver in-memory result classes (`src/driver/mysql2/result.ts`, `src/driver/pg/result.ts`, `src/driver/sqlite3/result.ts`, `src/driver/mssql/result.ts`) and switched those driver connections to use them instead of the shared `ArrayResult`, using `FetchUtils` for shared fetch helpers and adding parity tests.
 - Driver: added missing Doctrine-style `AbstractOracleDriver` (`src/driver/abstract-oracle-driver.ts`) wired to `OraclePlatform` and the OCI exception converter, with parity coverage in `src/__tests__/driver/abstract-oracle-driver.test.ts`.
 - Result: restored Doctrine-style `Result` constructor parity to store the DBAL `Connection`, updated `Connection`/`Statement` call sites to pass it, and wrapped driver-result method exceptions through `connection.convertException(...)` (with result tests covering conversion).

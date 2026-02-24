@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { Connection } from "../../connection";
-import { type Driver, type DriverConnection } from "../../driver";
+import type { Driver } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import type { Statement as DriverStatement } from "../../driver/statement";
 import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";

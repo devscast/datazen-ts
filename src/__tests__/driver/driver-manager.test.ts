@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
-import { type Driver, type DriverConnection, type DriverMiddleware } from "../../driver";
+import type { Driver } from "../../driver";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
+import type { Middleware as DriverMiddleware } from "../../driver/middleware";
 import { DriverManager } from "../../driver-manager";
 import { DriverException } from "../../exception/driver-exception";
 import { DriverRequired } from "../../exception/driver-required";

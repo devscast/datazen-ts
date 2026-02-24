@@ -2,20 +2,21 @@ import { describe, expect, it } from "vitest";
 
 import { ArrayParameterType } from "../../array-parameter-type";
 import { Connection } from "../../connection";
-import { type Driver, type DriverConnection } from "../../driver";
+import type { Driver } from "../../driver";
 import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { DriverException } from "../../exception/driver-exception";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
+import type { Query } from "../../query";
 import { DateType } from "../../types/date-type";
 import { registerBuiltInTypes } from "../../types/register-built-in-types";
 import { Types } from "../../types/types";
-import type { CompiledQuery } from "./query";
 
 class NoopExceptionConverter implements ExceptionConverter {
   public convert(error: unknown, context: ExceptionConverterContext): DriverException {
@@ -30,8 +31,8 @@ class NoopExceptionConverter implements ExceptionConverter {
 }
 
 class CaptureConnection implements DriverConnection {
-  public latestQuery: CompiledQuery | null = null;
-  public latestStatement: CompiledQuery | null = null;
+  public latestQuery: Query | null = null;
+  public latestStatement: Query | null = null;
 
   public async prepare(sql: string) {
     const boundValues = new Map<string | number, unknown>();

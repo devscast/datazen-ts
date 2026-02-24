@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { type Driver, type DriverConnection } from "../../driver";
+import type { Driver } from "../../driver";
 import type { ExceptionConverter } from "../../driver/api/exception-converter";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { MalformedDsnException } from "../../exception/malformed-dsn-exception";
 import { DsnParser } from "../../tools/dsn-parser";
 

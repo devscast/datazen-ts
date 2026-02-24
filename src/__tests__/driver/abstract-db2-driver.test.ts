@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { StaticServerVersionProvider } from "../../connection/static-server-version-provider";
-import type { DriverConnection } from "../../driver";
 import { AbstractDB2Driver } from "../../driver/abstract-db2-driver";
 import { ExceptionConverter as IBMDB2ExceptionConverter } from "../../driver/api/ibmdb2/exception-converter";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { DB2Platform } from "../../platforms/db2-platform";
 
 class TestDB2Driver extends AbstractDB2Driver {

@@ -1,20 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
-import { type Driver, type DriverConnection } from "../../driver";
+import { type Driver } from "../../driver";
 import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
   ExceptionConverter,
   ExceptionConverterContext,
 } from "../../driver/api/exception-converter";
 import { ArrayResult } from "../../driver/array-result";
+import type { Connection as DriverConnection } from "../../driver/connection";
 import { DriverManager } from "../../driver-manager";
 import { DriverException } from "../../exception/driver-exception";
 import type { Logger } from "../../logging/logger";
 import { Middleware } from "../../logging/middleware";
 import { ParameterType } from "../../parameter-type";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import type { CompiledQuery } from "./query";
+import type { Query } from "../../query";
 
 interface LogEntry {
   level: "debug" | "error" | "info" | "warn";
@@ -57,7 +58,7 @@ class NoopExceptionConverter implements ExceptionConverter {
 class SpyConnection implements DriverConnection {
   public readonly queriedSql: string[] = [];
   public readonly execSql: string[] = [];
-  public readonly preparedExecutions: CompiledQuery[] = [];
+  public readonly preparedExecutions: Query[] = [];
   public beginCalls = 0;
   public closeCalls = 0;
   public commitCalls = 0;
