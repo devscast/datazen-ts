@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EasyConnectString } from "../../driver/abstract-oracle-driver/easy-connect-string";
+import { EasyConnectString } from "../../../driver/abstract-oracle-driver/easy-connect-string";
 
 describe("EasyConnectString", () => {
   it("renders nested array parameters", () => {
