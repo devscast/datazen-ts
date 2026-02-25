@@ -49,7 +49,8 @@ const doctrineTopLevelDirectoryCases: DoctrineTopLevelDirectoryCase[] = [
   {
     doctrineDir: "Functional",
     expectedTestDir: "src/__tests__/functional",
-    excludedReason: "Cross-driver functional integration matrix is not ported to Vitest yet.",
+    excludedReason:
+      "Functional suite is only partially ported so far; the cross-driver integration matrix is not fully mirrored in Vitest yet.",
   },
   {
     doctrineDir: "Logging",
@@ -119,8 +120,7 @@ const doctrineRootFileCases: DoctrineRootFileCase[] = [
   },
   {
     doctrineFile: "TestUtil.php",
-    excludedReason:
-      "PHP global/bootstrap database test utility is PHP-specific and not ported to Node/Vitest.",
+    expectedAnyOf: ["src/__tests__/test-util.ts"],
   },
 ];
 

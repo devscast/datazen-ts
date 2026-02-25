@@ -4,6 +4,34 @@ import path from "node:path";
 const rootDir = process.cwd();
 const doctrineTestsDir = path.join(rootDir, "references", "dbal-full", "tests");
 const datazenTestsDir = path.join(rootDir, "src", "__tests__");
+const portedFunctionalFiles = new Set([
+  "Functional/AutoIncrementColumnTest.php",
+  "Functional/BinaryDataAccessTest.php",
+  "Functional/BlobTest.php",
+  "Functional/BooleanBindingTest.php",
+  "Functional/Connection/FetchEmptyTest.php",
+  "Functional/Connection/FetchTest.php",
+  "Functional/Connection/ConnectionLostTest.php",
+  "Functional/ConnectionTest.php",
+  "Functional/DataAccessTest.php",
+  "Functional/ExceptionTest.php",
+  "Functional/FetchBooleanTest.php",
+  "Functional/ForeignKeyConstraintViolationsTest.php",
+  "Functional/ForeignKeyExceptionTest.php",
+  "Functional/LikeWildcardsEscapingTest.php",
+  "Functional/ModifyLimitQueryTest.php",
+  "Functional/NamedParametersTest.php",
+  "Functional/PortabilityTest.php",
+  "Functional/PrimaryReadReplicaConnectionTest.php",
+  "Functional/ResultMetadataTest.php",
+  "Functional/ResultTest.php",
+  "Functional/StatementTest.php",
+  "Functional/TemporaryTableTest.php",
+  "Functional/TransactionTest.php",
+  "Functional/TypeConversionTest.php",
+  "Functional/UniqueConstraintViolationsTest.php",
+  "Functional/WriteTest.php",
+]);
 
 if (!existsSync(doctrineTestsDir)) {
   console.error("Missing Doctrine reference tests at references/dbal-full/tests");
@@ -75,11 +103,13 @@ const exclusionRules = [
   },
   {
     match: (rel) => rel === "TestUtil.php",
-    reason: "PHP global/bootstrap test utility (Node/Vitest harness differs).",
+    reason:
+      "Doctrine TestUtil also contains PHP bootstrap/connection helpers; Datazen ports selected utility behavior in src/__tests__/test-util.ts but does not count helper files in the .test.ts parity report.",
   },
   {
-    match: (rel) => rel.startsWith("Functional/"),
-    reason: "Cross-driver functional integration suite not ported to Vitest yet.",
+    match: (rel) => rel.startsWith("Functional/") && !portedFunctionalFiles.has(rel),
+    reason:
+      "Most of the cross-driver functional integration suite is not ported to Vitest yet (partial SQLite functional bootstrap only).",
   },
   {
     match: (rel) => rel.startsWith("Cache/"),
