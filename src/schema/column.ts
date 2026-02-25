@@ -5,6 +5,7 @@ import { ColumnEditor } from "./column-editor";
 import { UnknownColumnOption } from "./exception/unknown-column-option";
 import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
 import { Parsers } from "./name/parsers";
+import { UnqualifiedName } from "./name/unqualified-name";
 
 export type ColumnOptions = Record<string, unknown>;
 
@@ -99,6 +100,13 @@ export class Column extends AbstractAsset {
 
   public getType(): Type {
     return this.type;
+  }
+
+  public getObjectName(): UnqualifiedName {
+    const parsableName = this.isQuoted()
+      ? `"${this.getName().replaceAll('"', '""')}"`
+      : this.getName();
+    return this.getNameParser().parse(parsableName);
   }
 
   public setLength(length: number | null): this {

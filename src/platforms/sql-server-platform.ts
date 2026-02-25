@@ -7,6 +7,7 @@ import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
 import type { KeywordList } from "./keywords/keyword-list";
 import { SQLServerKeywords } from "./keywords/sql-server-keywords";
+import { SQLServerMetadataProvider } from "./sqlserver/sql-server-metadata-provider";
 import { TrimMode } from "./trim-mode";
 
 export class SQLServerPlatform extends AbstractPlatform {
@@ -97,6 +98,10 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   public createSchemaManager(connection: Connection): SQLServerSchemaManager {
     return new SQLServerSchemaManager(connection, this);
+  }
+
+  public override createMetadataProvider(connection: Connection): SQLServerMetadataProvider {
+    return new SQLServerMetadataProvider(connection, this);
   }
 
   public getLocateExpression(

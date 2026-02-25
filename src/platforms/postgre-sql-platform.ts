@@ -5,6 +5,7 @@ import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import type { KeywordList } from "./keywords/keyword-list";
 import { PostgreSQLKeywords } from "./keywords/postgresql-keywords";
+import { PostgreSQLMetadataProvider } from "./postgresql/postgre-sql-metadata-provider";
 
 export class PostgreSQLPlatform extends AbstractPlatform {
   protected useBooleanTrueFalseStrings = false;
@@ -98,6 +99,10 @@ export class PostgreSQLPlatform extends AbstractPlatform {
 
   public createSchemaManager(connection: Connection): PostgreSQLSchemaManager {
     return new PostgreSQLSchemaManager(connection, this);
+  }
+
+  public override createMetadataProvider(connection: Connection): PostgreSQLMetadataProvider {
+    return new PostgreSQLMetadataProvider(connection, this);
   }
 
   private convertSingleBooleanValue(

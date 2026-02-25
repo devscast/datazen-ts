@@ -4,7 +4,7 @@ import { PrimaryKeyConstraint } from "./primary-key-constraint";
 export class PrimaryKeyConstraintEditor {
   private name: string | null = null;
   private columnNames: string[] = [];
-  private clustered = false;
+  private clustered = true;
 
   public setName(name: string | null): this {
     this.name = name;

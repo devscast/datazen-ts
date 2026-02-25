@@ -1,4 +1,3 @@
-import { FetchUtils } from "../driver/fetch-utils";
 import type { Result as DriverResult } from "../driver/result";
 import { Converter } from "./converter";
 
@@ -42,23 +41,15 @@ export class Result implements DriverResult {
   }
 
   public fetchAllNumeric<T = unknown>(): T[][] {
-    return FetchUtils.fetchAllNumeric<T>(this);
+    return this.converter.convertAllNumeric(this.result.fetchAllNumeric<T>());
   }
 
   public fetchAllAssociative<T extends Record<string, unknown> = Record<string, unknown>>(): T[] {
-    const rows: T[] = [];
-    let row = this.fetchAssociative<T>();
-
-    while (row !== false) {
-      rows.push(row);
-      row = this.fetchAssociative<T>();
-    }
-
-    return rows;
+    return this.converter.convertAllAssociative(this.result.fetchAllAssociative<T>());
   }
 
   public fetchFirstColumn<T = unknown>(): T[] {
-    return FetchUtils.fetchFirstColumn<T>(this);
+    return this.converter.convertFirstColumn(this.result.fetchFirstColumn<T>());
   }
 
   public rowCount(): number | string {

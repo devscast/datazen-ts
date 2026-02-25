@@ -1,4 +1,5 @@
 import { AbstractAsset } from "./abstract-asset";
+import { OptionallyQualifiedName } from "./name/optionally-qualified-name";
 import type { OptionallyQualifiedNameParser } from "./name/parser/optionally-qualified-name-parser";
 import { Parsers } from "./name/parsers";
 import { SequenceEditor } from "./sequence-editor";
@@ -24,6 +25,10 @@ export class Sequence extends AbstractAsset {
 
   public getCacheSize(): number | null {
     return this.cacheSize;
+  }
+
+  public getObjectName(): OptionallyQualifiedName {
+    return this.getNameParser().parse(this.getName());
   }
 
   public setAllocationSize(allocationSize: number): this {

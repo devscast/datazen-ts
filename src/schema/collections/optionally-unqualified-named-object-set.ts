@@ -5,32 +5,36 @@ import { ObjectSet } from "./object-set";
 export class OptionallyUnqualifiedNamedObjectSet<TObject extends { getObjectName(): string | null }>
   implements ObjectSet<TObject>
 {
-  private readonly namedValues = new Map<string, TObject>();
-  private readonly unnamedValues: TObject[] = [];
+  private readonly values: TObject[] = [];
+
+  constructor(...objects: TObject[]) {
+    for (const object of objects) {
+      this.add(object);
+    }
+  }
 
   public add(object: TObject): this {
     const name = object.getObjectName();
 
-    if (name === null) {
-      this.unnamedValues.push(object);
-      return this;
-    }
-
-    const key = this.getKey(name);
-    if (this.namedValues.has(key)) {
+    if (name !== null && this.findIndexByName(name) >= 0) {
       throw ObjectAlreadyExists.new(name);
     }
 
-    this.namedValues.set(key, object);
+    this.values.push(object);
     return this;
   }
 
   public hasByName(name: string): boolean {
-    return this.namedValues.has(this.getKey(name));
+    return this.findIndexByName(name) >= 0;
   }
 
   public getByName(name: string): TObject {
-    const object = this.namedValues.get(this.getKey(name));
+    const index = this.findIndexByName(name);
+    if (index < 0) {
+      throw ObjectDoesNotExist.new(name);
+    }
+
+    const object = this.values[index];
     if (object === undefined) {
       throw ObjectDoesNotExist.new(name);
     }
@@ -39,18 +43,21 @@ export class OptionallyUnqualifiedNamedObjectSet<TObject extends { getObjectName
   }
 
   public removeByName(name: string): void {
-    const key = this.getKey(name);
-    if (!this.namedValues.delete(key)) {
+    const index = this.findIndexByName(name);
+    if (index < 0) {
       throw ObjectDoesNotExist.new(name);
     }
+
+    this.values.splice(index, 1);
   }
 
   public isEmpty(): boolean {
-    return this.namedValues.size === 0 && this.unnamedValues.length === 0;
+    return this.values.length === 0;
   }
 
   public get(name: string | { toString(): string }): TObject | null {
-    return this.namedValues.get(this.getKey(name)) ?? null;
+    const index = this.findIndexByName(String(name));
+    return index >= 0 ? (this.values[index] ?? null) : null;
   }
 
   public remove(name: string | { toString(): string }): void {
@@ -61,23 +68,42 @@ export class OptionallyUnqualifiedNamedObjectSet<TObject extends { getObjectName
     name: string | { toString(): string },
     modification: (object: TObject) => TObject,
   ): void {
-    const key = this.getKey(name);
-    const current = this.namedValues.get(key);
+    const oldName = String(name);
+    const index = this.findIndexByName(oldName);
 
-    if (current === undefined) {
-      throw ObjectDoesNotExist.new(String(name));
+    if (index < 0) {
+      throw ObjectDoesNotExist.new(oldName);
     }
 
-    this.replace(key, current, modification);
+    const current = this.values[index];
+    if (current === undefined) {
+      throw ObjectDoesNotExist.new(oldName);
+    }
+
+    const next = modification(current);
+    const nextName = next.getObjectName();
+
+    if (
+      nextName !== null &&
+      this.values.some(
+        (candidate, candidateIndex) =>
+          candidateIndex !== index &&
+          candidate.getObjectName() !== null &&
+          this.getKey(candidate.getObjectName() ?? "") === this.getKey(nextName),
+      )
+    ) {
+      throw ObjectAlreadyExists.new(nextName);
+    }
+
+    this.values[index] = next;
   }
 
   public clear(): void {
-    this.namedValues.clear();
-    this.unnamedValues.length = 0;
+    this.values.length = 0;
   }
 
   public toArray(): TObject[] {
-    return [...this.namedValues.values(), ...this.unnamedValues];
+    return [...this.values];
   }
 
   public toList(): TObject[] {
@@ -89,22 +115,15 @@ export class OptionallyUnqualifiedNamedObjectSet<TObject extends { getObjectName
   }
 
   public getIterator(): Iterator<TObject> {
-    return this.toArray()[Symbol.iterator]();
+    return this.values[Symbol.iterator]();
   }
 
-  private removeByKey(key: string): void {
-    this.namedValues.delete(key);
-  }
-
-  private replace(key: string, current: TObject, modification: (object: TObject) => TObject): void {
-    this.removeByKey(key);
-
-    try {
-      this.add(modification(current));
-    } catch (error) {
-      this.add(current);
-      throw error;
-    }
+  private findIndexByName(name: string): number {
+    const key = this.getKey(name);
+    return this.values.findIndex((object) => {
+      const objectName = object.getObjectName();
+      return objectName !== null && this.getKey(objectName) === key;
+    });
   }
 
   private getKey(name: string | { toString(): string }): string {
