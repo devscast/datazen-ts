@@ -6,6 +6,7 @@ import { AbstractPlatform } from "./abstract-platform";
 import { NotSupported } from "./exception/not-supported";
 import type { KeywordList } from "./keywords/keyword-list";
 import { SQLiteKeywords } from "./keywords/sqlite-keywords";
+import { SQLiteMetadataProvider } from "./sqlite/sqlite-metadata-provider";
 
 export class SQLitePlatform extends AbstractPlatform {
   protected initializeDatazenTypeMappings(): Record<string, string> {
@@ -80,5 +81,9 @@ export class SQLitePlatform extends AbstractPlatform {
 
   public createSchemaManager(connection: Connection): SQLiteSchemaManager {
     return new SQLiteSchemaManager(connection, this);
+  }
+
+  public override createMetadataProvider(connection: Connection): SQLiteMetadataProvider {
+    return new SQLiteMetadataProvider(connection, this);
   }
 }

@@ -10,6 +10,17 @@ import type { KeywordList } from "./keywords/keyword-list";
 import { MySQLKeywords } from "./keywords/mysql-keywords";
 
 export abstract class AbstractMySQLPlatform extends AbstractPlatform {
+  public override getCreateTableSQL(table: {
+    getColumns(): readonly unknown[];
+    getName(): string;
+  }): string[] {
+    return this.appendMySQLTableOptions(super.getCreateTableSQL(table), table);
+  }
+
+  protected override getCreateTableWithoutForeignKeysSQL(table: unknown): string[] {
+    return this.appendMySQLTableOptions(super.getCreateTableWithoutForeignKeysSQL(table), table);
+  }
+
   protected initializeDatazenTypeMappings(): Record<string, string> {
     return {
       bigint: Types.BIGINT,
@@ -142,5 +153,36 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
 
   public createSelectSQLBuilder(): SelectSQLBuilder {
     return new DefaultSelectSQLBuilder(this, "FOR UPDATE", null);
+  }
+
+  private appendMySQLTableOptions(sql: string[], table: unknown): string[] {
+    if (sql.length === 0) {
+      return sql;
+    }
+
+    const options = this.readTableOptions(table);
+    const charset = options.charset;
+
+    if (typeof charset === "string" && charset.length > 0) {
+      sql[0] = `${sql[0]} DEFAULT CHARACTER SET ${charset}`;
+    }
+
+    return sql;
+  }
+
+  private readTableOptions(table: unknown): Record<string, unknown> {
+    if (table === null || typeof table !== "object") {
+      return {};
+    }
+
+    const getOptions = (table as { getOptions?: () => unknown }).getOptions;
+    if (typeof getOptions !== "function") {
+      return {};
+    }
+
+    const options = getOptions.call(table);
+    return options !== null && typeof options === "object"
+      ? { ...(options as Record<string, unknown>) }
+      : {};
   }
 }

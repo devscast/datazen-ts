@@ -2,15 +2,20 @@ import { ObjectAlreadyExists } from "./exception/object-already-exists";
 import { ObjectDoesNotExist } from "./exception/object-does-not-exist";
 import { ObjectSet } from "./object-set";
 
-export class UnqualifiedNamedObjectSet<TObject extends { getName(): string }>
-  implements ObjectSet<TObject>
-{
+export class UnqualifiedNamedObjectSet<TObject extends object> implements ObjectSet<TObject> {
   private readonly values = new Map<string, TObject>();
 
+  constructor(...objects: TObject[]) {
+    for (const object of objects) {
+      this.add(object);
+    }
+  }
+
   public add(object: TObject): this {
-    const key = normalizeName(object.getName());
+    const objectName = getObjectName(object);
+    const key = normalizeName(objectName);
     if (this.values.has(key)) {
-      throw ObjectAlreadyExists.new(object.getName());
+      throw ObjectAlreadyExists.new(objectName);
     }
 
     this.values.set(key, object);
@@ -84,7 +89,8 @@ export class UnqualifiedNamedObjectSet<TObject extends { getName(): string }>
   }
 
   private replace(oldKey: string, object: TObject): void {
-    const newKey = this.getKey(object.getName());
+    const objectName = getObjectName(object);
+    const newKey = this.getKey(objectName);
 
     if (newKey === oldKey) {
       this.values.set(oldKey, object);
@@ -92,7 +98,7 @@ export class UnqualifiedNamedObjectSet<TObject extends { getName(): string }>
     }
 
     if (this.values.has(newKey)) {
-      throw ObjectAlreadyExists.new(object.getName());
+      throw ObjectAlreadyExists.new(objectName);
     }
 
     const entries = [...this.values.entries()];
@@ -116,4 +122,21 @@ export class UnqualifiedNamedObjectSet<TObject extends { getName(): string }>
 
 function normalizeName(name: string): string {
   return name.toLowerCase();
+}
+
+function getObjectName(object: object): string {
+  const candidate = object as {
+    getObjectName?: () => unknown;
+    getName?: () => unknown;
+  };
+
+  if (typeof candidate.getObjectName === "function") {
+    return String(candidate.getObjectName());
+  }
+
+  if (typeof candidate.getName === "function") {
+    return String(candidate.getName());
+  }
+
+  throw new TypeError("UnqualifiedNamedObjectSet items must expose getObjectName() or getName().");
 }

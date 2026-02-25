@@ -1,5 +1,6 @@
 import { Column } from "./column";
 import { ColumnDiff } from "./column-diff";
+import { InvalidState } from "./exception/invalid-state";
 import { ForeignKeyConstraint } from "./foreign-key-constraint";
 import { Index } from "./index";
 import { Table } from "./table";
@@ -129,7 +130,13 @@ export class TableDiff {
   }
 
   public getDroppedForeignKeyConstraintNames(): string[] {
-    return this.droppedForeignKeys.map((constraint) => constraint.getName());
+    const names = this.droppedForeignKeys.map((constraint) => constraint.getName());
+
+    if (names.some((name) => name.length === 0)) {
+      throw InvalidState.tableDiffContainsUnnamedDroppedForeignKeyConstraints();
+    }
+
+    return names;
   }
 
   public isEmpty(): boolean {

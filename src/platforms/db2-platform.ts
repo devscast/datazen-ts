@@ -6,6 +6,7 @@ import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
+import { Db2MetadataProvider } from "./db2/db2-metadata-provider";
 import { NotSupported } from "./exception/not-supported";
 import { DB2Keywords } from "./keywords/db2-keywords";
 import type { KeywordList } from "./keywords/keyword-list";
@@ -117,6 +118,10 @@ export class DB2Platform extends AbstractPlatform {
 
   public createSchemaManager(connection: Connection): DB2SchemaManager {
     return new DB2SchemaManager(connection, this);
+  }
+
+  public override createMetadataProvider(connection: Connection): Db2MetadataProvider {
+    return new Db2MetadataProvider(connection, this);
   }
 
   public getDummySelectSQL(expression = "1"): string {

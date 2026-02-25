@@ -33,6 +33,10 @@ export class SequenceEditor {
   }
 
   public setCacheSize(cacheSize: number | null): this {
+    if (cacheSize !== null && cacheSize < 0) {
+      throw InvalidSequenceDefinition.fromNegativeCacheSize(cacheSize);
+    }
+
     this.cacheSize = cacheSize;
     return this;
   }

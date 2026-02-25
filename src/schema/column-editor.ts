@@ -1,3 +1,4 @@
+import { registerBuiltInTypes } from "../types/register-built-in-types";
 import { Type } from "../types/type";
 import { Column } from "./column";
 import { InvalidColumnDefinition } from "./exception/invalid-column-definition";
@@ -26,6 +27,7 @@ export class ColumnEditor {
   }
 
   public setTypeName(typeName: string): this {
+    registerBuiltInTypes();
     this.type = Type.getType(typeName);
     return this;
   }

@@ -63,6 +63,17 @@ export class TableEditor {
     const editor = column.edit();
     modification(editor);
     const modifiedColumn = editor.create();
+
+    if (
+      !this.namesEqual(column.getName(), modifiedColumn.getName()) &&
+      this.columns.some(
+        (existing, existingIndex) =>
+          existingIndex !== index && this.namesEqual(existing.getName(), modifiedColumn.getName()),
+      )
+    ) {
+      throw InvalidTableModification.columnAlreadyExists(this.name, modifiedColumn.getName());
+    }
+
     this.columns[index] = modifiedColumn;
 
     if (!this.namesEqual(column.getName(), modifiedColumn.getName())) {
@@ -128,6 +139,14 @@ export class TableEditor {
       throw InvalidTableModification.indexDoesNotExist(this.name, oldIndexName);
     }
 
+    if (
+      this.indexes.some(
+        (candidate) => candidate !== index && this.namesEqual(candidate.getName(), newIndexName),
+      )
+    ) {
+      throw InvalidTableModification.indexAlreadyExists(this.name, newIndexName);
+    }
+
     const replacement = index.edit().setName(newIndexName).create();
     const position = this.indexes.indexOf(index);
     this.indexes[position] = replacement;
@@ -155,6 +174,7 @@ export class TableEditor {
   }
 
   public setPrimaryKeyConstraint(primaryKeyConstraint: PrimaryKeyConstraint | null): this {
+    this.indexes = this.indexes.filter((index) => !index.isPrimary());
     this.primaryKeyConstraint = primaryKeyConstraint;
     return this;
   }
@@ -183,10 +203,11 @@ export class TableEditor {
   public addUniqueConstraint(uniqueConstraint: UniqueConstraint): this {
     const objectName = uniqueConstraint.getObjectName();
     if (
+      objectName !== null &&
       objectName.length > 0 &&
       this.uniqueConstraints.some(
         (existing) =>
-          existing.getObjectName().length > 0 &&
+          existing.getObjectName() !== null &&
           this.namesEqual(existing.getObjectName(), objectName),
       )
     ) {
@@ -280,8 +301,7 @@ export class TableEditor {
     });
 
     if (this.primaryKeyConstraint !== null) {
-      const indexName = this.primaryKeyConstraint.getObjectName() ?? undefined;
-      table.setPrimaryKey(this.primaryKeyConstraint.getColumnNames(), indexName);
+      table.addPrimaryKeyConstraint(this.primaryKeyConstraint);
     }
 
     for (const uniqueConstraint of this.uniqueConstraints) {

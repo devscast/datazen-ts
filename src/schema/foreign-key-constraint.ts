@@ -9,6 +9,7 @@ import { Index } from "./index";
 import { OptionallyQualifiedName } from "./name/optionally-qualified-name";
 import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
 import { Parsers } from "./name/parsers";
+import { UnqualifiedName } from "./name/unqualified-name";
 
 export class ForeignKeyConstraint extends AbstractAsset {
   private readonly localColumns: Identifier[];
@@ -31,6 +32,16 @@ export class ForeignKeyConstraint extends AbstractAsset {
     return this.localTableName;
   }
 
+  public getObjectName(): UnqualifiedName | null {
+    const name = this.getName();
+    if (name.length === 0) {
+      return null;
+    }
+
+    const parsableName = this.isQuoted() ? `"${name.replaceAll('"', '""')}"` : name;
+    return this.getNameParser().parse(parsableName);
+  }
+
   public setLocalTableName(localTableName: string): this {
     this.localTableName = localTableName;
     return this;
@@ -41,15 +52,7 @@ export class ForeignKeyConstraint extends AbstractAsset {
   }
 
   public getReferencedTableName(): OptionallyQualifiedName {
-    const [first, ...rest] = this.foreignTableName.split(".");
-    if (rest.length === 0) {
-      return OptionallyQualifiedName.unquoted(this.trimQuotes(first ?? ""));
-    }
-
-    return OptionallyQualifiedName.unquoted(
-      this.trimQuotes(rest.join(".")),
-      this.trimQuotes(first ?? ""),
-    );
+    return Parsers.getOptionallyQualifiedNameParser().parse(this.foreignTableName);
   }
 
   public getColumns(): string[] {
@@ -98,13 +101,11 @@ export class ForeignKeyConstraint extends AbstractAsset {
   }
 
   public onUpdate(): string | null {
-    const value = this.options.onUpdate;
-    return typeof value === "string" ? value : null;
+    return normalizeReferentialActionString(this.options.onUpdate);
   }
 
   public onDelete(): string | null {
-    const value = this.options.onDelete;
-    return typeof value === "string" ? value : null;
+    return normalizeReferentialActionString(this.options.onDelete);
   }
 
   public getOnUpdateAction(): ReferentialAction {
@@ -179,6 +180,19 @@ export class ForeignKeyConstraint extends AbstractAsset {
 
 function normalize(identifier: string): string {
   return identifier.replaceAll(/[`"[\]]/g, "").toLowerCase();
+}
+
+function normalizeReferentialActionString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.toUpperCase();
+  if (normalized === ReferentialAction.RESTRICT) {
+    return ReferentialAction.NO_ACTION;
+  }
+
+  return normalized;
 }
 
 function parseMatchType(value: unknown): MatchType {

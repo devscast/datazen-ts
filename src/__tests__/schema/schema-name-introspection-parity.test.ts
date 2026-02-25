@@ -295,7 +295,7 @@ describe("Schema name + introspection parity (best effort)", () => {
     expect(fk.getReferencingColumnNames()).toEqual(["role_id", "tenant_id"]);
     expect(fk.getReferencedColumnNames()).toEqual(["id", "tenant_id"]);
     expect(fk.onUpdate()).toBe(ReferentialAction.CASCADE);
-    expect(fk.onDelete()).toBe(ReferentialAction.RESTRICT);
+    expect(fk.onDelete()).toBe(ReferentialAction.NO_ACTION);
     expect(fk.getOption("match")).toBe(MatchType.SIMPLE);
     expect(fk.getOption("deferrability")).toBe(Deferrability.DEFERRABLE);
 

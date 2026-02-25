@@ -9,7 +9,7 @@ export abstract class AbstractOptionallyNamedObject
 
   constructor(name: string | null) {
     super(name ?? "");
-    this.hasName = name !== null;
+    this.hasName = name !== null && name.length > 0;
   }
 
   public getObjectName(): string | null {
@@ -21,7 +21,7 @@ export abstract class AbstractOptionallyNamedObject
   }
 
   protected setName(name: string | null): void {
-    if (name === null) {
+    if (name === null || name.length === 0) {
       this.hasName = false;
       this._setName("");
       return;

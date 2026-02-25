@@ -108,8 +108,14 @@ export abstract class AbstractSchemaManager {
   }
 
   public async listTableForeignKeys(table: string): Promise<ForeignKeyConstraint[]> {
-    const introspected = await this.introspectTable(table);
-    return introspected.getForeignKeys();
+    try {
+      const databaseName = this.getDatabase("listTableForeignKeys");
+      const rows = await this.fetchForeignKeyColumns(databaseName, table);
+      return this._getPortableTableForeignKeysList(rows);
+    } catch {
+      const introspected = await this.introspectTable(table);
+      return introspected.getForeignKeys();
+    }
   }
 
   public async introspectDatabaseNames(): Promise<UnqualifiedName[]> {

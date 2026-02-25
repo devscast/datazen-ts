@@ -12,6 +12,7 @@ import { PrimaryKeyAlreadyExists } from "./exception/primary-key-already-exists"
 import { UniqueConstraintDoesNotExist } from "./exception/unique-constraint-does-not-exist";
 import { ForeignKeyConstraint } from "./foreign-key-constraint";
 import { Index } from "./index";
+import { OptionallyQualifiedName } from "./name/optionally-qualified-name";
 import type { OptionallyQualifiedNameParser } from "./name/parser/optionally-qualified-name-parser";
 import { Parsers } from "./name/parsers";
 import { PrimaryKeyConstraint } from "./primary-key-constraint";
@@ -90,6 +91,17 @@ export class Table extends AbstractAsset {
 
   public getColumns(): Column[] {
     return Object.values(this.columns);
+  }
+
+  public getObjectName(): OptionallyQualifiedName {
+    const parsableName = this.isQuoted()
+      ? this.getName()
+          .split(".")
+          .map((part) => `"${part.replaceAll('"', '""')}"`)
+          .join(".")
+      : this.getName();
+
+    return this.getNameParser().parse(parsableName);
   }
 
   public dropColumn(name: string): this {
@@ -320,7 +332,7 @@ export class Table extends AbstractAsset {
   public addUniqueConstraint(uniqueConstraint: UniqueConstraint): this {
     const explicitName = uniqueConstraint.getObjectName();
     const resolvedName =
-      explicitName.length > 0
+      explicitName !== null && explicitName.length > 0
         ? explicitName
         : this._generateIdentifierName(uniqueConstraint.getColumnNames(), "uniq", 30);
 
@@ -329,7 +341,7 @@ export class Table extends AbstractAsset {
       throw IndexAlreadyExists.new(resolvedName, this.getName());
     }
 
-    if (resolvedName !== explicitName && explicitName.length === 0) {
+    if (explicitName === null) {
       uniqueConstraint = uniqueConstraint
         .edit()
         .setName(resolvedName)
@@ -346,7 +358,7 @@ export class Table extends AbstractAsset {
     if (!hasBackingIndex) {
       this.addUniqueIndex(
         uniqueConstraint.getColumnNames(),
-        uniqueConstraint.getObjectName() || undefined,
+        uniqueConstraint.getObjectName() ?? undefined,
         uniqueConstraint.getOptions(),
       );
     }
@@ -472,6 +484,11 @@ export class Table extends AbstractAsset {
 
     if (this.schemaConfig !== null) {
       editor.setConfiguration(this.schemaConfig);
+    }
+
+    const primaryKeyConstraint = this.getPrimaryKeyConstraint();
+    if (primaryKeyConstraint !== null) {
+      editor.setPrimaryKeyConstraint(primaryKeyConstraint);
     }
 
     return editor;

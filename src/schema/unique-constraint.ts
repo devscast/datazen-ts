@@ -25,8 +25,8 @@ export class UniqueConstraint {
     }
   }
 
-  public getObjectName(): string {
-    return this.name;
+  public getObjectName(): string | null {
+    return this.name.length > 0 ? this.name : null;
   }
 
   public getColumnNames(): string[] {
@@ -84,7 +84,7 @@ export class UniqueConstraint {
 
   public edit(): UniqueConstraintEditor {
     return UniqueConstraint.editor()
-      .setName(this.name)
+      .setName(this.getObjectName())
       .setColumnNames(...this.getColumnNames())
       .setFlags(...this.getFlags())
       .setOptions(this.getOptions());

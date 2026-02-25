@@ -9,31 +9,34 @@ import type { TableMetadataRow } from "./table-metadata-row";
 import type { ViewMetadataRow } from "./view-metadata-row";
 
 export interface MetadataProvider {
-  getAllDatabaseNames(): Iterable<DatabaseMetadataRow>;
-  getAllSchemaNames(): Iterable<SchemaMetadataRow>;
-  getAllTableNames(): Iterable<TableMetadataRow>;
-  getTableColumnsForAllTables(): Iterable<TableColumnMetadataRow>;
+  getAllDatabaseNames(): Promise<DatabaseMetadataRow[]>;
+  getAllSchemaNames(): Promise<SchemaMetadataRow[]>;
+  getAllTableNames(): Promise<TableMetadataRow[]>;
+  getTableColumnsForAllTables(): Promise<TableColumnMetadataRow[]>;
   getTableColumnsForTable(
     schemaName: string | null,
     tableName: string,
-  ): Iterable<TableColumnMetadataRow>;
-  getIndexColumnsForAllTables(): Iterable<IndexColumnMetadataRow>;
+  ): Promise<TableColumnMetadataRow[]>;
+  getIndexColumnsForAllTables(): Promise<IndexColumnMetadataRow[]>;
   getIndexColumnsForTable(
     schemaName: string | null,
     tableName: string,
-  ): Iterable<IndexColumnMetadataRow>;
-  getPrimaryKeyConstraintColumnsForAllTables(): Iterable<PrimaryKeyConstraintColumnRow>;
+  ): Promise<IndexColumnMetadataRow[]>;
+  getPrimaryKeyConstraintColumnsForAllTables(): Promise<PrimaryKeyConstraintColumnRow[]>;
   getPrimaryKeyConstraintColumnsForTable(
     schemaName: string | null,
     tableName: string,
-  ): Iterable<PrimaryKeyConstraintColumnRow>;
-  getForeignKeyConstraintColumnsForAllTables(): Iterable<ForeignKeyConstraintColumnMetadataRow>;
+  ): Promise<PrimaryKeyConstraintColumnRow[]>;
+  getForeignKeyConstraintColumnsForAllTables(): Promise<ForeignKeyConstraintColumnMetadataRow[]>;
   getForeignKeyConstraintColumnsForTable(
     schemaName: string | null,
     tableName: string,
-  ): Iterable<ForeignKeyConstraintColumnMetadataRow>;
-  getTableOptionsForAllTables(): Iterable<TableMetadataRow>;
-  getTableOptionsForTable(schemaName: string | null, tableName: string): Iterable<TableMetadataRow>;
-  getAllViews(): Iterable<ViewMetadataRow>;
-  getAllSequences(): Iterable<SequenceMetadataRow>;
+  ): Promise<ForeignKeyConstraintColumnMetadataRow[]>;
+  getTableOptionsForAllTables(): Promise<TableMetadataRow[]>;
+  getTableOptionsForTable(
+    schemaName: string | null,
+    tableName: string,
+  ): Promise<TableMetadataRow[]>;
+  getAllViews(): Promise<ViewMetadataRow[]>;
+  getAllSequences(): Promise<SequenceMetadataRow[]>;
 }

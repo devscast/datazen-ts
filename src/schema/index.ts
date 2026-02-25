@@ -6,6 +6,7 @@ import { IndexedColumn } from "./index/indexed-column";
 import { IndexEditor } from "./index-editor";
 import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
 import { Parsers } from "./name/parsers";
+import { UnqualifiedName } from "./name/unqualified-name";
 
 export class Index extends AbstractAsset {
   private readonly columns: Identifier[] = [];
@@ -39,6 +40,13 @@ export class Index extends AbstractAsset {
     return this.columns.map((column) => column.getName());
   }
 
+  public getObjectName(): UnqualifiedName {
+    const parsableName = this.isQuoted()
+      ? `"${this.getName().replaceAll('"', '""')}"`
+      : this.getName();
+    return this.getNameParser().parse(parsableName);
+  }
+
   public getQuotedColumns(platform: AbstractPlatform): string[] {
     const lengths = Array.isArray(this.options.lengths) ? this.options.lengths : [];
 
@@ -64,7 +72,12 @@ export class Index extends AbstractAsset {
     return this.columns.map((column, index) => {
       const rawLength = lengths[index];
       const length = typeof rawLength === "number" ? rawLength : null;
-      return new IndexedColumn(column.getName(), length);
+      return new IndexedColumn(
+        column.isQuoted()
+          ? UnqualifiedName.quoted(column.getName())
+          : UnqualifiedName.unquoted(column.getName()),
+        length,
+      );
     });
   }
 
@@ -89,7 +102,7 @@ export class Index extends AbstractAsset {
   }
 
   public getPredicate(): string | null {
-    const predicate = this.options.where;
+    const predicate = this.readOption("where");
     return typeof predicate === "string" && predicate.length > 0 ? predicate : null;
   }
 
@@ -135,7 +148,7 @@ export class Index extends AbstractAsset {
       return false;
     }
 
-    if (this.isPrimary() !== index.isPrimary()) {
+    if (this.isPrimary() && !index.isPrimary()) {
       return false;
     }
 
@@ -160,11 +173,11 @@ export class Index extends AbstractAsset {
   }
 
   public hasOption(name: string): boolean {
-    return Object.hasOwn(this.options, name);
+    return this.readOption(name) !== undefined;
   }
 
   public getOption(name: string): unknown {
-    return this.options[name];
+    return this.readOption(name);
   }
 
   public getOptions(): Record<string, unknown> {
@@ -207,6 +220,19 @@ export class Index extends AbstractAsset {
 
   protected _addColumn(column: string): void {
     this.columns.push(new Identifier(column));
+  }
+
+  private readOption(name: string): unknown {
+    if (Object.hasOwn(this.options, name)) {
+      return this.options[name];
+    }
+
+    const lower = name.toLowerCase();
+    if (Object.hasOwn(this.options, lower)) {
+      return this.options[lower];
+    }
+
+    return undefined;
   }
 }
 
