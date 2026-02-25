@@ -1,4 +1,5 @@
 import type { AbstractPlatform } from "../platforms/abstract-platform";
+import { InvalidState } from "./exception/invalid-state";
 import { InvalidUniqueConstraintDefinition } from "./exception/invalid-unique-constraint-definition";
 import { Identifier } from "./identifier";
 import type { UnqualifiedNameParser } from "./name/parser/unqualified-name-parser";
@@ -30,6 +31,20 @@ export class UniqueConstraint {
   }
 
   public getColumnNames(): string[] {
+    if (this.columns.length === 0) {
+      throw InvalidState.uniqueConstraintHasEmptyColumnNames(this.name);
+    }
+
+    const parser = Parsers.getUnqualifiedNameParser();
+
+    try {
+      for (const column of this.columns) {
+        parser.parse(column.getName());
+      }
+    } catch {
+      throw InvalidState.uniqueConstraintHasInvalidColumnNames(this.name);
+    }
+
     return this.columns.map((column) => column.getName());
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { InvalidState } from "../../schema/exception/invalid-state";
 import { Index } from "../../schema/index";
 import { IndexType } from "../../schema/index/index-type";
 import { UnqualifiedName } from "../../schema/name/unqualified-name";
@@ -126,7 +127,66 @@ describe("Schema/Index (Doctrine parity, supported scenarios)", () => {
     expect(indexedColumns[1]?.getLength()).toBeNull();
   });
 
-  it.skip(
-    "Doctrine deprecation-only and invalid-state index scenarios are tracked but not fully aligned yet",
-  );
+  it("respects partial-index predicates when checking fulfillment", () => {
+    const without = new Index("without", ["col1", "col2"], true, false, [], {});
+    const partial = new Index("partial", ["col1", "col2"], true, false, [], {
+      where: "col1 IS NULL",
+    });
+    const another = new Index("another", ["col1", "col2"], true, false, [], {
+      where: "col1 IS NULL",
+    });
+
+    expect(partial.isFulfilledBy(without)).toBe(false);
+    expect(without.isFulfilledBy(partial)).toBe(false);
+    expect(partial.isFulfilledBy(another)).toBe(true);
+    expect(another.isFulfilledBy(partial)).toBe(true);
+  });
+
+  it.each([
+    [["column"], [], [], true],
+    [["column"], [64], [64], true],
+    [["column"], [32], [64], false],
+    [["column1", "column2"], [32], [undefined, 32], false],
+    [["column1", "column2"], [null, 32], [undefined, 32], true],
+  ])("checks fulfillment with indexed column lengths %#", (columns, lengths1, lengths2, expected) => {
+    const index1 = new Index("index1", columns, false, false, [], { lengths: lengths1 });
+    const index2 = new Index("index2", columns, false, false, [], { lengths: lengths2 });
+
+    expect(index1.isFulfilledBy(index2)).toBe(expected);
+    expect(index2.isFulfilledBy(index1)).toBe(expected);
+  });
+
+  it.each([
+    [() => new Index("idx_empty", []).getIndexedColumns()],
+    [() => new Index("idx_invalid", ["user.name"]).getIndexedColumns()],
+    [() => new Index("primary", ["id"], false, true, [], { lengths: [32] }).getIndexedColumns()],
+    [
+      () =>
+        new Index("idx_non_positive", ["name"], false, false, [], {
+          lengths: [-1],
+        }).getIndexedColumns(),
+    ],
+  ])("throws InvalidState for invalid indexed-column definitions %#", (call) => {
+    expect(call).toThrow(InvalidState);
+  });
+
+  it("accepts numeric-string lengths like Doctrine and coerces them when building indexed columns", () => {
+    const index = new Index("idx_user_name", ["name"], false, false, [], { lengths: ["8"] });
+    expect(index.getIndexedColumns()[0]?.getLength()).toBe(8);
+  });
+
+  it.each([
+    [new Index("idx_conflict_unique", ["name"], true, false, ["fulltext"]), "unique + fulltext"],
+    [
+      new Index("idx_conflict_flags", ["name"], false, false, ["fulltext", "spatial"]),
+      "fulltext + spatial",
+    ],
+  ])("throws InvalidState for conflicting type inference (%s)", (index) => {
+    expect(() => index.getType()).toThrow(InvalidState);
+  });
+
+  it("throws InvalidState for empty predicate", () => {
+    const index = new Index("idx_user_name", ["user_id"], false, false, [], { where: "" });
+    expect(() => index.getPredicate()).toThrow(InvalidState);
+  });
 });

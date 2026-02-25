@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { InvalidState } from "../../schema/exception/invalid-state";
 import { InvalidUniqueConstraintDefinition } from "../../schema/exception/invalid-unique-constraint-definition";
 import { UniqueConstraint } from "../../schema/unique-constraint";
 
@@ -38,7 +39,8 @@ describe("Schema/UniqueConstraint (Doctrine parity, supported scenarios)", () =>
     expect(() => new UniqueConstraint("", [])).toThrow(InvalidUniqueConstraintDefinition);
   });
 
-  it.skip(
-    "Doctrine deprecation/invalid-state constructor validation cases are not fully modeled in Node",
-  );
+  it("throws InvalidState when a column name cannot be parsed", () => {
+    const uniqueConstraint = new UniqueConstraint("", [""]);
+    expect(() => uniqueConstraint.getColumnNames()).toThrow(InvalidState);
+  });
 });

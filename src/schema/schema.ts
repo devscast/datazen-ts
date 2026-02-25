@@ -68,6 +68,11 @@ export class Schema extends AbstractAsset {
   }
 
   public addTable(table: Table): void {
+    const namespaceName = table.getNamespaceName();
+    if (namespaceName !== null && !this.hasNamespace(namespaceName)) {
+      this.createNamespace(namespaceName);
+    }
+
     const key = getSchemaAssetKey(table.getName());
     if (Object.hasOwn(this.tables, key)) {
       throw TableAlreadyExists.new(table.getName());
@@ -107,6 +112,11 @@ export class Schema extends AbstractAsset {
   }
 
   public addSequence(sequence: Sequence): void {
+    const namespaceName = sequence.getNamespaceName();
+    if (namespaceName !== null && !this.hasNamespace(namespaceName)) {
+      this.createNamespace(namespaceName);
+    }
+
     const key = getSchemaAssetKey(sequence.getName());
     if (Object.hasOwn(this.sequences, key)) {
       throw SequenceAlreadyExists.new(sequence.getName());
@@ -219,5 +229,12 @@ export class Schema extends AbstractAsset {
 }
 
 function getSchemaAssetKey(name: string): string {
-  return name.toLowerCase();
+  return normalizeAssetName(name).toLowerCase();
+}
+
+function normalizeAssetName(name: string): string {
+  return name
+    .split(".")
+    .map((part) => part.replaceAll(/[`"[\]]/g, ""))
+    .join(".");
 }

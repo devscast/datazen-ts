@@ -1,16 +1,27 @@
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
-describe("IBMDB2 DataSourceName parity scaffold", () => {
-  it("tracks that the IBM DB2 DSN helper is not implemented in the Node port", () => {
-    const sourcePath = resolve(process.cwd(), "src/driver/ibm-db2/data-source-name.ts");
+import { DataSourceName } from "../../../driver/ibm-db2/data-source-name";
 
-    expect(existsSync(sourcePath)).toBe(false);
+describe("IBMDB2 DataSourceName (Doctrine parity)", () => {
+  it.each([
+    [[], ""],
+    [
+      {
+        dbname: "doctrine",
+        host: "localhost",
+        password: "Passw0rd",
+        port: 50000,
+        user: "db2inst1",
+      },
+      "HOSTNAME=localhost;PORT=50000;DATABASE=doctrine;UID=db2inst1;PWD=Passw0rd",
+    ],
+    [
+      {
+        dbname: "HOSTNAME=localhost;PORT=50000;DATABASE=doctrine;UID=db2inst1;PWD=Passw0rd",
+      },
+      "HOSTNAME=localhost;PORT=50000;DATABASE=doctrine;UID=db2inst1;PWD=Passw0rd",
+    ],
+  ])("builds DSN from connection parameters %#", (params, expected) => {
+    expect(DataSourceName.fromConnectionParameters(params).toString()).toBe(expected);
   });
-
-  it.skip(
-    "ports Doctrine DataSourceName::fromConnectionParameters() formatting rules if/when an IBM DB2 driver adapter is added",
-  );
 });

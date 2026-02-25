@@ -1,5 +1,6 @@
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 import { AbstractAsset } from "./abstract-asset";
+import { InvalidState } from "./exception/invalid-state";
 import { Identifier } from "./identifier";
 import { IndexType } from "./index/index-type";
 import { IndexedColumn } from "./index/indexed-column";
@@ -67,21 +68,41 @@ export class Index extends AbstractAsset {
   }
 
   public getIndexedColumns(): IndexedColumn[] {
+    if (this.columns.length === 0) {
+      throw InvalidState.indexHasInvalidColumns(this.getName());
+    }
+
+    const parser = Parsers.getUnqualifiedNameParser();
     const lengths = Array.isArray(this.options.lengths) ? this.options.lengths : [];
 
     return this.columns.map((column, index) => {
       const rawLength = lengths[index];
-      const length = typeof rawLength === "number" ? rawLength : null;
-      return new IndexedColumn(
-        column.isQuoted()
-          ? UnqualifiedName.quoted(column.getName())
-          : UnqualifiedName.unquoted(column.getName()),
-        length,
-      );
+      const length = parseIndexedColumnLength(rawLength);
+
+      if (this.primary && length !== null) {
+        throw InvalidState.indexHasInvalidColumns(this.getName());
+      }
+
+      try {
+        const parsableName = column.isQuoted()
+          ? `"${column.getName().replaceAll('"', '""')}"`
+          : column.getName();
+        return new IndexedColumn(parser.parse(parsableName), length);
+      } catch {
+        throw InvalidState.indexHasInvalidColumns(this.getName());
+      }
     });
   }
 
   public getType(): IndexType {
+    const hasFulltext = this.hasFlag("fulltext");
+    const hasSpatial = this.hasFlag("spatial");
+    const conflictingTypeMarkers =
+      Number(this.unique) + Number(hasFulltext) + Number(hasSpatial) > 1;
+    if (conflictingTypeMarkers) {
+      throw InvalidState.indexHasInvalidType(this.getName());
+    }
+
     if (this.unique) {
       return IndexType.UNIQUE;
     }
@@ -103,7 +124,19 @@ export class Index extends AbstractAsset {
 
   public getPredicate(): string | null {
     const predicate = this.readOption("where");
-    return typeof predicate === "string" && predicate.length > 0 ? predicate : null;
+    if (predicate === undefined || predicate === null) {
+      return null;
+    }
+
+    if (typeof predicate === "string") {
+      if (predicate.length === 0) {
+        throw InvalidState.indexHasInvalidPredicate(this.getName());
+      }
+
+      return predicate;
+    }
+
+    return null;
   }
 
   public isSimpleIndex(): boolean {
@@ -141,6 +174,14 @@ export class Index extends AbstractAsset {
 
   public isFulfilledBy(index: Index): boolean {
     if (this.columns.length !== index.columns.length) {
+      return false;
+    }
+
+    if (!samePartialIndex(this, index)) {
+      return false;
+    }
+
+    if (!hasSameColumnLengths(this.options, index.options)) {
       return false;
     }
 
@@ -238,4 +279,70 @@ export class Index extends AbstractAsset {
 
 function normalizeIdentifier(identifier: string): string {
   return identifier.replaceAll(/[`"[\]]/g, "").toLowerCase();
+}
+
+function parseIndexedColumnLength(rawLength: unknown): number | null {
+  if (rawLength === undefined || rawLength === null) {
+    return null;
+  }
+
+  if (typeof rawLength === "number") {
+    return rawLength;
+  }
+
+  if (typeof rawLength === "string" && rawLength.trim().length > 0) {
+    const coerced = Number.parseInt(rawLength, 10);
+    if (Number.isFinite(coerced)) {
+      return coerced;
+    }
+  }
+
+  return null;
+}
+
+function samePartialIndex(left: Index, right: Index): boolean {
+  const leftHasPredicate = left.hasOption("where");
+  const rightHasPredicate = right.hasOption("where");
+
+  if (leftHasPredicate && rightHasPredicate) {
+    return left.getOption("where") === right.getOption("where");
+  }
+
+  return !leftHasPredicate && !rightHasPredicate;
+}
+
+function hasSameColumnLengths(
+  leftOptions: Record<string, unknown>,
+  rightOptions: Record<string, unknown>,
+): boolean {
+  const leftLengths = nonNullLengthsByIndex(leftOptions.lengths);
+  const rightLengths = nonNullLengthsByIndex(rightOptions.lengths);
+
+  if (leftLengths.size !== rightLengths.size) {
+    return false;
+  }
+
+  for (const [index, length] of leftLengths) {
+    if (rightLengths.get(index) !== length) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function nonNullLengthsByIndex(rawLengths: unknown): Map<number, number> {
+  const result = new Map<number, number>();
+  if (!Array.isArray(rawLengths)) {
+    return result;
+  }
+
+  for (const [index, rawLength] of rawLengths.entries()) {
+    const length = parseIndexedColumnLength(rawLength);
+    if (length !== null) {
+      result.set(index, length);
+    }
+  }
+
+  return result;
 }

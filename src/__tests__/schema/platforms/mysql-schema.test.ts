@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { Comparator as MySQLComparator } from "../../../platforms/mysql/comparator";
+import { DefaultTableOptions } from "../../../platforms/mysql/default-table-options";
 import { MySQLPlatform } from "../../../platforms/mysql-platform";
 import { Comparator } from "../../../schema/comparator";
+import { PrimaryKeyConstraint } from "../../../schema/primary-key-constraint";
 import { Table } from "../../../schema/table";
 import { Types } from "../../../types/types";
 
@@ -37,7 +40,29 @@ describe("Schema Platforms MySQLSchemaTest parity scaffold", () => {
     expect(platform).toBeInstanceOf(MySQLPlatform);
   });
 
-  it.skip(
-    "ports Doctrine's MySQL-specific schema comparator/collation metadata assertions (MySQL comparator layer is not implemented in this Node port)",
-  );
+  it("does not emit a CLOB alter when only adding a primary key (Doctrine MySQLSchemaTest::testClobNoAlterTable)", () => {
+    const platform = new MySQLPlatform();
+    const tableOld = new Table("test");
+    tableOld.addColumn("id", Types.INTEGER, { columnDefinition: "INT" });
+    tableOld.addColumn("description", Types.STRING, { length: 65536 });
+
+    const tableNew = tableOld
+      .edit()
+      .setPrimaryKeyConstraint(PrimaryKeyConstraint.editor().setColumnNames("id").create())
+      .create();
+
+    const diff = createMySqlComparator().compareTables(tableOld, tableNew);
+
+    expect(diff).not.toBeNull();
+    expect(platform.getAlterTableSQL(diff)).toEqual(["ALTER TABLE test ADD PRIMARY KEY (id)"]);
+  });
 });
+
+function createMySqlComparator(): MySQLComparator {
+  return new MySQLComparator(
+    new MySQLPlatform(),
+    { getDefaultCharsetCollation: () => null },
+    { getCollationCharset: () => null },
+    new DefaultTableOptions("utf8mb4", "utf8mb4_general_ci"),
+  );
+}

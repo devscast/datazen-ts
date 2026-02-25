@@ -6,6 +6,7 @@ import { ColumnDoesNotExist } from "../../schema/exception/column-does-not-exist
 import { ForeignKeyDoesNotExist } from "../../schema/exception/foreign-key-does-not-exist";
 import { IndexAlreadyExists } from "../../schema/exception/index-already-exists";
 import { IndexDoesNotExist } from "../../schema/exception/index-does-not-exist";
+import { InvalidTableName } from "../../schema/exception/invalid-table-name";
 import { PrimaryKeyAlreadyExists } from "../../schema/exception/primary-key-already-exists";
 import { UniqueConstraintDoesNotExist } from "../../schema/exception/unique-constraint-does-not-exist";
 import { Identifier } from "../../schema/name/identifier";
@@ -82,13 +83,25 @@ describe("Table (Doctrine TableTest parity, unified scope)", () => {
     expect(table.getPrimaryKey().getColumns()).toEqual(["c1"]);
   });
 
-  it.skip(
-    "tracks rename loops back to the original name across quoted/unquoted normalization (not yet implemented in this Node port)",
-  );
+  it("tracks rename loops back to the original name across quoted/unquoted normalization", () => {
+    const table = new Table("t");
+    table.addColumn("foo", Types.INTEGER);
 
-  it.skip(
-    "throws when renaming a column to the same normalized quoted/unquoted name (identifier normalization not yet implemented in this Node port)",
-  );
+    table.renameColumn("foo", "foo_tmp");
+    table.renameColumn("foo_tmp", "`foo`");
+
+    expect(table.getRenamedColumns()).toEqual({});
+    expect(table.hasColumn("foo")).toBe(true);
+    expect(table.hasColumn("`foo`")).toBe(true);
+  });
+
+  it("throws when renaming a column to the same normalized quoted/unquoted name", () => {
+    const table = new Table("t");
+    table.addColumn("foo", Types.INTEGER);
+
+    expect(() => table.renameColumn("foo", "`foo`")).toThrow();
+    expect(() => table.renameColumn("foo", '"foo"')).toThrow();
+  });
 
   it("adds, queries and drops indexes (including case-insensitive lookups)", () => {
     const table = new Table("foo");
@@ -273,19 +286,97 @@ describe("Table (Doctrine TableTest parity, unified scope)", () => {
     expect(fk.getUnqualifiedForeignTableName()).toBe("roles");
   });
 
-  it.skip(
-    "rejects empty table names in the constructor exactly like Doctrine (not yet aligned in this Node port)",
-  );
+  it("rejects empty table names in the constructor exactly like Doctrine", () => {
+    expect(() => new Table("")).toThrow(InvalidTableName);
+    expect(() => new Table("   ")).toThrow(InvalidTableName);
+  });
 
   it.skip(
     "covers Doctrine deprecation-only cases for dropping columns with constraints and ambiguous name references (PHP deprecation harness specific)",
   );
 
-  it.skip(
-    "covers Doctrine asset-name normalization matrix for quoted identifiers across columns/indexes/foreign keys (not yet implemented in this Node port)",
-  );
+  it.each([
+    "foo",
+    "FOO",
+    "`foo`",
+    "`FOO`",
+    '"foo"',
+    '"FOO"',
+    "[foo]",
+    "[FOO]",
+  ])("normalizes asset names across columns/indexes/foreign keys for %s (Doctrine TableTest parity)", (assetName) => {
+    const table = new Table("test");
 
-  it.skip(
-    "covers Doctrine primary-index auto-name regeneration on rename-to-null exactly (primary name generation semantics differ in this Node port)",
-  );
+    table.addColumn(assetName, Types.INTEGER);
+    table.addIndex([assetName], assetName);
+    table.addForeignKeyConstraint("test", [assetName], [assetName], {}, assetName);
+
+    expect(table.hasColumn(assetName)).toBe(true);
+    expect(table.hasColumn("foo")).toBe(true);
+
+    expect(table.hasIndex(assetName)).toBe(true);
+    expect(table.hasIndex("foo")).toBe(true);
+
+    expect(table.hasForeignKey(assetName)).toBe(true);
+    expect(table.hasForeignKey("foo")).toBe(true);
+
+    table.renameIndex(assetName, assetName);
+    expect(table.hasIndex(assetName)).toBe(true);
+    expect(table.hasIndex("foo")).toBe(true);
+
+    table.renameIndex(assetName, "foo");
+    expect(table.hasIndex(assetName)).toBe(true);
+    expect(table.hasIndex("foo")).toBe(true);
+
+    table.renameIndex("foo", assetName);
+    expect(table.hasIndex(assetName)).toBe(true);
+    expect(table.hasIndex("foo")).toBe(true);
+
+    table.renameIndex(assetName, "bar");
+    expect(table.hasIndex(assetName)).toBe(false);
+    expect(table.hasIndex("foo")).toBe(false);
+    expect(table.hasIndex("bar")).toBe(true);
+
+    table.renameIndex("bar", assetName);
+    table.dropColumn(assetName);
+    table.dropIndex(assetName);
+    table.removeForeignKey(assetName);
+
+    expect(table.hasColumn(assetName)).toBe(false);
+    expect(table.hasColumn("foo")).toBe(false);
+    expect(table.hasIndex(assetName)).toBe(false);
+    expect(table.hasIndex("foo")).toBe(false);
+    expect(table.hasForeignKey(assetName)).toBe(false);
+    expect(table.hasForeignKey("foo")).toBe(false);
+  });
+
+  it("renames indexes to Doctrine-compatible auto-generated names, including primary => primary", () => {
+    const table = new Table("test");
+    table.addColumn("id", Types.INTEGER);
+    table.addColumn("foo", Types.INTEGER);
+    table.addColumn("bar", Types.INTEGER);
+    table.addColumn("baz", Types.INTEGER);
+    table.setPrimaryKey(["id"], "pk");
+    table.addIndex(["foo"], "idx", ["flag"]);
+    table.addUniqueIndex(["bar", "baz"], "uniq");
+
+    table.renameIndex("pk", "pk_new");
+    table.renameIndex("idx", "idx_new");
+    table.renameIndex("uniq", "uniq_new");
+
+    table.renameIndex("pk_new", null);
+    table.renameIndex("idx_new", null);
+    table.renameIndex("uniq_new", null);
+
+    expect(table.getPrimaryKey().getName()).toBe("primary");
+    expect(table.hasIndex("primary")).toBe(true);
+    expect(table.hasIndex("IDX_D87F7E0C8C736521")).toBe(true);
+    expect(table.hasIndex("UNIQ_D87F7E0C76FF8CAA78240498")).toBe(true);
+
+    expect(table.getIndex("primary").getColumns()).toEqual(["id"]);
+    expect(table.getIndex("IDX_D87F7E0C8C736521").getColumns()).toEqual(["foo"]);
+    expect(table.getIndex("IDX_D87F7E0C8C736521").getFlags()).toEqual(["flag"]);
+    expect(table.getIndex("UNIQ_D87F7E0C76FF8CAA78240498").getColumns()).toEqual(["bar", "baz"]);
+    expect(table.getIndex("UNIQ_D87F7E0C76FF8CAA78240498").isUnique()).toBe(true);
+  });
 });
