@@ -1,5 +1,6 @@
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 import { AbstractAsset } from "./abstract-asset";
+import { InvalidState } from "./exception/invalid-state";
 import { Deferrability } from "./foreign-key-constraint/deferrability";
 import { MatchType } from "./foreign-key-constraint/match-type";
 import { ReferentialAction } from "./foreign-key-constraint/referential-action";
@@ -52,11 +53,18 @@ export class ForeignKeyConstraint extends AbstractAsset {
   }
 
   public getReferencedTableName(): OptionallyQualifiedName {
-    return Parsers.getOptionallyQualifiedNameParser().parse(this.foreignTableName);
+    try {
+      return Parsers.getOptionallyQualifiedNameParser().parse(this.foreignTableName);
+    } catch {
+      throw InvalidState.foreignKeyConstraintHasInvalidReferencedTableName(this.getName());
+    }
   }
 
   public getColumns(): string[] {
-    return this.localColumns.map((column) => column.getName());
+    return validateForeignKeyColumnNames(
+      this.localColumns.map((column) => column.getName()),
+      () => InvalidState.foreignKeyConstraintHasInvalidReferencingColumnNames(this.getName()),
+    );
   }
 
   public getReferencingColumnNames(): string[] {
@@ -72,7 +80,10 @@ export class ForeignKeyConstraint extends AbstractAsset {
   }
 
   public getForeignColumns(): string[] {
-    return this.foreignColumns.map((column) => column.getName());
+    return validateForeignKeyColumnNames(
+      this.foreignColumns.map((column) => column.getName()),
+      () => InvalidState.foreignKeyConstraintHasInvalidReferencedColumnNames(this.getName()),
+    );
   }
 
   public getReferencedColumnNames(): string[] {
@@ -109,21 +120,31 @@ export class ForeignKeyConstraint extends AbstractAsset {
   }
 
   public getOnUpdateAction(): ReferentialAction {
-    return parseReferentialAction(this.options.onUpdate);
+    return parseReferentialAction(this.options.onUpdate, () =>
+      InvalidState.foreignKeyConstraintHasInvalidOnUpdateAction(this.getName()),
+    );
   }
 
   public getOnDeleteAction(): ReferentialAction {
-    return parseReferentialAction(this.options.onDelete);
+    return parseReferentialAction(this.options.onDelete, () =>
+      InvalidState.foreignKeyConstraintHasInvalidOnDeleteAction(this.getName()),
+    );
   }
 
   public getMatchType(): MatchType {
-    return parseMatchType(this.options.match);
+    return parseMatchType(this.options.match, () =>
+      InvalidState.foreignKeyConstraintHasInvalidMatchType(this.getName()),
+    );
   }
 
   public getDeferrability(): Deferrability {
     const isDeferred = this.options.deferred !== undefined && this.options.deferred !== false;
     const isDeferrable =
       this.options.deferrable !== undefined ? this.options.deferrable !== false : isDeferred;
+
+    if (isDeferred && !isDeferrable) {
+      throw InvalidState.foreignKeyConstraintHasInvalidDeferrability(this.getName());
+    }
 
     if (isDeferred) {
       return Deferrability.DEFERRED;
@@ -195,7 +216,7 @@ function normalizeReferentialActionString(value: unknown): string | null {
   return normalized;
 }
 
-function parseMatchType(value: unknown): MatchType {
+function parseMatchType(value: unknown, onInvalid?: () => Error): MatchType {
   if (typeof value === "string") {
     const normalized = value.toUpperCase();
     if (normalized === MatchType.FULL) {
@@ -205,12 +226,20 @@ function parseMatchType(value: unknown): MatchType {
     if (normalized === MatchType.PARTIAL) {
       return MatchType.PARTIAL;
     }
+
+    if (normalized === MatchType.SIMPLE) {
+      return MatchType.SIMPLE;
+    }
+
+    if (onInvalid !== undefined) {
+      throw onInvalid();
+    }
   }
 
   return MatchType.SIMPLE;
 }
 
-function parseReferentialAction(value: unknown): ReferentialAction {
+function parseReferentialAction(value: unknown, onInvalid?: () => Error): ReferentialAction {
   if (typeof value === "string") {
     const normalized = value.toUpperCase();
     for (const action of Object.values(ReferentialAction)) {
@@ -218,7 +247,32 @@ function parseReferentialAction(value: unknown): ReferentialAction {
         return action;
       }
     }
+
+    if (onInvalid !== undefined) {
+      throw onInvalid();
+    }
   }
 
   return ReferentialAction.NO_ACTION;
+}
+
+function validateForeignKeyColumnNames(
+  names: string[],
+  errorFactory: () => InvalidState,
+): string[] {
+  if (names.length === 0) {
+    throw errorFactory();
+  }
+
+  const parser = Parsers.getUnqualifiedNameParser();
+
+  try {
+    for (const name of names) {
+      parser.parse(name);
+    }
+  } catch {
+    throw errorFactory();
+  }
+
+  return names;
 }

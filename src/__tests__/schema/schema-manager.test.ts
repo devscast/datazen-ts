@@ -351,8 +351,16 @@ describe("Connection schema manager integration", () => {
     await expect(manager.createSequence(new Sequence("users_id_seq"))).rejects.toThrow();
     await expect(manager.dropSequence("users_id_seq")).rejects.toThrow();
     await expect(manager.dropSchema("app")).rejects.toThrow();
+    const oldUsers = new Table("users");
+    oldUsers.addColumn("id", Types.INTEGER);
+    const newUsers = new Table("users");
+    newUsers.addColumn("id", Types.INTEGER);
+    newUsers.addColumn("email", Types.STRING);
+
     await expect(
-      manager.alterTable(new TableDiff(new Table("users"), new Table("users"))),
+      manager.alterTable(
+        new TableDiff(oldUsers, newUsers, { addedColumns: [newUsers.getColumn("email")] }),
+      ),
     ).rejects.toThrow();
     await expect(manager.alterSchema(new SchemaDiff())).rejects.toThrow();
     await expect(manager.migrateSchema(new Schema())).rejects.toThrow();

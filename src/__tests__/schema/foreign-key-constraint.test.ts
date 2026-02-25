@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { InvalidState } from "../../schema/exception/invalid-state";
 import { ForeignKeyConstraint } from "../../schema/foreign-key-constraint";
 import { Deferrability } from "../../schema/foreign-key-constraint/deferrability";
 import { MatchType } from "../../schema/foreign-key-constraint/match-type";
@@ -95,5 +96,55 @@ describe("Schema/ForeignKeyConstraint (Doctrine parity, supported scenarios)", (
     expect(foreignKey.getDeferrability()).toBe(Deferrability.NOT_DEFERRABLE);
   });
 
-  it.skip("Doctrine deprecation/invalid-state FK validation cases are not fully modeled in Node");
+  it.each([
+    [() => new ForeignKeyConstraint([], "users", ["id"]).getReferencingColumnNames()],
+    [() => new ForeignKeyConstraint([""], "users", ["id"]).getReferencingColumnNames()],
+  ])("throws InvalidState for invalid referencing column names %#", (call) => {
+    expect(call).toThrow(InvalidState);
+  });
+
+  it("throws InvalidState for invalid referenced table name", () => {
+    const foreignKey = new ForeignKeyConstraint(["user_id"], "", ["id"]);
+    expect(() => foreignKey.getReferencedTableName()).toThrow(InvalidState);
+  });
+
+  it.each([
+    [() => new ForeignKeyConstraint(["user_id"], "users", []).getReferencedColumnNames()],
+    [() => new ForeignKeyConstraint(["user_id"], "users", [""]).getReferencedColumnNames()],
+  ])("throws InvalidState for invalid referenced column names %#", (call) => {
+    expect(call).toThrow(InvalidState);
+  });
+
+  it("throws InvalidState for invalid match type", () => {
+    const foreignKey = new ForeignKeyConstraint(["user_id"], "users", ["id"], "", {
+      match: "MAYBE",
+    });
+    expect(() => foreignKey.getMatchType()).toThrow(InvalidState);
+  });
+
+  it.each([
+    [
+      () =>
+        new ForeignKeyConstraint(["user_id"], "users", ["id"], "", {
+          onUpdate: "DROP",
+        }).getOnUpdateAction(),
+    ],
+    [
+      () =>
+        new ForeignKeyConstraint(["user_id"], "users", ["id"], "", {
+          onDelete: "DROP",
+        }).getOnDeleteAction(),
+    ],
+  ])("throws InvalidState for invalid referential action %#", (call) => {
+    expect(call).toThrow(InvalidState);
+  });
+
+  it("throws InvalidState for invalid deferrability combination", () => {
+    const foreignKey = new ForeignKeyConstraint(["user_id"], "users", ["id"], "", {
+      deferred: true,
+      deferrable: false,
+    });
+
+    expect(() => foreignKey.getDeferrability()).toThrow(InvalidState);
+  });
 });

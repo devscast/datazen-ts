@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { Connection } from "../connection";
 import type { Driver } from "../driver";
 import type { ExceptionConverter } from "../driver/api/exception-converter";
 import type { Connection as DriverConnection } from "../driver/connection";
@@ -25,6 +26,8 @@ class DummyDriver implements Driver {
     throw new Error("not implemented");
   }
 }
+
+class DummyConnectionWrapper extends Connection {}
 
 describe("DriverManager (Doctrine root-level parity)", () => {
   it("throws when connection params do not define a driver", () => {
@@ -111,7 +114,13 @@ describe("DriverManager (Doctrine root-level parity)", () => {
     });
   });
 
-  it.skip(
-    "supports wrapperClass parity scenarios once DriverManager wrapperClass support is implemented",
-  );
+  it("supports wrapperClass parity scenarios", () => {
+    const connection = DriverManager.getConnection({
+      driverClass: DummyDriver,
+      wrapperClass: DummyConnectionWrapper,
+    } as DriverManagerParams);
+
+    expect(connection).toBeInstanceOf(DummyConnectionWrapper);
+    expect(connection.getDriver()).toBeInstanceOf(DummyDriver);
+  });
 });

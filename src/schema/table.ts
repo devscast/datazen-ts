@@ -8,6 +8,7 @@ import { ForeignKeyDoesNotExist } from "./exception/foreign-key-does-not-exist";
 import { IndexAlreadyExists } from "./exception/index-already-exists";
 import { IndexDoesNotExist } from "./exception/index-does-not-exist";
 import { InvalidState } from "./exception/invalid-state";
+import { InvalidTableName } from "./exception/invalid-table-name";
 import { PrimaryKeyAlreadyExists } from "./exception/primary-key-already-exists";
 import { UniqueConstraintDoesNotExist } from "./exception/unique-constraint-does-not-exist";
 import { ForeignKeyConstraint } from "./foreign-key-constraint";
@@ -38,6 +39,9 @@ export class Table extends AbstractAsset {
     options: Record<string, unknown> = {},
   ) {
     super(name);
+    if (this.getName().trim().length === 0) {
+      throw InvalidTableName.new(name);
+    }
     this.options = { ...options };
 
     for (const column of columns) {
@@ -115,7 +119,13 @@ export class Table extends AbstractAsset {
     flags: string[] = [],
     options: Record<string, unknown> = {},
   ): Index {
-    const name = indexName ?? this._generateIdentifierName(columnNames, "idx", 30);
+    const name =
+      indexName ??
+      this._generateIdentifierName(
+        [this.getName(), ...columnNames],
+        "idx",
+        this._getMaxIdentifierLength(),
+      );
     const index = new Index(name, columnNames, false, false, flags, options);
     this.addIndexObject(index);
     return index;
@@ -126,7 +136,13 @@ export class Table extends AbstractAsset {
     indexName?: string,
     options: Record<string, unknown> = {},
   ): Index {
-    const name = indexName ?? this._generateIdentifierName(columnNames, "uniq", 30);
+    const name =
+      indexName ??
+      this._generateIdentifierName(
+        [this.getName(), ...columnNames],
+        "uniq",
+        this._getMaxIdentifierLength(),
+      );
     const index = new Index(name, columnNames, true, false, [], options);
     this.addIndexObject(index);
     return index;
@@ -137,7 +153,7 @@ export class Table extends AbstractAsset {
       throw PrimaryKeyAlreadyExists.new(this.getName());
     }
 
-    const name = indexName ?? this._generateIdentifierName(columnNames, "primary", 30);
+    const name = indexName ?? "primary";
     const index = new Index(name, columnNames, true, true);
     this.primaryKeyName = name;
     this.addIndexObject(index);
@@ -245,25 +261,38 @@ export class Table extends AbstractAsset {
   public renameIndex(oldName: string, newName?: string | null): this {
     const oldIndex = this.getIndex(oldName);
     const normalizedOldName = getAssetKey(oldIndex.getName());
-    const targetName =
-      newName ??
-      this._generateIdentifierName(oldIndex.getColumns(), oldIndex.isUnique() ? "uniq" : "idx", 30);
+    const targetName = newName ?? null;
 
-    if (getAssetKey(oldIndex.getName()) === getAssetKey(targetName)) {
+    if (targetName !== null && getAssetKey(oldIndex.getName()) === getAssetKey(targetName)) {
       return this;
     }
 
-    if (this.hasIndex(targetName)) {
+    if (targetName !== null && this.hasIndex(targetName)) {
       throw IndexAlreadyExists.new(targetName, this.getName());
     }
 
-    const replacement = oldIndex.edit().setName(targetName).create();
     delete this.indexes[normalizedOldName];
-    this.indexes[getAssetKey(targetName)] = replacement;
 
-    if (this.primaryKeyName !== null && getAssetKey(this.primaryKeyName) === normalizedOldName) {
-      this.primaryKeyName = targetName;
+    if (oldIndex.isPrimary()) {
+      if (this.primaryKeyName !== null && getAssetKey(this.primaryKeyName) === normalizedOldName) {
+        this.primaryKeyName = null;
+      }
+
+      this.setPrimaryKey(oldIndex.getColumns(), targetName ?? undefined);
+      return this;
     }
+
+    if (oldIndex.isUnique()) {
+      this.addUniqueIndex(oldIndex.getColumns(), targetName ?? undefined, oldIndex.getOptions());
+      return this;
+    }
+
+    this.addIndex(
+      oldIndex.getColumns(),
+      targetName ?? undefined,
+      oldIndex.getFlags(),
+      oldIndex.getOptions(),
+    );
 
     return this;
   }
@@ -279,7 +308,13 @@ export class Table extends AbstractAsset {
     options: Record<string, unknown> = {},
     name?: string,
   ): ForeignKeyConstraint {
-    const constraintName = name ?? this._generateIdentifierName(localColumnNames, "fk", 30);
+    const constraintName =
+      name ??
+      this._generateIdentifierName(
+        [this.getName(), ...localColumnNames],
+        "fk",
+        this._getMaxIdentifierLength(),
+      );
     const foreignKey = new ForeignKeyConstraint(
       localColumnNames,
       foreignTableName,
@@ -334,7 +369,11 @@ export class Table extends AbstractAsset {
     const resolvedName =
       explicitName !== null && explicitName.length > 0
         ? explicitName
-        : this._generateIdentifierName(uniqueConstraint.getColumnNames(), "uniq", 30);
+        : this._generateIdentifierName(
+            uniqueConstraint.getColumnNames(),
+            "uniq",
+            this._getMaxIdentifierLength(),
+          );
 
     const key = getAssetKey(resolvedName);
     if (Object.hasOwn(this.uniqueConstraints, key)) {
@@ -456,7 +495,9 @@ export class Table extends AbstractAsset {
       const original = this.renamedColumns[oldKey];
       if (original !== undefined) {
         delete this.renamedColumns[oldKey];
-        this.renamedColumns[newKey] = original;
+        if (original !== newKey) {
+          this.renamedColumns[newKey] = original;
+        }
       }
     } else {
       this.renamedColumns[newKey] = oldKey;
@@ -592,5 +633,5 @@ export class Table extends AbstractAsset {
 }
 
 function getAssetKey(name: string): string {
-  return name.toLowerCase();
+  return name.replaceAll(/[`"[\]]/g, "").toLowerCase();
 }

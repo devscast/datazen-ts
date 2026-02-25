@@ -734,8 +734,97 @@ export abstract class AbstractPlatform {
     return `ALTER TABLE ${table} ADD ${this.getForeignKeyDeclarationSQL(foreignKey)}`;
   }
 
-  public getAlterTableSQL(_diff: unknown): string[] {
-    throw NotSupported.new("getAlterTableSQL");
+  public getAlterTableSQL(diff: unknown): string[] {
+    const oldTable =
+      this.invokeMethod<unknown>(diff, "getOldTable") ?? (diff as { oldTable?: unknown })?.oldTable;
+    const newTable =
+      this.invokeMethod<unknown>(diff, "getNewTable") ?? (diff as { newTable?: unknown })?.newTable;
+
+    if (oldTable === undefined || newTable === undefined) {
+      throw NotSupported.new("getAlterTableSQL");
+    }
+
+    const addedColumns = this.invokeMethod<unknown[]>(diff, "getAddedColumns") ?? [];
+    const changedColumns = this.invokeMethod<unknown[]>(diff, "getChangedColumns") ?? [];
+    const droppedColumns = this.invokeMethod<unknown[]>(diff, "getDroppedColumns") ?? [];
+
+    // Column alter SQL differs substantially per platform; keep the implementation
+    // explicit until platform-specific column alteration support is ported.
+    if (addedColumns.length > 0 || changedColumns.length > 0 || droppedColumns.length > 0) {
+      throw NotSupported.new("getAlterTableSQL");
+    }
+
+    const tableName = this.getDynamicTableSQLName(newTable);
+    const sql = [...this.getPreAlterTableIndexForeignKeySQL(diff)];
+
+    const droppedForeignKeys = this.invokeMethod<unknown[]>(diff, "getDroppedForeignKeys") ?? [];
+    for (const foreignKey of droppedForeignKeys) {
+      const name =
+        this.invokeMethod<string>(foreignKey, "getQuotedName", this) ??
+        this.invokeMethod<string>(foreignKey, "getName");
+
+      if (typeof name === "string" && name.length > 0) {
+        sql.push(this.getDropForeignKeySQL(name, tableName));
+      }
+    }
+
+    const renamedIndexes =
+      this.invokeMethod<Record<string, unknown>>(diff, "getRenamedIndexes") ?? {};
+    for (const [oldName, renamedIndex] of Object.entries(renamedIndexes)) {
+      sql.push(this.getDropIndexSQL(oldName, tableName));
+      sql.push(this.getCreateIndexSQL(renamedIndex, tableName));
+    }
+
+    const droppedIndexes = this.invokeMethod<unknown[]>(diff, "getDroppedIndexes") ?? [];
+    for (const index of droppedIndexes) {
+      const name =
+        this.invokeMethod<string>(index, "getQuotedName", this) ??
+        this.invokeMethod<string>(index, "getName");
+
+      if (typeof name === "string" && name.length > 0) {
+        sql.push(this.getDropIndexSQL(name, tableName));
+      }
+    }
+
+    const modifiedIndexes = this.invokeMethod<unknown[]>(diff, "getModifiedIndexes") ?? [];
+    for (const index of modifiedIndexes) {
+      const name =
+        this.invokeMethod<string>(index, "getQuotedName", this) ??
+        this.invokeMethod<string>(index, "getName");
+
+      if (typeof name === "string" && name.length > 0) {
+        sql.push(this.getDropIndexSQL(name, tableName));
+      }
+
+      sql.push(this.getCreateIndexSQL(index, tableName));
+    }
+
+    const addedIndexes = this.invokeMethod<unknown[]>(diff, "getAddedIndexes") ?? [];
+    for (const index of addedIndexes) {
+      sql.push(this.getCreateIndexSQL(index, tableName));
+    }
+
+    const modifiedForeignKeys = this.invokeMethod<unknown[]>(diff, "getModifiedForeignKeys") ?? [];
+    for (const foreignKey of modifiedForeignKeys) {
+      const name =
+        this.invokeMethod<string>(foreignKey, "getQuotedName", this) ??
+        this.invokeMethod<string>(foreignKey, "getName");
+
+      if (typeof name === "string" && name.length > 0) {
+        sql.push(this.getDropForeignKeySQL(name, tableName));
+      }
+
+      sql.push(this.getCreateForeignKeySQL(foreignKey, tableName));
+    }
+
+    const addedForeignKeys = this.invokeMethod<unknown[]>(diff, "getAddedForeignKeys") ?? [];
+    for (const foreignKey of addedForeignKeys) {
+      sql.push(this.getCreateForeignKeySQL(foreignKey, tableName));
+    }
+
+    sql.push(...this.getPostAlterTableIndexForeignKeySQL(diff));
+
+    return sql;
   }
 
   protected getPreAlterTableIndexForeignKeySQL(_diff: unknown): string[] {

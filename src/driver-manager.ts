@@ -18,6 +18,11 @@ export interface ConnectionParams extends Record<string, unknown> {
   driver?: DriverName;
   driverClass?: new () => Driver;
   driverInstance?: Driver;
+  wrapperClass?: new (
+    params: Record<string, unknown>,
+    driver: Driver,
+    configuration?: Configuration,
+  ) => Connection;
 }
 
 export class DriverManager {
@@ -39,7 +44,8 @@ export class DriverManager {
       wrappedDriver = middleware.wrap(wrappedDriver);
     }
 
-    return new Connection(params, wrappedDriver, configuration);
+    const WrapperClass = params.wrapperClass ?? Connection;
+    return new WrapperClass(params, wrappedDriver, configuration);
   }
 
   public static getPrimaryReadReplicaConnection(

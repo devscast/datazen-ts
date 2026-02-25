@@ -155,13 +155,24 @@ describe("Schema (Doctrine SchemaTest parity, unified scope)", () => {
     expect(sql.some((statement) => statement.includes("CREATE TABLE users"))).toBe(true);
   });
 
-  it.skip(
-    "supports quoted table lookup aliases like `hasTable('`foo`')` (not implemented in this Node port)",
-  );
+  it("supports quoted table lookup aliases like `hasTable('`foo`')`", () => {
+    const schema = new Schema([createTable("foo")]);
 
-  it.skip(
-    "creates namespaces implicitly when adding qualified tables/sequences (Doctrine behavior not implemented in this Node port)",
-  );
+    expect(schema.hasTable("`foo`")).toBe(true);
+    expect(schema.hasTable('"foo"')).toBe(true);
+    expect(schema.getTable("[foo]").getName()).toBe("foo");
+  });
+
+  it("creates namespaces implicitly when adding qualified tables/sequences", () => {
+    const schema = new Schema();
+
+    schema.createTable("app.users");
+    schema.createSequence("audit.seq");
+
+    expect(schema.hasNamespace("app")).toBe(true);
+    expect(schema.hasNamespace("audit")).toBe(true);
+    expect(schema.getNamespaces()).toEqual(["app", "audit"]);
+  });
 
   it.skip(
     "covers Doctrine deprecation matrix for qualified/unqualified name ambiguity and default namespace rules (PHP deprecation harness specific)",
@@ -171,9 +182,15 @@ describe("Schema (Doctrine SchemaTest parity, unified scope)", () => {
     "covers deep-clone semantics for schema graphs (PHP clone semantics differ from JS/Node)",
   );
 
-  it.skip(
-    "enforces max identifier length on auto-generated table indexes via SchemaConfig exactly like Doctrine (not yet aligned in this Node port)",
-  );
+  it("enforces max identifier length on auto-generated table indexes via SchemaConfig", () => {
+    const schema = new Schema([], [], new SchemaConfig().setMaxIdentifierLength(12));
+    const table = schema.createTable("users");
+    table.addColumn("really_long_email_column_name", Types.STRING);
+
+    const index = table.addIndex(["really_long_email_column_name"]);
+
+    expect(index.getName().length).toBeLessThanOrEqual(12);
+  });
 });
 
 function createTable(name: string): Table {

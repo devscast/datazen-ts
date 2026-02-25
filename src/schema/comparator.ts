@@ -13,15 +13,41 @@ export class Comparator {
   constructor(private readonly config: ComparatorConfig = new ComparatorConfig()) {}
 
   public compareSchemas(oldSchema: Schema, newSchema: Schema): SchemaDiff {
-    const oldTablesByName = new Map(oldSchema.getTables().map((table) => [table.getName(), table]));
-    const newTablesByName = new Map(newSchema.getTables().map((table) => [table.getName(), table]));
+    const oldDefaultSchemaName = nonEmptyOrNull(oldSchema.getName());
+    const newDefaultSchemaName = nonEmptyOrNull(newSchema.getName());
+
+    const createdSchemas = newSchema
+      .getNamespaces()
+      .filter((namespace) => !oldSchema.hasNamespace(namespace))
+      .filter(
+        (namespace) =>
+          !isDefaultNamespaceAlias(namespace, oldDefaultSchemaName, newDefaultSchemaName),
+      );
+    const droppedSchemas = oldSchema
+      .getNamespaces()
+      .filter((namespace) => !newSchema.hasNamespace(namespace))
+      .filter(
+        (namespace) =>
+          !isDefaultNamespaceAlias(namespace, oldDefaultSchemaName, newDefaultSchemaName),
+      );
 
     const createdTables: Table[] = [];
     const alteredTables: TableDiff[] = [];
     const droppedTables: Table[] = [];
 
-    for (const [name, newTable] of newTablesByName) {
-      const oldTable = oldTablesByName.get(name);
+    const oldTablesByShortestName = new Map(
+      oldSchema
+        .getTables()
+        .map((table) => [normalizeAssetKey(table.getShortestName(oldDefaultSchemaName)), table]),
+    );
+    const newTablesByShortestName = new Map(
+      newSchema
+        .getTables()
+        .map((table) => [normalizeAssetKey(table.getShortestName(newDefaultSchemaName)), table]),
+    );
+
+    for (const [tableKey, newTable] of newTablesByShortestName) {
+      const oldTable = oldTablesByShortestName.get(tableKey);
       if (oldTable === undefined) {
         createdTables.push(newTable);
         continue;
@@ -33,52 +59,65 @@ export class Comparator {
       }
     }
 
-    for (const [name, oldTable] of oldTablesByName) {
-      if (!newTablesByName.has(name)) {
+    for (const [tableKey, oldTable] of oldTablesByShortestName) {
+      if (!newTablesByShortestName.has(tableKey)) {
         droppedTables.push(oldTable);
       }
     }
 
-    const oldSequencesByName = new Map(
-      oldSchema.getSequences().map((sequence) => [sequence.getName(), sequence]),
+    const createdSequences: Sequence[] = [];
+    const alteredSequences: Sequence[] = [];
+    const droppedSequences: Sequence[] = [];
+
+    const oldSequencesByShortestName = new Map(
+      oldSchema
+        .getSequences()
+        .map((sequence) => [
+          normalizeAssetKey(sequence.getShortestName(oldDefaultSchemaName)),
+          sequence,
+        ]),
     );
-    const newSequencesByName = new Map(
-      newSchema.getSequences().map((sequence) => [sequence.getName(), sequence]),
+    const newSequencesByShortestName = new Map(
+      newSchema
+        .getSequences()
+        .map((sequence) => [
+          normalizeAssetKey(sequence.getShortestName(newDefaultSchemaName)),
+          sequence,
+        ]),
     );
 
-    const createdSequences = [...newSequencesByName.entries()]
-      .filter(
-        ([name, sequence]) =>
-          !oldSequencesByName.has(name) &&
-          !this.isAutoIncrementSequenceInSchema(oldSchema, sequence),
-      )
-      .map(([, sequence]) => sequence);
-
-    const alteredSequences = [...newSequencesByName.entries()]
-      .filter(([name]) => oldSequencesByName.has(name))
-      .map(([name, sequence]) => {
-        const oldSequence = oldSequencesByName.get(name);
-        if (oldSequence === undefined) {
-          return null;
+    for (const [sequenceKey, newSequence] of newSequencesByShortestName) {
+      const oldSequence = oldSequencesByShortestName.get(sequenceKey);
+      if (oldSequence === undefined) {
+        if (!this.isAutoIncrementSequenceInSchema(oldSchema, newSequence)) {
+          createdSequences.push(newSequence);
         }
 
-        return this.diffSequence(sequence, oldSequence) ? sequence : null;
-      })
-      .filter((sequence): sequence is Sequence => sequence !== null);
+        continue;
+      }
 
-    const droppedSequences = [...oldSequencesByName.entries()]
-      .filter(
-        ([name, sequence]) =>
-          !newSequencesByName.has(name) &&
-          !this.isAutoIncrementSequenceInSchema(newSchema, sequence),
-      )
-      .map(([, sequence]) => sequence);
+      if (this.diffSequence(newSequence, oldSequence)) {
+        alteredSequences.push(newSequence);
+      }
+    }
+
+    for (const [sequenceKey, oldSequence] of oldSequencesByShortestName) {
+      if (this.isAutoIncrementSequenceInSchema(newSchema, oldSequence)) {
+        continue;
+      }
+
+      if (!newSequencesByShortestName.has(sequenceKey)) {
+        droppedSequences.push(oldSequence);
+      }
+    }
 
     return new SchemaDiff({
       alteredSequences,
       alteredTables,
+      createdSchemas,
       createdSequences,
       createdTables,
+      droppedSchemas,
       droppedSequences,
       droppedTables,
     });
@@ -86,60 +125,142 @@ export class Comparator {
 
   public compareTables(oldTable: Table, newTable: Table): TableDiff | null {
     const oldColumnsByName = new Map(
-      oldTable.getColumns().map((column) => [column.getName(), column]),
+      oldTable.getColumns().map((column) => [normalizeAssetKey(column.getName()), column]),
     );
     const newColumnsByName = new Map(
-      newTable.getColumns().map((column) => [column.getName(), column]),
+      newTable.getColumns().map((column) => [normalizeAssetKey(column.getName()), column]),
     );
 
-    const addedColumns: Column[] = [];
-    const changedColumns: ColumnDiff[] = [];
-    const droppedColumns: Column[] = [];
+    const addedColumnsByName = new Map<string, Column>();
+    const changedColumnsByName = new Map<string, ColumnDiff>();
+    const droppedColumnsByName = new Map<string, Column>();
 
     for (const [name, newColumn] of newColumnsByName) {
       const oldColumn = oldColumnsByName.get(name);
       if (oldColumn === undefined) {
-        addedColumns.push(newColumn);
+        addedColumnsByName.set(name, newColumn);
         continue;
       }
 
       const columnDiff = this.compareColumns(oldColumn, newColumn);
       if (columnDiff !== null) {
-        changedColumns.push(columnDiff);
+        changedColumnsByName.set(name, columnDiff);
       }
     }
 
     for (const [name, oldColumn] of oldColumnsByName) {
       if (!newColumnsByName.has(name)) {
-        droppedColumns.push(oldColumn);
+        droppedColumnsByName.set(name, oldColumn);
       }
     }
 
-    const addedIndexes = newTable
-      .getIndexes()
-      .filter(
-        (index) =>
-          !oldTable.getIndexes().some((oldIndex) => oldIndex.getName() === index.getName()),
-      );
+    const explicitlyRenamedColumns = newTable.getRenamedColumns();
+    for (const [newColumnName, oldColumnName] of Object.entries(explicitlyRenamedColumns)) {
+      const addedColumn = addedColumnsByName.get(newColumnName);
+      const droppedColumn = droppedColumnsByName.get(oldColumnName);
 
-    const droppedIndexes = oldTable
-      .getIndexes()
-      .filter(
-        (index) =>
-          !newTable.getIndexes().some((newIndex) => newIndex.getName() === index.getName()),
-      );
+      if (addedColumn === undefined || droppedColumn === undefined) {
+        continue;
+      }
 
-    const addedForeignKeys = newTable.getForeignKeys().filter((foreignKey) => {
-      return !oldTable
-        .getForeignKeys()
-        .some((oldForeignKey) => oldForeignKey.getName() === foreignKey.getName());
-    });
+      const columnDiff =
+        this.compareColumns(droppedColumn, addedColumn) ??
+        new ColumnDiff(droppedColumn, addedColumn, []);
+      changedColumnsByName.set(oldColumnName, columnDiff);
+      addedColumnsByName.delete(newColumnName);
+      droppedColumnsByName.delete(oldColumnName);
+    }
 
-    const droppedForeignKeys = oldTable.getForeignKeys().filter((foreignKey) => {
-      return !newTable
-        .getForeignKeys()
-        .some((newForeignKey) => newForeignKey.getName() === foreignKey.getName());
-    });
+    if (this.config.getDetectRenamedColumns()) {
+      this.detectRenamedColumns(changedColumnsByName, addedColumnsByName, droppedColumnsByName);
+    }
+
+    const oldIndexesByName = new Map(
+      oldTable.getIndexes().map((index) => [normalizeAssetKey(index.getName()), index]),
+    );
+    const newIndexesByName = new Map(
+      newTable.getIndexes().map((index) => [normalizeAssetKey(index.getName()), index]),
+    );
+
+    const addedIndexesByName = new Map<string, Index>();
+    const droppedIndexesByName = new Map<string, Index>();
+    const modifiedIndexes: Index[] = [];
+
+    for (const [newIndexName, newIndex] of newIndexesByName) {
+      if (!oldIndexesByName.has(newIndexName)) {
+        addedIndexesByName.set(newIndexName, newIndex);
+      }
+    }
+
+    for (const [oldIndexName, oldIndex] of oldIndexesByName) {
+      const newIndex = newIndexesByName.get(oldIndexName);
+      if (newIndex === undefined) {
+        droppedIndexesByName.set(oldIndexName, oldIndex);
+        continue;
+      }
+
+      if (!this.diffIndex(oldIndex, newIndex)) {
+        continue;
+      }
+
+      if (this.config.getReportModifiedIndexes()) {
+        modifiedIndexes.push(newIndex);
+      } else {
+        droppedIndexesByName.set(oldIndexName, oldIndex);
+        addedIndexesByName.set(oldIndexName, newIndex);
+      }
+    }
+
+    const renamedIndexes = this.config.getDetectRenamedIndexes()
+      ? this.detectRenamedIndexes(addedIndexesByName, droppedIndexesByName)
+      : {};
+
+    const addedIndexes = [...addedIndexesByName.values()];
+    const droppedIndexes = [...droppedIndexesByName.values()];
+
+    const oldForeignKeys = [...oldTable.getForeignKeys()];
+    const newForeignKeys = [...newTable.getForeignKeys()];
+    const addedForeignKeys: ForeignKeyConstraint[] = [];
+    const droppedForeignKeys: ForeignKeyConstraint[] = [];
+
+    for (let oldIndex = 0; oldIndex < oldForeignKeys.length; oldIndex += 1) {
+      const oldForeignKey = oldForeignKeys[oldIndex];
+      if (oldForeignKey === undefined) {
+        continue;
+      }
+
+      for (let newIndex = 0; newIndex < newForeignKeys.length; newIndex += 1) {
+        const newForeignKey = newForeignKeys[newIndex];
+        if (newForeignKey === undefined) {
+          continue;
+        }
+
+        if (!this.diffForeignKey(oldForeignKey, newForeignKey)) {
+          oldForeignKeys.splice(oldIndex, 1);
+          newForeignKeys.splice(newIndex, 1);
+          oldIndex -= 1;
+          break;
+        }
+
+        if (
+          normalizeAssetKey(oldForeignKey.getName()) === normalizeAssetKey(newForeignKey.getName())
+        ) {
+          droppedForeignKeys.push(oldForeignKey);
+          addedForeignKeys.push(newForeignKey);
+          oldForeignKeys.splice(oldIndex, 1);
+          newForeignKeys.splice(newIndex, 1);
+          oldIndex -= 1;
+          break;
+        }
+      }
+    }
+
+    droppedForeignKeys.push(...oldForeignKeys);
+    addedForeignKeys.push(...newForeignKeys);
+
+    const addedColumns = [...addedColumnsByName.values()];
+    const changedColumns = [...changedColumnsByName.values()];
+    const droppedColumns = [...droppedColumnsByName.values()];
 
     const diff = new TableDiff(oldTable, newTable, {
       addedColumns,
@@ -149,6 +270,8 @@ export class Comparator {
       droppedColumns,
       droppedForeignKeys,
       droppedIndexes,
+      modifiedIndexes,
+      renamedIndexes,
     });
 
     if (!diff.hasChanges() && !this.config.isDetectColumnRenamesEnabled()) {
@@ -222,9 +345,11 @@ export class Comparator {
 
   protected diffForeignKey(key1: ForeignKeyConstraint, key2: ForeignKeyConstraint): boolean {
     return (
-      key1.getForeignTableName() !== key2.getForeignTableName() ||
-      JSON.stringify(key1.getColumns()) !== JSON.stringify(key2.getColumns()) ||
-      JSON.stringify(key1.getForeignColumns()) !== JSON.stringify(key2.getForeignColumns()) ||
+      JSON.stringify(key1.getUnquotedLocalColumns().map(normalizeAssetKey)) !==
+        JSON.stringify(key2.getUnquotedLocalColumns().map(normalizeAssetKey)) ||
+      JSON.stringify(key1.getUnquotedForeignColumns().map(normalizeAssetKey)) !==
+        JSON.stringify(key2.getUnquotedForeignColumns().map(normalizeAssetKey)) ||
+      key1.getUnqualifiedForeignTableName() !== key2.getUnqualifiedForeignTableName() ||
       key1.onUpdate() !== key2.onUpdate() ||
       key1.onDelete() !== key2.onDelete()
     );
@@ -234,7 +359,108 @@ export class Comparator {
     return !(index1.isFulfilledBy(index2) && index2.isFulfilledBy(index1));
   }
 
+  private detectRenamedIndexes(
+    addedIndexes: Map<string, Index>,
+    removedIndexes: Map<string, Index>,
+  ): Record<string, Index> {
+    const candidatesByAddedName = new Map<string, [Index, Index][]>();
+
+    for (const [addedKey, addedIndex] of addedIndexes) {
+      for (const [, removedIndex] of removedIndexes) {
+        if (this.diffIndex(addedIndex, removedIndex)) {
+          continue;
+        }
+
+        const candidates = candidatesByAddedName.get(addedKey) ?? [];
+        candidates.push([removedIndex, addedIndex]);
+        candidatesByAddedName.set(addedKey, candidates);
+      }
+    }
+
+    const renamedIndexes: Record<string, Index> = {};
+
+    for (const candidates of candidatesByAddedName.values()) {
+      if (candidates.length !== 1) {
+        continue;
+      }
+
+      const [removedIndex, addedIndex] = candidates[0]!;
+      const removedKey = normalizeAssetKey(removedIndex.getName());
+      const addedKey = normalizeAssetKey(addedIndex.getName());
+
+      if (Object.hasOwn(renamedIndexes, removedKey)) {
+        continue;
+      }
+
+      renamedIndexes[removedKey] = addedIndex;
+      addedIndexes.delete(addedKey);
+      removedIndexes.delete(removedKey);
+    }
+
+    return renamedIndexes;
+  }
+
+  private detectRenamedColumns(
+    modifiedColumns: Map<string, ColumnDiff>,
+    addedColumns: Map<string, Column>,
+    removedColumns: Map<string, Column>,
+  ): void {
+    const candidatesByAddedName = new Map<string, [Column, Column][]>();
+
+    for (const [addedColumnName, addedColumn] of addedColumns) {
+      for (const removedColumn of removedColumns.values()) {
+        if (!this.columnsEqual(addedColumn, removedColumn)) {
+          continue;
+        }
+
+        const candidates = candidatesByAddedName.get(addedColumnName) ?? [];
+        candidates.push([removedColumn, addedColumn]);
+        candidatesByAddedName.set(addedColumnName, candidates);
+      }
+    }
+
+    for (const [addedColumnName, candidates] of candidatesByAddedName) {
+      if (candidates.length !== 1) {
+        continue;
+      }
+
+      const [oldColumn, newColumn] = candidates[0]!;
+      const oldColumnName = normalizeAssetKey(oldColumn.getName());
+
+      if (modifiedColumns.has(oldColumnName)) {
+        continue;
+      }
+
+      modifiedColumns.set(oldColumnName, new ColumnDiff(oldColumn, newColumn, []));
+      addedColumns.delete(addedColumnName);
+      removedColumns.delete(oldColumnName);
+    }
+  }
+
   private isAutoIncrementSequenceInSchema(schema: Schema, sequence: Sequence): boolean {
     return schema.getTables().some((table) => sequence.isAutoIncrementsFor(table));
   }
+}
+
+function normalizeAssetKey(name: string): string {
+  return name.replaceAll(/[`"[\]]/g, "").toLowerCase();
+}
+
+function nonEmptyOrNull(value: string): string | null {
+  return value.length > 0 ? value : null;
+}
+
+function isDefaultNamespaceAlias(
+  namespace: string,
+  oldDefaultSchemaName: string | null,
+  newDefaultSchemaName: string | null,
+): boolean {
+  const normalizedNamespace = normalizeAssetKey(namespace);
+
+  return (
+    (oldDefaultSchemaName !== null &&
+      normalizedNamespace === normalizeAssetKey(oldDefaultSchemaName)) ||
+    (newDefaultSchemaName !== null &&
+      normalizedNamespace === normalizeAssetKey(newDefaultSchemaName))
+  );
 }
