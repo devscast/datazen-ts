@@ -76,15 +76,15 @@ export class SQLitePlatform extends AbstractPlatform {
   }
 
   public getDateDiffExpression(date1: string, date2: string): string {
-    return `CAST((JULIANDAY(${date1}) - JULIANDAY(${date2})) AS INTEGER)`;
+    return `(JULIANDAY(${date1}, 'start of day') - JULIANDAY(${date2}, 'start of day'))`;
   }
 
   public getCurrentDateSQL(): string {
-    return "DATE('now')";
+    return "CURRENT_DATE";
   }
 
   public getCurrentTimeSQL(): string {
-    return "TIME('now')";
+    return "CURRENT_TIME";
   }
 
   protected override getDateArithmeticIntervalExpression(
@@ -180,6 +180,94 @@ export class SQLitePlatform extends AbstractPlatform {
     }
 
     return sql;
+  }
+
+  public override getAlterTableSQL(diff: unknown): string[] {
+    const addedColumns = this.sqliteInvoke<unknown[]>(diff, "getAddedColumns") ?? [];
+    const changedColumns = this.sqliteInvoke<unknown[]>(diff, "getChangedColumns") ?? [];
+    const droppedColumns = this.sqliteInvoke<unknown[]>(diff, "getDroppedColumns") ?? [];
+    const hasComplexColumnChanges = changedColumns.length > 0 || droppedColumns.length > 0;
+
+    if (!hasComplexColumnChanges) {
+      return super.getAlterTableSQL(diff);
+    }
+
+    const oldTable = this.sqliteInvoke<unknown>(diff, "getOldTable");
+    const newTable = this.sqliteInvoke<unknown>(diff, "getNewTable");
+    if (oldTable === undefined || newTable === undefined) {
+      throw NotSupported.new("getAlterTableSQL");
+    }
+
+    const oldTableName = this.getSQLiteDynamicTableSQLName(oldTable);
+    const oldQuotedName =
+      this.sqliteInvoke<string>(oldTable, "getQuotedName", this) ?? oldTableName;
+    const newQuotedName =
+      this.sqliteInvoke<string>(newTable, "getQuotedName", this) ?? oldQuotedName;
+    const tempTableName = this.quoteIdentifier(
+      `__temp__${this.extractSQLiteBareTableName(oldTableName)}`,
+    );
+
+    const copyColumns = this.buildSQLiteAlterCopyColumnMap(
+      oldTable,
+      newTable,
+      changedColumns,
+      droppedColumns,
+    );
+    const sql: string[] = [];
+
+    if (copyColumns.oldQuotedColumns.length > 0) {
+      sql.push(
+        `CREATE TEMPORARY TABLE ${tempTableName} AS SELECT ${copyColumns.oldQuotedColumns.join(", ")} FROM ${oldQuotedName}`,
+      );
+    }
+
+    const rebuildTable = this.buildSQLiteAlterRebuildTable(
+      oldTable,
+      newTable,
+      addedColumns,
+      changedColumns,
+      droppedColumns,
+    );
+
+    sql.push(this.getDropTableSQL(oldQuotedName));
+    sql.push(...this.getCreateTableSQL(rebuildTable));
+
+    if (copyColumns.oldQuotedColumns.length > 0) {
+      sql.push(
+        `INSERT INTO ${newQuotedName} (${copyColumns.newQuotedColumns.join(", ")}) SELECT ${copyColumns.oldQuotedColumns.join(", ")} FROM ${tempTableName}`,
+      );
+      sql.push(this.getDropTableSQL(tempTableName));
+    }
+
+    return sql;
+  }
+
+  public override getCreateIndexSQL(index: unknown, table: string): string {
+    if (this.sqliteInvoke<boolean>(index, "isPrimary") === true) {
+      return this.getCreatePrimaryKeySQL(index, table);
+    }
+
+    const quotedColumns = this.getSQLiteQuotedColumns(index);
+    if (quotedColumns.length === 0) {
+      throw new Error(`Incomplete or invalid index definition on table ${table}`);
+    }
+
+    let indexName =
+      this.sqliteInvoke<string>(index, "getQuotedName", this) ??
+      this.sqliteInvoke<string>(index, "getName") ??
+      "index";
+    let tableName = table;
+
+    if (table.includes(".")) {
+      const [schemaName, bareTableName] = table.split(".", 2);
+      if (schemaName !== undefined && bareTableName !== undefined) {
+        indexName = `${schemaName}.${indexName}`;
+        tableName = bareTableName;
+      }
+    }
+
+    const flags = this.getCreateIndexSQLFlags(index);
+    return `CREATE ${flags}INDEX ${indexName} ON ${tableName} (${quotedColumns.join(", ")})${this.getPartialIndexSQL(index)}`;
   }
 
   protected createReservedKeywordsList(): KeywordList {
@@ -305,12 +393,238 @@ export class SQLitePlatform extends AbstractPlatform {
       return undefined;
     }
 
-    const fn = (target as Record<string, unknown>)[methodName];
+    const candidate = target as Record<string, unknown>;
+    const fn = candidate[methodName];
     if (typeof fn !== "function") {
-      return undefined;
+      if (methodName === "getOldTable") {
+        return candidate.oldTable as T | undefined;
+      }
+
+      if (methodName === "getNewTable") {
+        return candidate.newTable as T | undefined;
+      }
+
+      return candidate[methodName] as T | undefined;
     }
 
     return (fn as (...callArgs: unknown[]) => T).apply(target, args);
+  }
+
+  private buildSQLiteAlterCopyColumnMap(
+    oldTable: unknown,
+    newTable: unknown,
+    changedColumns: unknown[],
+    droppedColumns: unknown[],
+  ): { oldQuotedColumns: string[]; newQuotedColumns: string[] } {
+    const dropped = new Set(
+      droppedColumns
+        .map((column) => this.sqliteInvoke<string>(column, "getName")?.toLowerCase())
+        .filter((name): name is string => typeof name === "string"),
+    );
+    const changedByOldName = new Map<string, { oldColumn: unknown; newColumn: unknown }>();
+
+    for (const columnDiff of changedColumns) {
+      const oldColumn = this.sqliteInvoke<unknown>(columnDiff, "getOldColumn");
+      const newColumn = this.sqliteInvoke<unknown>(columnDiff, "getNewColumn");
+      const oldName = this.sqliteInvoke<string>(oldColumn, "getName");
+      if (oldColumn === undefined || newColumn === undefined || oldName === undefined) {
+        continue;
+      }
+
+      changedByOldName.set(oldName.toLowerCase(), { newColumn, oldColumn });
+    }
+
+    const oldQuotedColumns: string[] = [];
+    const newQuotedColumns: string[] = [];
+    const newColumns = this.sqliteInvoke<unknown[]>(newTable, "getColumns") ?? [];
+    const newByName = new Map<string, unknown>();
+
+    for (const column of newColumns) {
+      const name = this.sqliteInvoke<string>(column, "getName");
+      if (typeof name === "string") {
+        newByName.set(name.toLowerCase(), column);
+      }
+    }
+
+    for (const oldColumn of this.sqliteInvoke<unknown[]>(oldTable, "getColumns") ?? []) {
+      const oldName = this.sqliteInvoke<string>(oldColumn, "getName");
+      if (typeof oldName !== "string") {
+        continue;
+      }
+
+      const key = oldName.toLowerCase();
+      if (dropped.has(key)) {
+        continue;
+      }
+
+      const changed = changedByOldName.get(key);
+      if (changed !== undefined) {
+        const oldQuoted = this.sqliteInvoke<string>(changed.oldColumn, "getQuotedName", this);
+        const newQuoted = this.sqliteInvoke<string>(changed.newColumn, "getQuotedName", this);
+        if (oldQuoted !== undefined && newQuoted !== undefined) {
+          oldQuotedColumns.push(oldQuoted);
+          newQuotedColumns.push(newQuoted);
+        }
+        continue;
+      }
+
+      const currentColumn = newByName.get(key);
+      const oldQuoted = this.sqliteInvoke<string>(oldColumn, "getQuotedName", this);
+      const newQuoted =
+        this.sqliteInvoke<string>(currentColumn, "getQuotedName", this) ?? oldQuoted;
+
+      if (oldQuoted !== undefined && newQuoted !== undefined) {
+        oldQuotedColumns.push(oldQuoted);
+        newQuotedColumns.push(newQuoted);
+      }
+    }
+
+    return { newQuotedColumns, oldQuotedColumns };
+  }
+
+  private extractSQLiteBareTableName(name: string): string {
+    const unquoted = name.replaceAll('"', "");
+    const dot = unquoted.indexOf(".");
+    return dot >= 0 ? unquoted.slice(dot + 1) : unquoted;
+  }
+
+  private buildSQLiteAlterRebuildTable(
+    oldTable: unknown,
+    newTable: unknown,
+    addedColumns: unknown[],
+    changedColumns: unknown[],
+    droppedColumns: unknown[],
+  ): { getColumns(): readonly unknown[]; getName(): string } & Record<string, unknown> {
+    const dropped = new Set(
+      droppedColumns
+        .map((column) => this.sqliteInvoke<string>(column, "getName")?.toLowerCase())
+        .filter((name): name is string => typeof name === "string"),
+    );
+    const changedByOldName = new Map<string, unknown>();
+
+    for (const columnDiff of changedColumns) {
+      const oldColumn = this.sqliteInvoke<unknown>(columnDiff, "getOldColumn");
+      const newColumn = this.sqliteInvoke<unknown>(columnDiff, "getNewColumn");
+      const oldName = this.sqliteInvoke<string>(oldColumn, "getName");
+      if (newColumn !== undefined && typeof oldName === "string") {
+        changedByOldName.set(oldName.toLowerCase(), newColumn);
+      }
+    }
+
+    const implicitRenameByOldName = new Map<string, unknown>();
+    const remainingAdded = [...addedColumns];
+    for (const droppedColumn of droppedColumns) {
+      const droppedName = this.sqliteInvoke<string>(droppedColumn, "getName");
+      if (typeof droppedName !== "string") {
+        continue;
+      }
+
+      const matchIndex = remainingAdded.findIndex((addedColumn) =>
+        this.sqliteColumnsHaveSameDefinition(droppedColumn, addedColumn),
+      );
+      if (matchIndex < 0) {
+        continue;
+      }
+
+      const matchedAdded = remainingAdded.splice(matchIndex, 1)[0];
+      if (matchedAdded !== undefined) {
+        implicitRenameByOldName.set(droppedName.toLowerCase(), matchedAdded);
+      }
+    }
+
+    const newColumns = this.sqliteInvoke<unknown[]>(newTable, "getColumns") ?? [];
+    const newByName = new Map<string, unknown>();
+    for (const column of newColumns) {
+      const name = this.sqliteInvoke<string>(column, "getName");
+      if (typeof name === "string") {
+        newByName.set(name.toLowerCase(), column);
+      }
+    }
+
+    const orderedColumns: unknown[] = [];
+    const usedNames = new Set<string>();
+
+    for (const oldColumn of this.sqliteInvoke<unknown[]>(oldTable, "getColumns") ?? []) {
+      const oldName = this.sqliteInvoke<string>(oldColumn, "getName");
+      if (typeof oldName !== "string") {
+        continue;
+      }
+
+      const key = oldName.toLowerCase();
+      const implicitReplacement = implicitRenameByOldName.get(key);
+      if (dropped.has(key) && implicitReplacement === undefined) {
+        continue;
+      }
+
+      const replacement = changedByOldName.get(key) ?? implicitReplacement ?? newByName.get(key);
+      if (replacement !== undefined) {
+        orderedColumns.push(replacement);
+        const replacementName = this.sqliteInvoke<string>(replacement, "getName");
+        if (typeof replacementName === "string") {
+          usedNames.add(replacementName.toLowerCase());
+        }
+      }
+    }
+
+    for (const column of newColumns) {
+      const name = this.sqliteInvoke<string>(column, "getName");
+      if (typeof name !== "string") {
+        continue;
+      }
+
+      const key = name.toLowerCase();
+      if (usedNames.has(key)) {
+        continue;
+      }
+
+      orderedColumns.push(column);
+      usedNames.add(key);
+    }
+
+    const getName = () => this.sqliteInvoke<string>(newTable, "getName") ?? "";
+
+    return {
+      getColumns: () => orderedColumns,
+      getForeignKeys: () => this.sqliteInvoke<unknown[]>(newTable, "getForeignKeys") ?? [],
+      getIndexes: () => this.sqliteInvoke<unknown[]>(newTable, "getIndexes") ?? [],
+      getName,
+      getOptions: () => this.sqliteInvoke<Record<string, unknown>>(newTable, "getOptions") ?? {},
+      getQuotedName: () => this.sqliteInvoke<string>(newTable, "getQuotedName", this) ?? getName(),
+    };
+  }
+
+  private sqliteColumnsHaveSameDefinition(left: unknown, right: unknown): boolean {
+    const leftDef = this.sqliteInvoke<Record<string, unknown>>(left, "toArray") ?? {};
+    const rightDef = this.sqliteInvoke<Record<string, unknown>>(right, "toArray") ?? {};
+
+    return (
+      JSON.stringify(this.normalizeSqliteRenameCandidate(leftDef)) ===
+      JSON.stringify(this.normalizeSqliteRenameCandidate(rightDef))
+    );
+  }
+
+  private normalizeSqliteRenameCandidate(
+    definition: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const rawType = definition.type;
+    const typeIdentity =
+      typeof rawType === "string"
+        ? rawType.toLowerCase()
+        : typeof (rawType as { constructor?: { name?: unknown } } | null)?.constructor?.name ===
+            "string"
+          ? String((rawType as { constructor: { name: string } }).constructor.name)
+          : "";
+
+    return {
+      autoincrement: definition.autoincrement === true,
+      fixed: definition.fixed === true,
+      length: typeof definition.length === "number" ? definition.length : null,
+      notnull: definition.notnull !== false,
+      precision: typeof definition.precision === "number" ? definition.precision : null,
+      scale: typeof definition.scale === "number" ? definition.scale : 0,
+      type: typeIdentity,
+      unsigned: definition.unsigned === true,
+    };
   }
 }
 

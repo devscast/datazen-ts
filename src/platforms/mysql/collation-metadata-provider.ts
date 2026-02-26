@@ -1,3 +1,3 @@
 export interface CollationMetadataProvider {
-  getCollationCharset(collation: string): string | null;
+  getCollationCharset(collation: string): Promise<string | null>;
 }

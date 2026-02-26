@@ -74,6 +74,9 @@ WHERE type = 'table'
             ...row,
             column_name: pickString(row, "name"),
             data_type: pickString(row, "type"),
+            length: parseSqliteTypeLength(pickString(row, "type")),
+            precision: parseSqliteTypePrecision(pickString(row, "type")),
+            scale: parseSqliteTypeScale(pickString(row, "type")),
           }),
         ),
     );
@@ -239,4 +242,46 @@ ORDER BY name`;
 
 function escapeSqliteIdentifier(identifier: string): string {
   return identifier.replaceAll("'", "''");
+}
+
+function parseSqliteTypeLength(type: string | null): number | null {
+  if (type === null) {
+    return null;
+  }
+
+  const match = /\(\s*(\d+)\s*(?:,\s*\d+\s*)?\)$/.exec(type);
+  if (match === null) {
+    return null;
+  }
+
+  const length = Number.parseInt(match[1]!, 10);
+  return Number.isFinite(length) ? length : null;
+}
+
+function parseSqliteTypePrecision(type: string | null): number | null {
+  if (type === null) {
+    return null;
+  }
+
+  const match = /\(\s*(\d+)\s*,\s*(\d+)\s*\)$/.exec(type);
+  if (match === null) {
+    return null;
+  }
+
+  const precision = Number.parseInt(match[1]!, 10);
+  return Number.isFinite(precision) ? precision : null;
+}
+
+function parseSqliteTypeScale(type: string | null): number | null {
+  if (type === null) {
+    return null;
+  }
+
+  const match = /\(\s*(\d+)\s*,\s*(\d+)\s*\)$/.exec(type);
+  if (match === null) {
+    return null;
+  }
+
+  const scale = Number.parseInt(match[2]!, 10);
+  return Number.isFinite(scale) ? scale : null;
 }

@@ -168,6 +168,7 @@ ORDER BY sequence_schema, sequence_name`;
        is_nullable,
        column_default,
        character_maximum_length,
+       collation_name,
        numeric_precision,
        numeric_scale
 FROM information_schema.columns

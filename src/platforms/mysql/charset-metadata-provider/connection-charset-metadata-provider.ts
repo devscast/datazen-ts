@@ -1,11 +1,13 @@
-import type { SyncQueryConnection } from "../../_internal/sync-query-connection";
+import type { Connection } from "../../../connection";
 import type { CharsetMetadataProvider } from "../charset-metadata-provider";
 
-export class ConnectionCharsetMetadataProvider implements CharsetMetadataProvider {
-  public constructor(private readonly connection: SyncQueryConnection) {}
+type MetadataQueryConnection = Pick<Connection, "fetchOne">;
 
-  public getDefaultCharsetCollation(charset: string): string | null {
-    const collation = this.connection.fetchOne<string>(
+export class ConnectionCharsetMetadataProvider implements CharsetMetadataProvider {
+  public constructor(private readonly connection: MetadataQueryConnection) {}
+
+  public async getDefaultCharsetCollation(charset: string): Promise<string | null> {
+    const collation = await this.connection.fetchOne<string>(
       `SELECT DEFAULT_COLLATE_NAME
 FROM information_schema.CHARACTER_SETS
 WHERE CHARACTER_SET_NAME = ?;`,

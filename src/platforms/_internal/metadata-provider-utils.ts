@@ -163,7 +163,7 @@ export function createColumnFromMetadataRow(
     options.default = defaultValue;
   }
 
-  if (length !== null) {
+  if (length !== null && typeName !== Types.ENUM) {
     options.length = length;
   }
 
@@ -189,6 +189,13 @@ export function createColumnFromMetadataRow(
 
   if (isAutoincrementRow(row)) {
     options.autoincrement = true;
+  }
+
+  if (typeName === Types.ENUM) {
+    const enumValues = parseEnumColumnValues(pickString(row, "column_type", "COLUMN_TYPE"));
+    if (enumValues !== null) {
+      options.values = enumValues;
+    }
   }
 
   const column = new Column(columnName, typeName, options);
@@ -642,6 +649,85 @@ function isAutoincrementRow(row: Record<string, unknown>): boolean {
   }
 
   return false;
+}
+
+function parseEnumColumnValues(columnType: string | null): string[] | null {
+  if (columnType === null) {
+    return null;
+  }
+
+  const trimmed = columnType.trim();
+  if (!/^enum\s*\(/i.test(trimmed) || !trimmed.endsWith(")")) {
+    return null;
+  }
+
+  const body = trimmed.slice(trimmed.indexOf("(") + 1, -1);
+  const values: string[] = [];
+  let i = 0;
+
+  while (i < body.length) {
+    while (i < body.length && /[\s,]/.test(body[i]!)) {
+      i += 1;
+    }
+
+    if (i >= body.length) {
+      break;
+    }
+
+    const quote = body[i];
+    if (quote !== "'" && quote !== '"') {
+      return null;
+    }
+
+    i += 1;
+    let value = "";
+
+    while (i < body.length) {
+      const char = body[i]!;
+      const next = body[i + 1];
+
+      if (char === "\\") {
+        if (next !== undefined) {
+          value += next;
+          i += 2;
+          continue;
+        }
+
+        value += "\\";
+        i += 1;
+        continue;
+      }
+
+      if (char === quote && next === quote) {
+        value += quote;
+        i += 2;
+        continue;
+      }
+
+      if (char === quote) {
+        i += 1;
+        break;
+      }
+
+      value += char;
+      i += 1;
+    }
+
+    values.push(value);
+
+    while (i < body.length && /\s/.test(body[i]!)) {
+      i += 1;
+    }
+
+    if (i < body.length) {
+      if (body[i] !== ",") {
+        return null;
+      }
+      i += 1;
+    }
+  }
+
+  return values;
 }
 
 function asBoolean(value: unknown): boolean | null {

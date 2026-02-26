@@ -1,7 +1,8 @@
+import type { AbstractPlatform } from "../../platforms/abstract-platform";
 import { DefaultExpression } from "../default-expression";
 
 export class CurrentDate implements DefaultExpression {
-  public toSQL(): string {
-    return "CURRENT_DATE";
+  public toSQL(platform: AbstractPlatform): string {
+    return platform.getCurrentDateSQL();
   }
 }

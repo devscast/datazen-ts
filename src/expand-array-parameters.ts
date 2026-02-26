@@ -43,6 +43,13 @@ export class ExpandArrayParameters implements Visitor {
     this.convertedSQL.push(sql);
   }
 
+  public acceptEscapedQuestionMark(_sql: string): void {
+    // Preserve the DBAL escaped question mark token across this parse pass so a
+    // later driver-specific placeholder conversion pass can still distinguish it
+    // from a real positional placeholder.
+    this.convertedSQL.push("??");
+  }
+
   public getSQL(): string {
     return this.convertedSQL.join("");
   }

@@ -1,3 +1,6 @@
+import { BigIntType } from "../types/big-int-type";
+import { IntegerType } from "../types/integer-type";
+import { SmallIntType } from "../types/small-int-type";
 import { Column } from "./column";
 import { ColumnDiff } from "./column-diff";
 import { ComparatorConfig } from "./comparator-config";
@@ -10,7 +13,30 @@ import { Table } from "./table";
 import { TableDiff } from "./table-diff";
 
 export class Comparator {
-  constructor(private readonly config: ComparatorConfig = new ComparatorConfig()) {}
+  private readonly platform: { columnsEqual(column1: Column, column2: Column): boolean } | null;
+  private readonly config: ComparatorConfig;
+
+  public constructor(config?: ComparatorConfig);
+  public constructor(
+    platform?: { columnsEqual(column1: Column, column2: Column): boolean } | null,
+    config?: ComparatorConfig,
+  );
+  public constructor(
+    platformOrConfig?:
+      | ComparatorConfig
+      | { columnsEqual(column1: Column, column2: Column): boolean }
+      | null,
+    maybeConfig?: ComparatorConfig,
+  ) {
+    if (platformOrConfig instanceof ComparatorConfig || platformOrConfig === undefined) {
+      this.platform = null;
+      this.config = platformOrConfig ?? new ComparatorConfig();
+      return;
+    }
+
+    this.platform = platformOrConfig;
+    this.config = maybeConfig ?? new ComparatorConfig();
+  }
 
   public compareSchemas(oldSchema: Schema, newSchema: Schema): SchemaDiff {
     const oldDefaultSchemaName = nonEmptyOrNull(oldSchema.getName());
@@ -142,10 +168,14 @@ export class Comparator {
         continue;
       }
 
-      const columnDiff = this.compareColumns(oldColumn, newColumn);
-      if (columnDiff !== null) {
-        changedColumnsByName.set(name, columnDiff);
+      if (this.columnsEqual(oldColumn, newColumn)) {
+        continue;
       }
+
+      changedColumnsByName.set(
+        name,
+        this.compareColumns(oldColumn, newColumn) ?? new ColumnDiff(oldColumn, newColumn, []),
+      );
     }
 
     for (const [name, oldColumn] of oldColumnsByName) {
@@ -292,11 +322,17 @@ export class Comparator {
       changedProperties.push("length");
     }
 
-    if (oldColumn.getPrecision() !== newColumn.getPrecision()) {
+    if (
+      !this.isIntegerLikeColumnPair(oldColumn, newColumn) &&
+      oldColumn.getPrecision() !== newColumn.getPrecision()
+    ) {
       changedProperties.push("precision");
     }
 
-    if (oldColumn.getScale() !== newColumn.getScale()) {
+    if (
+      !this.isIntegerLikeColumnPair(oldColumn, newColumn) &&
+      oldColumn.getScale() !== newColumn.getScale()
+    ) {
       changedProperties.push("scale");
     }
 
@@ -340,6 +376,10 @@ export class Comparator {
   }
 
   protected columnsEqual(column1: Column, column2: Column): boolean {
+    if (this.platform !== null) {
+      return this.platform.columnsEqual(column1, column2);
+    }
+
     return this.compareColumns(column1, column2) === null;
   }
 
@@ -439,6 +479,18 @@ export class Comparator {
 
   private isAutoIncrementSequenceInSchema(schema: Schema, sequence: Sequence): boolean {
     return schema.getTables().some((table) => sequence.isAutoIncrementsFor(table));
+  }
+
+  private isIntegerLikeColumnPair(oldColumn: Column, newColumn: Column): boolean {
+    if (oldColumn.getType().constructor !== newColumn.getType().constructor) {
+      return false;
+    }
+
+    return (
+      oldColumn.getType() instanceof IntegerType ||
+      oldColumn.getType() instanceof BigIntType ||
+      oldColumn.getType() instanceof SmallIntType
+    );
   }
 }
 

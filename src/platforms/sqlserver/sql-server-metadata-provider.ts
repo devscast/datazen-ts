@@ -192,7 +192,7 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION`;
        i.name AS index_name,
        i.type_desc AS index_type,
        i.is_unique AS is_unique,
-       i.type_desc LIKE 'CLUSTERED%' AS is_clustered,
+       CASE WHEN i.type_desc LIKE 'CLUSTERED%' THEN 1 ELSE 0 END AS is_clustered,
        i.filter_definition AS predicate,
        c.name AS column_name
 FROM sys.indexes i
@@ -234,7 +234,7 @@ ORDER BY s.name, t.name, i.name, ic.key_ordinal`;
     const sql = `SELECT s.name AS table_schema,
        t.name AS table_name,
        kc.name AS constraint_name,
-       i.type_desc LIKE 'CLUSTERED%' AS is_clustered,
+       CASE WHEN i.type_desc LIKE 'CLUSTERED%' THEN 1 ELSE 0 END AS is_clustered,
        c.name AS column_name
 FROM sys.key_constraints kc
 JOIN sys.tables t ON t.object_id = kc.parent_object_id

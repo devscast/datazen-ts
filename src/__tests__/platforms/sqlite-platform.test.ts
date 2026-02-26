@@ -12,8 +12,8 @@ describe("SQLitePlatform parity", () => {
     const platform = new SQLitePlatform();
 
     assertCommonPlatformSurface(platform);
-    expect(platform.getCurrentDateSQL()).toBe("DATE('now')");
-    expect(platform.getCurrentTimeSQL()).toBe("TIME('now')");
+    expect(platform.getCurrentDateSQL()).toBe("CURRENT_DATE");
+    expect(platform.getCurrentTimeSQL()).toBe("CURRENT_TIME");
   });
 
   it("uses Doctrine-style autoincrement column declaration in CREATE TABLE SQL", () => {

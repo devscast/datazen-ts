@@ -595,7 +595,9 @@ export class Connection {
 
   public async createSchemaManager(): Promise<AbstractSchemaManager> {
     await this.resolveDatabasePlatform();
-    return this.schemaManagerFactory.createSchemaManager(this);
+    const schemaManager = this.schemaManagerFactory.createSchemaManager(this);
+    await schemaManager.initialize();
+    return schemaManager;
   }
 
   public async setTransactionIsolation(level: TransactionIsolationLevel): Promise<void> {
