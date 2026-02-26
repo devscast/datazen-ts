@@ -92,6 +92,7 @@ export function useFunctionalTestCase(): FunctionalTestCase {
 
   beforeEach(async () => {
     const bundle = await createFunctionalConnectionBundle();
+    await bundle.connection.resolveDatabasePlatform();
     activeConnection = bundle.connection;
     activeTarget = bundle.target;
   });
@@ -243,11 +244,13 @@ export function useFunctionalTestCase(): FunctionalTestCase {
       return getActiveConnection();
     },
     async createConnection(): Promise<Connection> {
-      return createFunctionalConnection();
+      const connection = await createFunctionalConnection();
+      await connection.resolveDatabasePlatform();
+      return connection;
     },
     async dropAndCreateTable(table: Table): Promise<void> {
       const connection = getActiveConnection();
-      const schemaManager = connection.createSchemaManager();
+      const schemaManager = await connection.createSchemaManager();
 
       try {
         await schemaManager.dropTable(table.getQuotedName(connection.getDatabasePlatform()));
@@ -259,7 +262,7 @@ export function useFunctionalTestCase(): FunctionalTestCase {
     },
     async dropTableIfExists(name: string): Promise<void> {
       try {
-        await getActiveConnection().createSchemaManager().dropTable(name);
+        await (await getActiveConnection().createSchemaManager()).dropTable(name);
       } catch {
         // best effort setup helper
       }
@@ -274,7 +277,7 @@ export function useFunctionalTestCase(): FunctionalTestCase {
 
       const folding = platform.getUnquotedIdentifierFolding();
       const normalizedSchemaName = schemaName.getIdentifier().toNormalizedValue(folding);
-      const schemaManager = connection.createSchemaManager();
+      const schemaManager = await connection.createSchemaManager();
       const databaseSchema = await schemaManager.introspectSchema();
 
       const sequencesToDrop = databaseSchema.getSequences().filter((sequence) => {

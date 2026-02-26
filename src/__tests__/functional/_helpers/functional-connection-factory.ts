@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { Configuration } from "../../../configuration";
 import { Connection } from "../../../connection";
+import type { ConnectionParams } from "../../../driver-manager";
 import { DriverManager } from "../../../driver-manager";
 
 export type FunctionalDriver = "mssql" | "mysql2" | "pg" | "sqlite3";
@@ -59,8 +60,18 @@ export function resolveFunctionalTarget(): FunctionalTarget {
 }
 
 export async function createFunctionalConnection(): Promise<Connection> {
-  const { connection } = await createFunctionalConnectionBundle();
-  return connection;
+  const target = resolveFunctionalTarget();
+
+  switch (target.driver) {
+    case "sqlite3":
+      return createSQLite3Connection("default", undefined, "direct");
+    case "mysql2":
+      return createMySQL2Connection(target, "default", undefined, "direct");
+    case "pg":
+      return createPgConnection(target, "default", undefined, "direct");
+    case "mssql":
+      return createMSSQLConnection(target);
+  }
 }
 
 export async function createFunctionalConnectionWithConfiguration(
@@ -70,11 +81,11 @@ export async function createFunctionalConnectionWithConfiguration(
 
   switch (target.driver) {
     case "sqlite3":
-      return createSQLite3Connection("default", configuration);
+      return createSQLite3Connection("default", configuration, "direct");
     case "mysql2":
-      return createMySQL2Connection(target, "default", configuration);
+      return createMySQL2Connection(target, "default", configuration, "direct");
     case "pg":
-      return createPgConnection(target, "default", configuration);
+      return createPgConnection(target, "default", configuration, "direct");
     case "mssql":
       return createMSSQLConnection(target, "default", configuration);
   }
@@ -122,12 +133,77 @@ export async function createFunctionalConnectionBundle(): Promise<FunctionalConn
   }
 }
 
-type FunctionalConnectionRole = "default" | "privileged";
+export type FunctionalConnectionRole = "default" | "privileged";
+export type FunctionalConnectionMode = "direct" | "pool";
+
+export async function createFunctionalDriverManagerParams(
+  role: FunctionalConnectionRole = "default",
+  mode: FunctionalConnectionMode = "direct",
+): Promise<ConnectionParams> {
+  const target = resolveFunctionalTarget();
+
+  switch (target.driver) {
+    case "sqlite3":
+      return createSQLite3DriverManagerParams(role, mode);
+    case "mysql2":
+      return createMySQL2DriverManagerParams(target, role, mode);
+    case "pg":
+      return createPgDriverManagerParams(target, role, mode);
+    case "mssql":
+      return createMSSQLDriverManagerParams(target, role);
+  }
+}
 
 async function createSQLite3Connection(
   role: FunctionalConnectionRole = "default",
   configuration?: Configuration,
+  _mode: FunctionalConnectionMode = "direct",
 ): Promise<Connection> {
+  return DriverManager.getConnection(
+    await createSQLite3DriverManagerParams(role, _mode),
+    configuration,
+  );
+}
+
+async function createMySQL2Connection(
+  target: FunctionalTarget,
+  role: FunctionalConnectionRole = "default",
+  configuration?: Configuration,
+  mode: FunctionalConnectionMode = "pool",
+): Promise<Connection> {
+  return DriverManager.getConnection(
+    await createMySQL2DriverManagerParams(target, role, mode),
+    configuration,
+  );
+}
+
+async function createPgConnection(
+  target: FunctionalTarget,
+  role: FunctionalConnectionRole = "default",
+  configuration?: Configuration,
+  mode: FunctionalConnectionMode = "pool",
+): Promise<Connection> {
+  return DriverManager.getConnection(
+    await createPgDriverManagerParams(target, role, mode),
+    configuration,
+  );
+}
+
+async function createMSSQLConnection(
+  target: FunctionalTarget,
+  role: FunctionalConnectionRole = "default",
+  configuration?: Configuration,
+): Promise<Connection> {
+  return DriverManager.getConnection(
+    await createMSSQLDriverManagerParams(target, role),
+    configuration,
+  );
+}
+
+async function createSQLite3DriverManagerParams(
+  role: FunctionalConnectionRole = "default",
+  _mode: FunctionalConnectionMode = "direct",
+): Promise<ConnectionParams> {
   const sqliteModule = await importOptional("sqlite3", { driver: "sqlite3", platform: "sqlite3" });
   const sqlite3 = (sqliteModule.default ?? sqliteModule) as {
     Database: new (
@@ -147,30 +223,25 @@ async function createSQLite3Connection(
     });
   });
 
-  return DriverManager.getConnection(
-    {
-      client: client as Record<string, unknown>,
-      driver: "sqlite3",
-      ownsClient: true,
-      ...readCommonConnectionOverrides({ driver: "sqlite3", platform: "sqlite3" }, role),
-    },
-    configuration,
-  );
+  return {
+    client: client as Record<string, unknown>,
+    dbname: sqliteFile,
+    driver: "sqlite3",
+    path: sqliteFile,
+    ownsClient: true,
+    ...readCommonConnectionOverrides({ driver: "sqlite3", platform: "sqlite3" }, role),
+  };
 }
 
-async function createMySQL2Connection(
+async function createMySQL2DriverManagerParams(
   target: FunctionalTarget,
   role: FunctionalConnectionRole = "default",
-  configuration?: Configuration,
-): Promise<Connection> {
+  mode: FunctionalConnectionMode = "pool",
+): Promise<ConnectionParams> {
   const mysql2 = await importOptional("mysql2/promise", target);
   const mysqlModule = mysql2.default ?? mysql2;
 
-  if (typeof mysqlModule.createPool !== "function") {
-    throw new Error('The "mysql2/promise" module does not expose createPool().');
-  }
-
-  const pool = mysqlModule.createPool({
+  const config = {
     database: readEnv(target.platform, "DATABASE", "datazen", role),
     host: readEnv(target.platform, "HOST", "127.0.0.1", role),
     password: readEnv(
@@ -181,55 +252,118 @@ async function createMySQL2Connection(
     ),
     port: readNumberEnv(target.platform, "PORT", target.platform === "mariadb" ? 3307 : 3306, role),
     user: readEnv(target.platform, "USER", role === "privileged" ? "root" : "datazen", role),
-  });
+  };
 
-  return DriverManager.getConnection(
-    {
+  if (mode === "direct") {
+    if (typeof mysqlModule.createConnection !== "function") {
+      throw new Error('The "mysql2/promise" module does not expose createConnection().');
+    }
+
+    const connection = await mysqlModule.createConnection(config);
+
+    return {
+      database: config.database,
+      dbname: config.database,
+      host: config.host,
+      connection,
       driver: "mysql2",
-      ownsPool: true,
-      pool,
+      ownsClient: true,
+      password: config.password,
+      port: config.port,
+      user: config.user,
       ...readCommonConnectionOverrides(target, role),
-    },
-    configuration,
-  );
-}
-
-async function createPgConnection(
-  target: FunctionalTarget,
-  role: FunctionalConnectionRole = "default",
-  configuration?: Configuration,
-): Promise<Connection> {
-  const pg = await importOptional("pg", target);
-  const PgPool = (pg.Pool ?? pg.default?.Pool) as (new (...args: unknown[]) => unknown) | undefined;
-
-  if (PgPool === undefined) {
-    throw new Error('The "pg" module does not expose Pool.');
+    };
   }
 
-  const pool = new PgPool({
+  if (typeof mysqlModule.createPool !== "function") {
+    throw new Error('The "mysql2/promise" module does not expose createPool().');
+  }
+
+  const pool = mysqlModule.createPool(config);
+
+  return {
+    database: config.database,
+    dbname: config.database,
+    host: config.host,
+    driver: "mysql2",
+    ownsPool: true,
+    password: config.password,
+    pool,
+    port: config.port,
+    user: config.user,
+    ...readCommonConnectionOverrides(target, role),
+  };
+}
+
+async function createPgDriverManagerParams(
+  target: FunctionalTarget,
+  role: FunctionalConnectionRole = "default",
+  mode: FunctionalConnectionMode = "pool",
+): Promise<ConnectionParams> {
+  const pg = await importOptional("pg", target);
+  const PgPool = (pg.Pool ?? pg.default?.Pool) as (new (...args: unknown[]) => unknown) | undefined;
+  const PgClient = (pg.Client ?? pg.default?.Client) as
+    | (new (
+        ...args: unknown[]
+      ) => { connect?: () => Promise<unknown> })
+    | undefined;
+
+  const config = {
     database: readEnv(target.platform, "DATABASE", "datazen", role),
     host: readEnv(target.platform, "HOST", "127.0.0.1", role),
     password: readEnv(target.platform, "PASSWORD", "datazen", role),
     port: readNumberEnv(target.platform, "PORT", 5432, role),
     user: readEnv(target.platform, "USER", "datazen", role),
-  });
+  };
 
-  return DriverManager.getConnection(
-    {
+  if (mode === "direct") {
+    if (PgClient === undefined) {
+      throw new Error('The "pg" module does not expose Client.');
+    }
+
+    const client = new PgClient(config);
+    if (typeof client.connect === "function") {
+      await client.connect();
+    }
+
+    return {
+      database: config.database,
+      dbname: config.database,
+      host: config.host,
+      client: client as Record<string, unknown>,
       driver: "pg",
-      ownsPool: true,
-      pool: pool as Record<string, unknown>,
+      ownsClient: true,
+      password: config.password,
+      port: config.port,
+      user: config.user,
       ...readCommonConnectionOverrides(target, role),
-    },
-    configuration,
-  );
+    };
+  }
+
+  if (PgPool === undefined) {
+    throw new Error('The "pg" module does not expose Pool.');
+  }
+
+  const pool = new PgPool(config);
+
+  return {
+    database: config.database,
+    dbname: config.database,
+    host: config.host,
+    driver: "pg",
+    ownsPool: true,
+    password: config.password,
+    pool: pool as Record<string, unknown>,
+    port: config.port,
+    user: config.user,
+    ...readCommonConnectionOverrides(target, role),
+  };
 }
 
-async function createMSSQLConnection(
+async function createMSSQLDriverManagerParams(
   target: FunctionalTarget,
   role: FunctionalConnectionRole = "default",
-  configuration?: Configuration,
-): Promise<Connection> {
+): Promise<ConnectionParams> {
   const mssql = await importOptional("mssql", target);
   const module = (mssql.default ?? mssql) as Record<string, unknown>;
   const ConnectionPool = module.ConnectionPool as
@@ -263,15 +397,18 @@ async function createMSSQLConnection(
     await pool.connect();
   }
 
-  return DriverManager.getConnection(
-    {
-      driver: "mssql",
-      ownsPool: true,
-      pool: pool as Record<string, unknown>,
-      ...readCommonConnectionOverrides(target, role),
-    },
-    configuration,
-  );
+  return {
+    database: readEnv(target.platform, "DATABASE", "tempdb", role),
+    dbname: readEnv(target.platform, "DATABASE", "tempdb", role),
+    driver: "mssql",
+    host: readEnv(target.platform, "HOST", "127.0.0.1", role),
+    ownsPool: true,
+    password: readEnv(target.platform, "PASSWORD", "Datazen123!", role),
+    pool: pool as Record<string, unknown>,
+    port: readNumberEnv(target.platform, "PORT", 1433, role),
+    user: readEnv(target.platform, "USER", "sa", role),
+    ...readCommonConnectionOverrides(target, role),
+  };
 }
 
 async function importOptional(

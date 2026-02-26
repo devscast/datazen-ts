@@ -1,5 +1,6 @@
 import type { Connection } from "./connection";
 import type { Result as DriverResult } from "./driver/result";
+import { InvalidColumnIndex } from "./exception/invalid-column-index";
 import { NoKeyValue } from "./exception/no-key-value";
 
 type AssociativeRow = Record<string, unknown>;
@@ -165,9 +166,15 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
     const withColumnName = this.result as DriverResultWithColumnName;
 
     if (typeof withColumnName.getColumnName === "function") {
-      return this.convertDriverException("getColumnName", () =>
-        withColumnName.getColumnName!(index),
-      );
+      try {
+        return withColumnName.getColumnName(index);
+      } catch (error) {
+        if (error instanceof RangeError) {
+          throw InvalidColumnIndex.new(index, error);
+        }
+
+        throw this.connection.convertException(error, "getColumnName");
+      }
     }
 
     throw new Error("The driver result does not support accessing the column name.");

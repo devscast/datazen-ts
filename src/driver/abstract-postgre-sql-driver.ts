@@ -7,11 +7,10 @@ import type { ExceptionConverter as DriverExceptionConverter } from "./api/excep
 import { ExceptionConverter } from "./api/pgsql/exception-converter";
 
 export abstract class AbstractPostgreSQLDriver implements Driver {
-  public getDatabasePlatform(versionProvider: ServerVersionProvider): PostgreSQLPlatform {
-    const version = versionProvider.getServerVersion();
-    if (typeof version !== "string") {
-      return new PostgreSQLPlatform();
-    }
+  public async getDatabasePlatform(
+    versionProvider: ServerVersionProvider,
+  ): Promise<PostgreSQLPlatform> {
+    const version = await versionProvider.getServerVersion();
 
     const match = /^(?<major>\d+)(?:\.(?<minor>\d+)(?:\.(?<patch>\d+))?)?/.exec(version);
     if (match?.groups === undefined) {

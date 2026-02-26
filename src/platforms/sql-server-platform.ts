@@ -13,6 +13,85 @@ import { TrimMode } from "./trim-mode";
 export class SQLServerPlatform extends AbstractPlatform {
   public static readonly OPTION_DEFAULT_CONSTRAINT_NAME = "default_constraint_name";
 
+  protected override _getCreateTableSQL(
+    name: string,
+    columns: Array<Record<string, unknown>>,
+    options: Record<string, unknown> = {},
+  ): string[] {
+    this.validateCreateTableOptions(options, "_getCreateTableSQL");
+
+    const defaultConstraintsSql: string[] = [];
+    const commentsSql: string[] = [];
+    const primarySet = new Set(
+      Array.isArray(options.primary) ? options.primary.map((column) => String(column)) : [],
+    );
+
+    for (const column of columns) {
+      if (primarySet.has(String(column.name ?? ""))) {
+        column.notnull = true;
+      }
+
+      if (column.default !== undefined && column.default !== null) {
+        defaultConstraintsSql.push(
+          `ALTER TABLE ${name} ADD${this.getDefaultConstraintDeclarationSQL(column)}`,
+        );
+      }
+
+      if (typeof column.comment === "string" && column.comment.length > 0) {
+        commentsSql.push(
+          this.getCreateColumnCommentSQL(name, String(column.name ?? ""), column.comment),
+        );
+      }
+    }
+
+    let columnListSql = this.getColumnDeclarationListSQL(columns);
+
+    const uniqueConstraints = Array.isArray(options.uniqueConstraints)
+      ? (options.uniqueConstraints as unknown[])
+      : [];
+    for (const definition of uniqueConstraints) {
+      columnListSql += `, ${this.getUniqueConstraintDeclarationSQL(definition)}`;
+    }
+
+    const primary = Array.isArray(options.primary) ? options.primary.map(String) : [];
+    if (primary.length > 0) {
+      let flags = "";
+      const hasFlag = (options.primary_index as { hasFlag?: (name: string) => boolean } | undefined)
+        ?.hasFlag;
+      if (
+        typeof hasFlag === "function" &&
+        hasFlag.call(options.primary_index, "nonclustered") === true
+      ) {
+        flags = " NONCLUSTERED";
+      }
+
+      columnListSql += `, PRIMARY KEY${flags} (${[...new Set(primary)].join(", ")})`;
+    }
+
+    let query = `CREATE TABLE ${name} (${columnListSql}`;
+    const check = this.getCheckDeclarationSQL(columns);
+    if (check.length > 0) {
+      query += `, ${check}`;
+    }
+    query += ")";
+
+    const sql = [query];
+
+    const indexes = Array.isArray(options.indexes) ? (options.indexes as unknown[]) : [];
+    for (const index of indexes) {
+      sql.push(this.getCreateIndexSQL(index, name));
+    }
+
+    const foreignKeys = Array.isArray(options.foreignKeys)
+      ? (options.foreignKeys as unknown[])
+      : [];
+    for (const definition of foreignKeys) {
+      sql.push(this.getCreateForeignKeySQL(definition, name));
+    }
+
+    return [...sql, ...commentsSql, ...defaultConstraintsSql];
+  }
+
   protected initializeDatazenTypeMappings(): Record<string, string> {
     return {
       bigint: Types.BIGINT,
@@ -90,6 +169,54 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   public supportsSequences(): boolean {
     return true;
+  }
+
+  public override getIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `INT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  public override getBigIntTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `BIGINT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  public override getSmallIntTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `SMALLINT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  protected override _getCommonIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return column.autoincrement === true ? " IDENTITY" : "";
+  }
+
+  public override getBooleanTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "BIT";
+  }
+
+  public override getGuidTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "UNIQUEIDENTIFIER";
+  }
+
+  public override getClobTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "VARCHAR(MAX)";
+  }
+
+  public override getBlobTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "VARBINARY(MAX)";
+  }
+
+  public override getDateTimeTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "DATETIME2(6)";
+  }
+
+  public override getDateTimeTzTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "DATETIMEOFFSET(6)";
+  }
+
+  public override getDateTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "DATE";
+  }
+
+  public override getTimeTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "TIME(0)";
   }
 
   protected createReservedKeywordsList(): KeywordList {
@@ -192,6 +319,14 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   public getTimeFormatString(): string {
     return "H:i:s";
+  }
+
+  public override getCreateTemporaryTableSnippetSQL(): string {
+    return "CREATE TABLE";
+  }
+
+  public override getTemporaryTableName(tableName: string): string {
+    return `#${tableName}`;
   }
 
   public getEmptyIdentityInsertSQL(
@@ -327,7 +462,11 @@ export class SQLServerPlatform extends AbstractPlatform {
   }
 
   protected getDefaultConstraintDeclarationSQL(column: Record<string, unknown>): string {
-    return this.getDefaultValueDeclarationSQL(column).trim();
+    if (column.default === undefined || column.default === null) {
+      throw new Error('Incomplete column definition. "default" required.');
+    }
+
+    return `${this.getDefaultValueDeclarationSQL(column)} FOR ${String(column.name ?? "")}`;
   }
 
   protected getAlterColumnCommentSQL(
@@ -392,5 +531,51 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   private quoteNationalStringLiteral(value: string): string {
     return `N${this.quoteStringLiteral(value)}`;
+  }
+
+  public override getColumnDeclarationSQL(name: string, column: Record<string, unknown>): string {
+    if (typeof column.columnDefinition === "string") {
+      return `${name} ${column.columnDefinition}`;
+    }
+
+    let declaration = this.resolveColumnTypeDeclarationForSQLServer(column);
+
+    if (typeof column.collation === "string" && column.collation.length > 0) {
+      declaration += ` ${this.getColumnCollationDeclarationSQL(column.collation)}`;
+    }
+
+    if (column.notnull === true) {
+      declaration += " NOT NULL";
+    }
+
+    return `${name} ${declaration}`;
+  }
+
+  public override getColumnCollationDeclarationSQL(collation: string): string {
+    return `COLLATE ${collation}`;
+  }
+
+  private resolveColumnTypeDeclarationForSQLServer(column: Record<string, unknown>): string {
+    const type = column.type;
+    if (type !== null && typeof type === "object") {
+      const getSQLDeclaration = (type as { getSQLDeclaration?: unknown }).getSQLDeclaration;
+      if (typeof getSQLDeclaration === "function") {
+        const declaration = (
+          getSQLDeclaration as (
+            column: Record<string, unknown>,
+            platform: SQLServerPlatform,
+          ) => unknown
+        )(column, this);
+        if (typeof declaration === "string" && declaration.length > 0) {
+          return declaration;
+        }
+      }
+    }
+
+    if (typeof type === "string") {
+      return type.toUpperCase();
+    }
+
+    return "TEXT";
   }
 }

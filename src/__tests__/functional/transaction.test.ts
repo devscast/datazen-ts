@@ -22,42 +22,52 @@ describe("Functional/TransactionTest", () => {
   it("beginTransaction failure raises ConnectionLost after killing the current session", async ({
     skip,
   }) => {
-    await expectConnectionLoss(functional, connection, skip, async (target) => {
-      await target.beginTransaction();
+    await withDedicatedConnection(functional, async (dedicated) => {
+      await expectConnectionLoss(functional, dedicated, skip, async (target) => {
+        await target.beginTransaction();
+      });
     });
   });
 
   it("commit failure raises ConnectionLost after killing the current session", async ({ skip }) => {
-    await connection.beginTransaction();
+    await withDedicatedConnection(functional, async (dedicated) => {
+      await dedicated.beginTransaction();
 
-    await expectConnectionLoss(functional, connection, skip, async (target) => {
-      await target.commit();
+      await expectConnectionLoss(functional, dedicated, skip, async (target) => {
+        await target.commit();
+      });
     });
   });
 
   it("rollback failure raises ConnectionLost after killing the current session", async ({
     skip,
   }) => {
-    await connection.beginTransaction();
+    await withDedicatedConnection(functional, async (dedicated) => {
+      await dedicated.beginTransaction();
 
-    await expectConnectionLoss(functional, connection, skip, async (target) => {
-      await target.rollBack();
+      await expectConnectionLoss(functional, dedicated, skip, async (target) => {
+        await target.rollBack();
+      });
     });
   });
 
   it("transactional failure during callback via forced connection loss", async ({ skip }) => {
-    await expectConnectionLoss(functional, connection, skip, async (target) => {
-      await target.transactional(async (transactionalConnection) => {
-        await transactionalConnection.executeQuery(
-          transactionalConnection.getDatabasePlatform().getDummySelectSQL(),
-        );
+    await withDedicatedConnection(functional, async (dedicated) => {
+      await expectConnectionLoss(functional, dedicated, skip, async (target) => {
+        await target.transactional(async (transactionalConnection) => {
+          await transactionalConnection.executeQuery(
+            transactionalConnection.getDatabasePlatform().getDummySelectSQL(),
+          );
+        });
       });
     });
   });
 
   it("transactional failure during commit via forced connection loss", async ({ skip }) => {
-    await expectConnectionLoss(functional, connection, skip, async (target) => {
-      await target.transactional(async () => {});
+    await withDedicatedConnection(functional, async (dedicated) => {
+      await expectConnectionLoss(functional, dedicated, skip, async (target) => {
+        await target.transactional(async () => {});
+      });
     });
   });
 
@@ -89,7 +99,7 @@ describe("Functional/TransactionTest", () => {
 
     expect(String(result)).toBe("1");
     expect(String(await connection.fetchOne(query))).toBe("1");
-  });
+  }, 15000);
 });
 
 async function expectConnectionLoss(
@@ -135,5 +145,22 @@ async function killCurrentSession(
     await privilegedConnection.executeStatement(killProcessStatement, [currentProcessId]);
   } finally {
     await privilegedConnection.close();
+  }
+}
+
+async function withDedicatedConnection(
+  functional: ReturnType<typeof useFunctionalTestCase>,
+  run: (connection: Connection) => Promise<void>,
+): Promise<void> {
+  const dedicated = await functional.createConnection();
+
+  try {
+    await run(dedicated);
+  } finally {
+    while (dedicated.isTransactionActive()) {
+      await dedicated.rollBack();
+    }
+
+    await dedicated.close();
   }
 }

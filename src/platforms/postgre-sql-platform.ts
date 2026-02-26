@@ -3,12 +3,52 @@ import { PostgreSQLSchemaManager } from "../schema/postgre-sql-schema-manager";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
+import { DateIntervalUnit } from "./date-interval-unit";
 import type { KeywordList } from "./keywords/keyword-list";
 import { PostgreSQLKeywords } from "./keywords/postgresql-keywords";
 import { PostgreSQLMetadataProvider } from "./postgresql/postgre-sql-metadata-provider";
 
 export class PostgreSQLPlatform extends AbstractPlatform {
   protected useBooleanTrueFalseStrings = false;
+
+  protected override _getCreateTableSQL(
+    name: string,
+    columns: Array<Record<string, unknown>>,
+    options: Record<string, unknown> = {},
+  ): string[] {
+    this.validateCreateTableOptions(options, "_getCreateTableSQL");
+
+    let columnListSql = this.getColumnDeclarationListSQL(columns);
+
+    const primary = Array.isArray(options.primary) ? options.primary.map(String) : [];
+    if (primary.length > 0) {
+      columnListSql += `, PRIMARY KEY (${[...new Set(primary)].join(", ")})`;
+    }
+
+    const unlogged = options.unlogged === true ? " UNLOGGED" : "";
+    const sql = [`CREATE${unlogged} TABLE ${name} (${columnListSql})`];
+
+    const indexes = Array.isArray(options.indexes) ? (options.indexes as unknown[]) : [];
+    for (const index of indexes) {
+      sql.push(this.getCreateIndexSQL(index, name));
+    }
+
+    const uniqueConstraints = Array.isArray(options.uniqueConstraints)
+      ? (options.uniqueConstraints as unknown[])
+      : [];
+    for (const uniqueConstraint of uniqueConstraints) {
+      sql.push(this.getCreateUniqueConstraintSQL(uniqueConstraint, name));
+    }
+
+    const foreignKeys = Array.isArray(options.foreignKeys)
+      ? (options.foreignKeys as unknown[])
+      : [];
+    for (const definition of foreignKeys) {
+      sql.push(this.getCreateForeignKeySQL(definition, name));
+    }
+
+    return sql;
+  }
 
   protected initializeDatazenTypeMappings(): Record<string, string> {
     return {
@@ -48,11 +88,26 @@ export class PostgreSQLPlatform extends AbstractPlatform {
     substring: string,
     start: string | null = null,
   ): string {
-    if (start === null) {
-      return `POSITION(${substring} IN ${string})`;
+    if (start !== null) {
+      const sliced = this.getSubstringExpression(string, start);
+      return `CASE WHEN (POSITION(${substring} IN ${sliced}) = 0) THEN 0 ELSE (POSITION(${substring} IN ${sliced}) + ${start} - 1) END`;
     }
 
-    return `(POSITION(${substring} IN SUBSTRING(${string} FROM ${start})) + ${start} - 1)`;
+    return `POSITION(${substring} IN ${string})`;
+  }
+
+  protected override getDateArithmeticIntervalExpression(
+    date: string,
+    operator: string,
+    interval: string,
+    unit: DateIntervalUnit,
+  ): string {
+    if (unit === DateIntervalUnit.QUARTER) {
+      interval = this.multiplyInterval(interval, 3);
+      unit = DateIntervalUnit.MONTH;
+    }
+
+    return `(${date} ${operator} (${interval} || ' ${unit}')::interval)`;
   }
 
   public getDateDiffExpression(date1: string, date2: string): string {
@@ -77,6 +132,66 @@ export class PostgreSQLPlatform extends AbstractPlatform {
 
   public supportsIdentityColumns(): boolean {
     return true;
+  }
+
+  public override getBooleanTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "BOOLEAN";
+  }
+
+  public override getGuidTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "UUID";
+  }
+
+  public override getDateTimeTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "TIMESTAMP(0) WITHOUT TIME ZONE";
+  }
+
+  public override getDateTimeTzTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "TIMESTAMP(0) WITH TIME ZONE";
+  }
+
+  public override getTimeTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "TIME(0) WITHOUT TIME ZONE";
+  }
+
+  public override getClobTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "TEXT";
+  }
+
+  public override getBlobTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "BYTEA";
+  }
+
+  protected override getBinaryTypeDeclarationSQLSnippet(_length: number | undefined): string {
+    return "BYTEA";
+  }
+
+  protected override getVarbinaryTypeDeclarationSQLSnippet(_length: number | undefined): string {
+    return "BYTEA";
+  }
+
+  public override getIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `INT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  public override getBigIntTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `BIGINT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  public override getSmallIntTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `SMALLINT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  protected override _getCommonIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return column.autoincrement === true ? " GENERATED BY DEFAULT AS IDENTITY" : "";
+  }
+
+  public override getDefaultValueDeclarationSQL(column: Record<string, unknown>): string {
+    if (column.autoincrement === true) {
+      return "";
+    }
+
+    return super.getDefaultValueDeclarationSQL(column);
   }
 
   public setUseBooleanTrueFalseStrings(flag: boolean): void {

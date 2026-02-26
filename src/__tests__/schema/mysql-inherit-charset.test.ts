@@ -46,9 +46,7 @@ describe("MySQL schema manager charset inheritance parity", () => {
       .setColumns(Column.editor().setUnquotedName("aa").setTypeName(Types.INTEGER).create())
       .create();
 
-    expect(platform.getCreateTableSQL(table)).toEqual([
-      "CREATE TABLE foobar (aa INT DEFAULT NULL NOT NULL)",
-    ]);
+    expect(platform.getCreateTableSQL(table)).toEqual(["CREATE TABLE foobar (aa INT NOT NULL)"]);
 
     table = Table.editor()
       .setUnquotedName("foobar")
@@ -57,7 +55,7 @@ describe("MySQL schema manager charset inheritance parity", () => {
       .create();
 
     expect(platform.getCreateTableSQL(table)).toEqual([
-      "CREATE TABLE foobar (aa INT DEFAULT NULL NOT NULL) DEFAULT CHARACTER SET utf8",
+      "CREATE TABLE foobar (aa INT NOT NULL) DEFAULT CHARACTER SET utf8",
     ]);
   });
 });

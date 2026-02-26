@@ -5,7 +5,11 @@ import { Comparator } from "./comparator";
 import { TableDoesNotExist } from "./exception/table-does-not-exist";
 import type { ForeignKeyConstraint } from "./foreign-key-constraint";
 import type { Index } from "./index";
+import { ForeignKeyConstraintColumnMetadataProcessor } from "./introspection/metadata-processor/foreign-key-constraint-column-metadata-processor";
+import { IndexColumnMetadataProcessor } from "./introspection/metadata-processor/index-column-metadata-processor";
+import { PrimaryKeyConstraintColumnMetadataProcessor } from "./introspection/metadata-processor/primary-key-constraint-column-metadata-processor";
 import { OptionallyQualifiedName } from "./name/optionally-qualified-name";
+import { Parsers } from "./name/parsers";
 import { UnqualifiedName } from "./name/unqualified-name";
 import type { PrimaryKeyConstraint } from "./primary-key-constraint";
 import { Schema } from "./schema";
@@ -104,7 +108,49 @@ export abstract class AbstractSchemaManager {
       throw TableDoesNotExist.new(name);
     }
 
-    return new Table(name);
+    try {
+      const provider = this.platform.createMetadataProvider(this.connection);
+      const parsedName = Parsers.getOptionallyQualifiedNameParser().parse(name);
+      const schemaName = parsedName.getQualifier()?.getValue() ?? null;
+      const tableName = parsedName.getUnqualifiedName().getValue();
+
+      const columnRows = await provider.getTableColumnsForTable(schemaName, tableName);
+      const [indexRows, primaryKeyRows, foreignKeyRows, optionsRows] = await Promise.all([
+        provider.getIndexColumnsForTable(schemaName, tableName).catch(() => []),
+        provider.getPrimaryKeyConstraintColumnsForTable(schemaName, tableName).catch(() => []),
+        provider.getForeignKeyConstraintColumnsForTable(schemaName, tableName).catch(() => []),
+        provider.getTableOptionsForTable(schemaName, tableName).catch(() => []),
+      ]);
+
+      const editor = Table.editor()
+        .setUnquotedName(tableName, schemaName)
+        .setColumns(...columnRows.map((row) => row.getColumn()));
+
+      const options = optionsRows[0]?.getOptions();
+      if (options !== undefined) {
+        editor.setOptions(options);
+      }
+
+      const primaryKey = buildPrimaryKeyConstraint(primaryKeyRows);
+      if (primaryKey !== null) {
+        editor.setPrimaryKeyConstraint(primaryKey);
+      }
+
+      for (const index of buildIndexes(indexRows)) {
+        editor.addIndex(index);
+      }
+
+      for (const foreignKey of buildForeignKeys(
+        foreignKeyRows,
+        await this.getCurrentSchemaName(),
+      )) {
+        editor.addForeignKeyConstraint(foreignKey);
+      }
+
+      return editor.create();
+    } catch {
+      return new Table(name);
+    }
   }
 
   public async listTableForeignKeys(table: string): Promise<ForeignKeyConstraint[]> {
@@ -553,6 +599,76 @@ export abstract class AbstractSchemaManager {
 
     return grouped;
   }
+}
+
+function buildIndexes(
+  rows: Array<import("./metadata/index-column-metadata-row").IndexColumnMetadataRow>,
+): Index[] {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const processor = new IndexColumnMetadataProcessor();
+  const editors = new Map<string, ReturnType<IndexColumnMetadataProcessor["initializeEditor"]>>();
+
+  for (const row of rows) {
+    const key = row.getIndexName().toLowerCase();
+    let editor = editors.get(key);
+    if (editor === undefined) {
+      editor = processor.initializeEditor(row);
+      editors.set(key, editor);
+    }
+
+    processor.applyRow(editor, row);
+  }
+
+  return [...editors.values()].map((editor) => editor.create());
+}
+
+function buildPrimaryKeyConstraint(
+  rows: Array<import("./metadata/primary-key-constraint-column-row").PrimaryKeyConstraintColumnRow>,
+): PrimaryKeyConstraint | null {
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const processor = new PrimaryKeyConstraintColumnMetadataProcessor();
+  const editor = processor.initializeEditor(rows[0]!);
+  for (const row of rows) {
+    processor.applyRow(editor, row);
+  }
+
+  return editor.create();
+}
+
+function buildForeignKeys(
+  rows: Array<
+    import("./metadata/foreign-key-constraint-column-metadata-row").ForeignKeyConstraintColumnMetadataRow
+  >,
+  currentSchemaName: string | null,
+): ForeignKeyConstraint[] {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const processor = new ForeignKeyConstraintColumnMetadataProcessor(currentSchemaName);
+  const editors = new Map<
+    string,
+    ReturnType<ForeignKeyConstraintColumnMetadataProcessor["initializeEditor"]>
+  >();
+
+  for (const row of rows) {
+    const key = String(row.getId());
+    let editor = editors.get(key);
+    if (editor === undefined) {
+      editor = processor.initializeEditor(row);
+      editors.set(key, editor);
+    }
+
+    processor.applyRow(editor, row);
+  }
+
+  return [...editors.values()].map((editor) => editor.create());
 }
 
 function normalizeName(value: unknown): string | null {

@@ -41,7 +41,7 @@ describe("Functional/ExceptionTest", () => {
   });
 
   it("throws table exists exception", async () => {
-    const sm = functional.connection().createSchemaManager();
+    const sm = await functional.connection().createSchemaManager();
     const table = Table.editor()
       .setUnquotedName("alreadyexist_table")
       .setColumns(Column.editor().setUnquotedName("id").setTypeName(Types.INTEGER).create())

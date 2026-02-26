@@ -20,43 +20,43 @@ import { PostgreSQL120Platform } from "../../platforms/postgre-sql120-platform";
 describe("VersionAwarePlatformDriver", () => {
   it.each(
     mySqlVersionProvider(),
-  )("MySQL2Driver instantiates %p for version %p", (version, expectedClass) => {
-    assertDriverInstantiatesDatabasePlatform(new MySQL2Driver(), version, expectedClass);
+  )("MySQL2Driver instantiates %p for version %p", async (version, expectedClass) => {
+    await assertDriverInstantiatesDatabasePlatform(new MySQL2Driver(), version, expectedClass);
   });
 
   it.each(
     postgreSqlVersionProvider(),
-  )("PgDriver instantiates %p for version %p", (version, expectedClass) => {
-    assertDriverInstantiatesDatabasePlatform(new PgDriver(), version, expectedClass);
+  )("PgDriver instantiates %p for version %p", async (version, expectedClass) => {
+    await assertDriverInstantiatesDatabasePlatform(new PgDriver(), version, expectedClass);
   });
 
-  it("throws on malformed MySQL/MariaDB versions", () => {
-    expect(() =>
+  it("throws on malformed MySQL/MariaDB versions", async () => {
+    await expect(
       new MySQL2Driver().getDatabasePlatform(
         new StaticServerVersionProvider("mariadb-not-a-version"),
       ),
-    ).toThrow(InvalidPlatformVersion);
+    ).rejects.toThrow(InvalidPlatformVersion);
 
-    expect(() =>
+    await expect(
       new MySQL2Driver().getDatabasePlatform(
         new StaticServerVersionProvider("totally-invalid-version"),
       ),
-    ).toThrow(InvalidPlatformVersion);
+    ).rejects.toThrow(InvalidPlatformVersion);
   });
 
-  it("throws on malformed PostgreSQL versions", () => {
-    expect(() =>
+  it("throws on malformed PostgreSQL versions", async () => {
+    await expect(
       new PgDriver().getDatabasePlatform(new StaticServerVersionProvider("not-a-postgres-version")),
-    ).toThrow(InvalidPlatformVersion);
+    ).rejects.toThrow(InvalidPlatformVersion);
   });
 });
 
-function assertDriverInstantiatesDatabasePlatform(
+async function assertDriverInstantiatesDatabasePlatform(
   driver: Driver,
   version: string,
   expectedClass: new (...args: never[]) => AbstractPlatform,
-): void {
-  const platform = driver.getDatabasePlatform(new StaticServerVersionProvider(version));
+): Promise<void> {
+  const platform = await driver.getDatabasePlatform(new StaticServerVersionProvider(version));
 
   expect(platform).toBeInstanceOf(expectedClass);
 }

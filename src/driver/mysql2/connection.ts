@@ -131,13 +131,27 @@ export class MySQL2Connection implements DriverConnection {
   }
 
   private releaseTransactionConnection(connection: MySQL2ConnectionLike): void {
-    if ("release" in connection && typeof connection.release === "function") {
+    const canReleaseBorrowedConnection =
+      "getConnection" in this.client && typeof this.client.getConnection === "function";
+
+    if (
+      canReleaseBorrowedConnection &&
+      "release" in connection &&
+      typeof connection.release === "function"
+    ) {
       connection.release();
     }
   }
 
   private async executeRaw(sql: string, parameters: unknown[]): Promise<unknown> {
     const executor = this.transactionConnection ?? this.client;
+
+    // mysql2 prepared statements do not support certain control statements (e.g. SAVEPOINT).
+    // Follow a safer path for parameterless SQL by using query() directly.
+    if (parameters.length === 0 && "query" in executor && typeof executor.query === "function") {
+      const result = await executor.query(sql);
+      return this.unwrapDriverResult(result);
+    }
 
     if ("execute" in executor && typeof executor.execute === "function") {
       const result = await executor.execute(sql, parameters);
@@ -157,19 +171,19 @@ export class MySQL2Connection implements DriverConnection {
       return result;
     }
 
-    return result[0];
+    return {
+      fields: result[1],
+      rows: result[0],
+    };
   }
 
   private toDriverResult(result: unknown): DriverResult {
     const rows = this.toRows(result);
-    if (rows.length > 0) {
-      const firstRow = rows[0];
+    const firstRow = rows[0];
+    const columns = this.toColumns(result, firstRow);
 
-      return new MySQL2Result(
-        rows,
-        firstRow === undefined ? [] : Object.keys(firstRow),
-        rows.length,
-      );
+    if (rows.length > 0 || columns.length > 0) {
+      return new MySQL2Result(rows, columns, rows.length);
     }
 
     const metadata = this.toMetadata(result);
@@ -179,12 +193,13 @@ export class MySQL2Connection implements DriverConnection {
   }
 
   private toRows(result: unknown): Array<Record<string, unknown>> {
-    if (!Array.isArray(result)) {
+    const rowPayload = this.extractRowsPayload(result);
+    if (!Array.isArray(rowPayload)) {
       return [];
     }
 
     const rows: Array<Record<string, unknown>> = [];
-    for (const row of result) {
+    for (const row of rowPayload) {
       if (row !== null && typeof row === "object" && !Array.isArray(row)) {
         rows.push(row as Record<string, unknown>);
       }
@@ -193,10 +208,33 @@ export class MySQL2Connection implements DriverConnection {
     return rows;
   }
 
-  private toMetadata(result: unknown): { affectedRows: number; insertId: number | string | null } {
+  private toColumns(result: unknown, firstRow: Record<string, unknown> | undefined): string[] {
     if (result !== null && typeof result === "object" && !Array.isArray(result)) {
-      const affectedRowsValue = (result as { affectedRows?: unknown }).affectedRows;
-      const insertIdValue = (result as { insertId?: unknown }).insertId;
+      const fields = (result as { fields?: unknown }).fields;
+      if (Array.isArray(fields)) {
+        const names = fields
+          .map((field) => (field !== null && typeof field === "object" ? field.name : undefined))
+          .filter((name): name is string => typeof name === "string");
+
+        if (names.length > 0) {
+          return names;
+        }
+      }
+    }
+
+    return firstRow === undefined ? [] : Object.keys(firstRow);
+  }
+
+  private toMetadata(result: unknown): { affectedRows: number; insertId: number | string | null } {
+    const metadataPayload = this.extractRowsPayload(result);
+
+    if (
+      metadataPayload !== null &&
+      typeof metadataPayload === "object" &&
+      !Array.isArray(metadataPayload)
+    ) {
+      const affectedRowsValue = (metadataPayload as { affectedRows?: unknown }).affectedRows;
+      const insertIdValue = (metadataPayload as { insertId?: unknown }).insertId;
 
       return {
         affectedRows: typeof affectedRowsValue === "number" ? affectedRowsValue : 0,
@@ -207,9 +245,9 @@ export class MySQL2Connection implements DriverConnection {
       };
     }
 
-    if (Array.isArray(result)) {
+    if (Array.isArray(metadataPayload)) {
       return {
-        affectedRows: result.length,
+        affectedRows: metadataPayload.length,
         insertId: null,
       };
     }
@@ -218,5 +256,18 @@ export class MySQL2Connection implements DriverConnection {
       affectedRows: 0,
       insertId: null,
     };
+  }
+
+  private extractRowsPayload(result: unknown): unknown {
+    if (
+      result !== null &&
+      typeof result === "object" &&
+      !Array.isArray(result) &&
+      "rows" in result
+    ) {
+      return (result as { rows?: unknown }).rows;
+    }
+
+    return result;
   }
 }

@@ -123,10 +123,10 @@ describe("Platform parity extensions", () => {
     const platform = new OraclePlatform();
 
     expect(platform.getDateAddQuarterExpression("created_at", "2")).toBe(
-      "ADD_MONTHS(created_at, +2 * 3)",
+      "ADD_MONTHS(created_at, +(2 * 3))",
     );
     expect(platform.getDateSubYearExpression("created_at", "1")).toBe(
-      "ADD_MONTHS(created_at, -1 * 12)",
+      "ADD_MONTHS(created_at, -(1 * 12))",
     );
     expect(platform.supportsReleaseSavepoints()).toBe(false);
     expect(platform.releaseSavePoint("sp1")).toBe("");
@@ -135,9 +135,9 @@ describe("Platform parity extensions", () => {
   it("maps DB2 date arithmetic and select syntax", () => {
     const platform = new DB2Platform();
 
-    expect(platform.getDateAddWeeksExpression("created_at", "3")).toBe("created_at + 3 * 7 DAY");
+    expect(platform.getDateAddWeeksExpression("created_at", "3")).toBe("created_at + (3 * 7) DAY");
     expect(platform.getDateSubQuarterExpression("created_at", "2")).toBe(
-      "created_at - 2 * 3 MONTH",
+      "created_at - (2 * 3) MONTH",
     );
     expect(platform.getDummySelectSQL("1")).toBe("SELECT 1 FROM sysibm.sysdummy1");
     expect(platform.supportsSavepoints()).toBe(false);
@@ -257,7 +257,7 @@ describe("Platform parity extensions", () => {
     );
 
     expect(platform.getCreateTableSQL(table)).toEqual([
-      "CREATE TABLE users (id INT, role_id INT, INDEX idx_users_role_id (role_id), PRIMARY KEY (id))",
+      "CREATE TABLE users (id INT, role_id INT, PRIMARY KEY (id), INDEX idx_users_role_id (role_id))",
       "ALTER TABLE users ADD CONSTRAINT fk_users_roles FOREIGN KEY (role_id) REFERENCES roles (id) ON DELETE CASCADE",
     ]);
   });

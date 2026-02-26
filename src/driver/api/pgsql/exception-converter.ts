@@ -80,7 +80,7 @@ export class ExceptionConverter implements ExceptionConverterInterface {
       return new ConnectionException(details.message, details);
     }
 
-    if (details.message.toLowerCase().includes("terminating connection")) {
+    if (this.isConnectionLostMessage(details.message)) {
       return new ConnectionLost(details.message, details);
     }
 
@@ -155,6 +155,17 @@ export class ExceptionConverter implements ExceptionConverterInterface {
     }
 
     return false;
+  }
+
+  private isConnectionLostMessage(message: string): boolean {
+    const normalized = message.toLowerCase();
+
+    return (
+      normalized.includes("terminating connection") ||
+      normalized.includes("not queryable") ||
+      normalized.includes("connection terminated unexpectedly") ||
+      normalized.includes("server closed the connection unexpectedly")
+    );
   }
 
   private asRecord(value: unknown): Record<string, unknown> {
