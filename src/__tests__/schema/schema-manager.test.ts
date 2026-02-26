@@ -361,7 +361,10 @@ describe("Connection schema manager integration", () => {
       manager.alterTable(
         new TableDiff(oldUsers, newUsers, { addedColumns: [newUsers.getColumn("email")] }),
       ),
-    ).rejects.toThrow();
+    ).resolves.toBeUndefined();
+    expect(driver.executedStatements.some((sql) => sql.includes("ALTER TABLE users ADD"))).toBe(
+      true,
+    );
     await expect(manager.alterSchema(new SchemaDiff())).rejects.toThrow();
     await expect(manager.migrateSchema(new Schema())).rejects.toThrow();
   });

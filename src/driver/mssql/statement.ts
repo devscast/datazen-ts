@@ -4,8 +4,9 @@ import type { Statement as DriverStatement } from "../statement";
 import type { MSSQLConnection } from "./connection";
 
 type MSSQLTypedParameter = {
-  typeHint: "varbinary";
+  typeHint: "varbinary" | "varchar";
   value: unknown;
+  length?: number;
 };
 
 export class MSSQLStatement implements DriverStatement {
@@ -46,6 +47,10 @@ export class MSSQLStatement implements DriverStatement {
     }
 
     if (type !== ParameterType.BINARY && type !== ParameterType.LARGE_OBJECT) {
+      if (type === ParameterType.ASCII && typeof value === "string") {
+        return this.wrapVarchar(value, Math.max(value.length, 1));
+      }
+
       return value;
     }
 
@@ -70,5 +75,9 @@ export class MSSQLStatement implements DriverStatement {
 
   private wrapVarBinary(value: unknown): MSSQLTypedParameter {
     return { typeHint: "varbinary", value };
+  }
+
+  private wrapVarchar(value: unknown, length?: number): MSSQLTypedParameter {
+    return { length, typeHint: "varchar", value };
   }
 }

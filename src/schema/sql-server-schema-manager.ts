@@ -23,7 +23,7 @@ WHERE  name NOT IN('guest', 'INFORMATION_SCHEMA', 'sys')
   }
 
   public createComparator(config: ComparatorConfig = new ComparatorConfig()): Comparator {
-    return new Comparator(config);
+    return new Comparator(this.platform, config);
   }
 
   protected getListTableNamesSQL(): string {

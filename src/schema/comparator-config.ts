@@ -10,9 +10,9 @@ export class ComparatorConfig {
   private readonly reportModifiedIndexes: boolean;
 
   constructor(options: ComparatorConfigOptions = {}) {
-    this.detectColumnRenames = options.detectColumnRenames ?? false;
-    this.detectIndexRenames = options.detectIndexRenames ?? false;
-    this.reportModifiedIndexes = options.reportModifiedIndexes ?? false;
+    this.detectColumnRenames = options.detectColumnRenames ?? true;
+    this.detectIndexRenames = options.detectIndexRenames ?? true;
+    this.reportModifiedIndexes = options.reportModifiedIndexes ?? true;
   }
 
   public isDetectColumnRenamesEnabled(): boolean {

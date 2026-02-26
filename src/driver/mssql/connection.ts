@@ -14,8 +14,9 @@ const require = createRequire(import.meta.url);
 const mssqlModule = require("mssql") as unknown;
 
 type MSSQLTypedParameter = {
-  typeHint: "varbinary";
+  typeHint: "varbinary" | "varchar";
   value: unknown;
+  length?: number;
 };
 
 export class MSSQLConnection implements DriverConnection {
@@ -168,6 +169,29 @@ export class MSSQLConnection implements DriverConnection {
         request.input(name, parameter.value);
         return;
       }
+      case "varchar": {
+        const sql = (mssqlModule as { default?: unknown })?.default ?? mssqlModule;
+        const varCharFactory = (sql as { VarChar?: unknown }).VarChar;
+
+        if (typeof varCharFactory === "function") {
+          const max = (sql as { MAX?: unknown }).MAX;
+          const length = parameter.length ?? max;
+          if (length !== undefined) {
+            request.input(
+              name,
+              (varCharFactory as (declaredLength: unknown) => unknown)(length),
+              parameter.value,
+            );
+            return;
+          }
+
+          request.input(name, parameter.value);
+          return;
+        }
+
+        request.input(name, parameter.value);
+        return;
+      }
     }
   }
 
@@ -178,7 +202,8 @@ export class MSSQLConnection implements DriverConnection {
       !Array.isArray(value) &&
       "typeHint" in value &&
       "value" in value &&
-      (value as { typeHint?: unknown }).typeHint === "varbinary"
+      ((value as { typeHint?: unknown }).typeHint === "varbinary" ||
+        (value as { typeHint?: unknown }).typeHint === "varchar")
     );
   }
 

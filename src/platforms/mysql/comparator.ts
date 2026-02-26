@@ -5,16 +5,21 @@ import type { TableDiff } from "../../schema/table-diff";
 import { Type } from "../../types/type";
 import { Types } from "../../types/types";
 import type { AbstractMySQLPlatform } from "../abstract-mysql-platform";
-import { MariaDBPlatform } from "../mariadb-platform";
-import type { CharsetMetadataProvider } from "./charset-metadata-provider";
-import type { CollationMetadataProvider } from "./collation-metadata-provider";
 import type { DefaultTableOptions } from "./default-table-options";
+
+type CharsetMetadataLookup = {
+  getDefaultCharsetCollation(charset: string): string | null;
+};
+
+type CollationMetadataLookup = {
+  getCollationCharset(collation: string): string | null;
+};
 
 export class Comparator extends BaseComparator {
   public constructor(
-    private readonly platform: AbstractMySQLPlatform,
-    private readonly charsetMetadataProvider: CharsetMetadataProvider,
-    private readonly collationMetadataProvider: CollationMetadataProvider,
+    private readonly mysqlPlatform: AbstractMySQLPlatform,
+    private readonly charsetMetadataProvider: CharsetMetadataLookup,
+    private readonly collationMetadataProvider: CollationMetadataLookup,
     private readonly defaultTableOptions: DefaultTableOptions,
     config?: ComparatorConfig,
   ) {
@@ -81,7 +86,7 @@ export class Comparator extends BaseComparator {
   }
 
   private isMariaDbJsonColumn(column: { getType(): unknown }): boolean {
-    if (!(this.platform instanceof MariaDBPlatform)) {
+    if (!this.mysqlPlatform.constructor.name.includes("MariaDB")) {
       return false;
     }
 
@@ -113,7 +118,15 @@ function cloneTable(table: Table): Table {
     editor.setPrimaryKeyConstraint(primaryKeyConstraint.edit().create());
   }
 
-  return editor.create();
+  const cloned = editor.create();
+  const renamedColumns = table.getRenamedColumns();
+  if (Object.keys(renamedColumns).length > 0) {
+    (cloned as unknown as { renamedColumns: Record<string, string> }).renamedColumns = {
+      ...renamedColumns,
+    };
+  }
+
+  return cloned;
 }
 
 function asString(value: unknown): string | null {

@@ -1,17 +1,17 @@
 import type { CharsetMetadataProvider } from "../charset-metadata-provider";
 
 export class CachingCharsetMetadataProvider implements CharsetMetadataProvider {
-  private readonly cache = new Map<string, string | null>();
+  private readonly cache = new Map<string, Promise<string | null>>();
 
   public constructor(private readonly provider: CharsetMetadataProvider) {}
 
-  public getDefaultCharsetCollation(charset: string): string | null {
+  public async getDefaultCharsetCollation(charset: string): Promise<string | null> {
     if (this.cache.has(charset)) {
-      return this.cache.get(charset) ?? null;
+      return (await this.cache.get(charset)) ?? null;
     }
 
-    const value = this.provider.getDefaultCharsetCollation(charset);
-    this.cache.set(charset, value);
-    return value;
+    const valuePromise = this.provider.getDefaultCharsetCollation(charset);
+    this.cache.set(charset, valuePromise);
+    return (await valuePromise) ?? null;
   }
 }

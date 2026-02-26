@@ -1,10 +1,12 @@
 import type { Connection } from "../connection";
+import { ColumnLengthRequired } from "../exception/invalid-column-type/column-length-required";
 import { LockMode } from "../lock-mode";
 import { SQLServerSchemaManager } from "../schema/sql-server-schema-manager";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
+import { NotSupported } from "./exception/not-supported";
 import type { KeywordList } from "./keywords/keyword-list";
 import { SQLServerKeywords } from "./keywords/sql-server-keywords";
 import { SQLServerMetadataProvider } from "./sqlserver/sql-server-metadata-provider";
@@ -191,6 +193,15 @@ export class SQLServerPlatform extends AbstractPlatform {
     return "BIT";
   }
 
+  public override getAsciiStringTypeDeclarationSQL(column: Record<string, unknown>): string {
+    const length = typeof column.length === "number" ? column.length : undefined;
+    if (column.fixed === true) {
+      return super.getCharTypeDeclarationSQLSnippet(length);
+    }
+
+    return super.getVarcharTypeDeclarationSQLSnippet(length);
+  }
+
   public override getGuidTypeDeclarationSQL(_column: Record<string, unknown>): string {
     return "UNIQUEIDENTIFIER";
   }
@@ -201,6 +212,148 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   public override getBlobTypeDeclarationSQL(_column: Record<string, unknown>): string {
     return "VARBINARY(MAX)";
+  }
+
+  public override getAlterTableSQL(diff: unknown): string[] {
+    const addedColumns = this.readDiffArray(diff, "getAddedColumns");
+    const changedColumns = this.readDiffArray(diff, "getChangedColumns").filter(
+      (columnDiff) => !this.isSqlServerMetadataNoiseColumnDiff(columnDiff),
+    );
+    const droppedColumns = this.readDiffArray(diff, "getDroppedColumns");
+
+    if (addedColumns.length === 0 && changedColumns.length === 0 && droppedColumns.length === 0) {
+      return super.getAlterTableSQL(diff);
+    }
+
+    const oldTable = this.readDiffTable(diff, "getOldTable");
+    const newTable = this.readDiffTable(diff, "getNewTable");
+    if (oldTable === undefined || newTable === undefined) {
+      throw NotSupported.new("getAlterTableSQL");
+    }
+
+    const newTableName = this.getDynamicSqlServerTableName(newTable);
+    const sql: string[] = [];
+    const commentsSql: string[] = [];
+
+    for (const column of addedColumns) {
+      sql.push(`ALTER TABLE ${newTableName} ADD ${this.getSqlServerAddColumnDeclaration(column)}`);
+    }
+
+    for (const column of droppedColumns) {
+      const defaultValue = this.readDiffValue<unknown>(column, "getDefault");
+      if (defaultValue !== undefined && defaultValue !== null) {
+        sql.push(
+          `ALTER TABLE ${newTableName} ${this.getAlterTableDropDefaultConstraintClause(column)}`,
+        );
+      }
+
+      const quotedName = this.readDiffString(column, "getQuotedName", this);
+      if (quotedName.length > 0) {
+        sql.push(`ALTER TABLE ${newTableName} DROP COLUMN ${quotedName}`);
+      }
+    }
+
+    for (const columnDiff of changedColumns) {
+      const newColumn = this.readDiffValue<unknown>(columnDiff, "getNewColumn");
+      const oldColumn = this.readDiffValue<unknown>(columnDiff, "getOldColumn");
+      if (newColumn === undefined || oldColumn === undefined) {
+        continue;
+      }
+
+      const nameChanged = this.readDiffValue<boolean>(columnDiff, "hasNameChanged") === true;
+      if (nameChanged) {
+        const oldColumnNameSQL = this.readDiffString(oldColumn, "getQuotedName", this);
+        const newColumnName = this.readDiffString(newColumn, "getName");
+        if (oldColumnNameSQL.length > 0 && newColumnName.length > 0) {
+          sql.push(...this.getRenameColumnSQL(newTableName, oldColumnNameSQL, newColumnName));
+        }
+      }
+
+      const newComment = this.readDiffString(newColumn, "getComment");
+      const oldComment = this.readDiffString(oldColumn, "getComment");
+      const hasCommentChanged =
+        this.readDiffValue<boolean>(columnDiff, "hasCommentChanged") === true;
+      if (hasCommentChanged) {
+        const quotedColumnName = this.readDiffString(newColumn, "getQuotedName", this);
+        if (quotedColumnName.length > 0) {
+          if (oldComment.length > 0 && newComment.length > 0) {
+            commentsSql.push(
+              this.getAlterColumnCommentSQL(newTableName, quotedColumnName, newComment),
+            );
+          } else if (oldComment.length > 0 && newComment.length === 0) {
+            commentsSql.push(this.getDropColumnCommentSQL(newTableName, quotedColumnName));
+          } else if (oldComment.length === 0 && newComment.length > 0) {
+            commentsSql.push(
+              this.getCreateColumnCommentSQL(newTableName, quotedColumnName, newComment),
+            );
+          }
+        }
+      }
+
+      const columnNameSQL = this.readDiffString(newColumn, "getQuotedName", this);
+      if (columnNameSQL.length === 0) {
+        continue;
+      }
+
+      const newDeclarationSQL = this.getColumnDeclarationSQL(
+        columnNameSQL,
+        this.toSqlServerColumnDefinition(newColumn),
+      );
+      const oldDeclarationSQL = this.getColumnDeclarationSQL(
+        columnNameSQL,
+        this.toSqlServerColumnDefinition(oldColumn),
+      );
+      const declarationSQLChanged = newDeclarationSQL !== oldDeclarationSQL;
+      const defaultChanged = this.readDiffValue<boolean>(columnDiff, "hasDefaultChanged") === true;
+
+      if (!declarationSQLChanged && !defaultChanged && !nameChanged) {
+        continue;
+      }
+
+      const requireDropDefaultConstraint =
+        this.alterColumnRequiresDropDefaultConstraint(columnDiff);
+      if (requireDropDefaultConstraint) {
+        sql.push(
+          `ALTER TABLE ${newTableName} ${this.getAlterTableDropDefaultConstraintClause(oldColumn)}`,
+        );
+      }
+
+      if (declarationSQLChanged) {
+        sql.push(`ALTER TABLE ${newTableName} ALTER COLUMN ${newDeclarationSQL}`);
+      }
+
+      const newDefault = this.readDiffValue<unknown>(newColumn, "getDefault");
+      if (
+        newDefault !== null &&
+        newDefault !== undefined &&
+        (requireDropDefaultConstraint || defaultChanged)
+      ) {
+        sql.push(
+          `ALTER TABLE ${newTableName} ${this.getAlterTableAddDefaultConstraintClause(newTableName, newColumn)}`,
+        );
+      }
+    }
+
+    const hasAnyOtherDiffs =
+      this.readDiffArray(diff, "getAddedIndexes").length > 0 ||
+      this.readDiffArray(diff, "getModifiedIndexes").length > 0 ||
+      this.readDiffArray(diff, "getDroppedIndexes").length > 0 ||
+      Object.keys(this.readDiffRecord(diff, "getRenamedIndexes")).length > 0 ||
+      this.readDiffArray(diff, "getAddedForeignKeys").length > 0 ||
+      this.readDiffArray(diff, "getModifiedForeignKeys").length > 0 ||
+      this.readDiffArray(diff, "getDroppedForeignKeys").length > 0;
+
+    if (hasAnyOtherDiffs) {
+      sql.push(
+        ...super.getAlterTableSQL({
+          ...(diff as Record<string, unknown>),
+          addedColumns: [],
+          getAddedColumns: () => [],
+        }),
+      );
+    }
+
+    return [...sql, ...commentsSql];
   }
 
   public override getDateTimeTypeDeclarationSQL(_column: Record<string, unknown>): string {
@@ -245,6 +398,18 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   public getModExpression(dividend: string, divisor: string): string {
     return `${dividend} % ${divisor}`;
+  }
+
+  protected override getCharTypeDeclarationSQLSnippet(length: number | undefined): string {
+    return length === undefined ? "NCHAR" : `NCHAR(${length})`;
+  }
+
+  protected override getVarcharTypeDeclarationSQLSnippet(length: number | undefined): string {
+    if (length === undefined) {
+      throw ColumnLengthRequired.new(this, "NVARCHAR");
+    }
+
+    return `NVARCHAR(${length})`;
   }
 
   public getTrimExpression(
@@ -577,5 +742,172 @@ export class SQLServerPlatform extends AbstractPlatform {
     }
 
     return "TEXT";
+  }
+
+  private getSqlServerAddColumnDeclaration(column: unknown): string {
+    const definition = this.toSqlServerColumnDefinition(column);
+    return super.getColumnDeclarationSQL(String(definition.name ?? ""), definition);
+  }
+
+  private toSqlServerColumnDefinition(column: unknown): Record<string, unknown> {
+    const definition =
+      this.readDiffRecord(column, "toArray") ??
+      (column !== null && typeof column === "object"
+        ? { ...(column as Record<string, unknown>) }
+        : {});
+
+    const quotedName = this.readDiffString(column, "getQuotedName", this);
+    if (quotedName.length > 0) {
+      definition.name = quotedName;
+    }
+
+    const comment = this.readDiffString(column, "getComment");
+    if (comment.length > 0) {
+      definition.comment = comment;
+    }
+
+    return definition;
+  }
+
+  protected override getRenameColumnSQL(
+    tableName: string,
+    oldColumnName: string,
+    newColumnName: string,
+  ): string[] {
+    return [
+      this.getExecSQL(
+        "sp_rename",
+        this.quoteNationalStringLiteral(`${tableName}.${oldColumnName}`),
+        this.quoteNationalStringLiteral(newColumnName),
+      ),
+    ];
+  }
+
+  private getAlterTableAddDefaultConstraintClause(_tableName: string, column: unknown): string {
+    const columnDef = this.toSqlServerColumnDefinition(column);
+    const quotedName = this.readDiffString(column, "getQuotedName", this);
+    if (quotedName.length > 0) {
+      columnDef.name = quotedName;
+    }
+
+    return `ADD${this.getDefaultConstraintDeclarationSQL(columnDef)}`;
+  }
+
+  private getAlterTableDropDefaultConstraintClause(column: unknown): string {
+    const hasPlatformOption =
+      this.readDiffValue<boolean>(
+        column,
+        "hasPlatformOption",
+        SQLServerPlatform.OPTION_DEFAULT_CONSTRAINT_NAME,
+      ) === true;
+    if (!hasPlatformOption) {
+      throw new Error(
+        `Column ${this.readDiffString(column, "getName")} was not properly introspected and is missing a default constraint name.`,
+      );
+    }
+
+    const name = this.readDiffValue<unknown>(
+      column,
+      "getPlatformOption",
+      SQLServerPlatform.OPTION_DEFAULT_CONSTRAINT_NAME,
+    );
+    return `DROP CONSTRAINT ${this.quoteSingleIdentifier(String(name ?? ""))}`;
+  }
+
+  private alterColumnRequiresDropDefaultConstraint(columnDiff: unknown): boolean {
+    const oldColumn = this.readDiffValue<unknown>(columnDiff, "getOldColumn");
+    if (oldColumn === undefined) {
+      return false;
+    }
+
+    const oldDefault = this.readDiffValue<unknown>(oldColumn, "getDefault");
+    if (oldDefault === null || oldDefault === undefined) {
+      return false;
+    }
+
+    if (this.readDiffValue<boolean>(columnDiff, "hasDefaultChanged") === true) {
+      return true;
+    }
+
+    return (
+      this.readDiffValue<boolean>(columnDiff, "hasTypeChanged") === true ||
+      this.readDiffValue<boolean>(columnDiff, "hasFixedChanged") === true
+    );
+  }
+
+  private readDiffArray(target: unknown, methodName: string): unknown[] {
+    const value = this.readDiffValue<unknown>(target, methodName);
+    return Array.isArray(value) ? value : [];
+  }
+
+  private readDiffRecord(target: unknown, methodName: string): Record<string, unknown> {
+    const value = this.readDiffValue<unknown>(target, methodName);
+    return value !== null && typeof value === "object"
+      ? { ...(value as Record<string, unknown>) }
+      : {};
+  }
+
+  private readDiffTable(target: unknown, methodName: string): unknown | undefined {
+    const value = this.readDiffValue<unknown>(target, methodName);
+    if (value !== undefined) {
+      return value;
+    }
+
+    if (target !== null && typeof target === "object") {
+      if (methodName === "getOldTable") {
+        return (target as { oldTable?: unknown }).oldTable;
+      }
+
+      if (methodName === "getNewTable") {
+        return (target as { newTable?: unknown }).newTable;
+      }
+    }
+
+    return undefined;
+  }
+
+  private readDiffString(target: unknown, methodName: string, ...args: unknown[]): string {
+    const value = this.readDiffValue<unknown>(target, methodName, ...args);
+    return typeof value === "string" ? value : "";
+  }
+
+  private readDiffValue<T>(target: unknown, methodName: string, ...args: unknown[]): T | undefined {
+    if (target === null || target === undefined) {
+      return undefined;
+    }
+
+    const candidate = target as Record<string, unknown>;
+    const fn = candidate[methodName];
+    if (typeof fn === "function") {
+      return (fn as (...callArgs: unknown[]) => T).apply(target, args);
+    }
+
+    return candidate[methodName] as T | undefined;
+  }
+
+  private getDynamicSqlServerTableName(table: unknown): string {
+    const quoted = this.readDiffString(table, "getQuotedName", this);
+    if (quoted.length > 0) {
+      return quoted;
+    }
+
+    const name = this.readDiffString(table, "getName");
+    if (name.length > 0) {
+      return name;
+    }
+
+    throw NotSupported.new("getAlterTableSQL");
+  }
+
+  private isSqlServerMetadataNoiseColumnDiff(columnDiff: unknown): boolean {
+    const changedProperties =
+      (this.readDiffValue<unknown>(columnDiff, "changedProperties") as unknown) ??
+      this.readDiffValue<unknown[]>(columnDiff, "getChangedProperties");
+
+    if (!Array.isArray(changedProperties) || changedProperties.length === 0) {
+      return false;
+    }
+
+    return changedProperties.every((name) => String(name) === "platformOptions");
   }
 }

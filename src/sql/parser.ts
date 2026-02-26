@@ -7,6 +7,7 @@ const SPECIAL_CHARS = String.raw`:\?'"\[\-\/\``;
 const BACKTICK_IDENTIFIER = String.raw`\`[^\`]*\``;
 const BRACKET_IDENTIFIER = String.raw`(?<!\b[Aa][Rr][Rr][Aa][Yy])\[(?:[^\]])*\]`;
 const MULTICHAR = ":{2,}";
+const ESCAPED_QUESTION = String.raw`\?\?`;
 const NAMED_PARAMETER = ":[a-zA-Z0-9_]+";
 const POSITIONAL_PARAMETER = String.raw`(?<!\?)\?(?!\?)`;
 const ONE_LINE_COMMENT = String.raw`--[^\r\n]*`;
@@ -31,6 +32,7 @@ export class Parser implements SQLParser {
       BACKTICK_IDENTIFIER,
       BRACKET_IDENTIFIER,
       MULTICHAR,
+      ESCAPED_QUESTION,
       ONE_LINE_COMMENT,
       MULTI_LINE_COMMENT,
       OTHER,
@@ -65,6 +67,12 @@ export class Parser implements SQLParser {
         visitor.acceptNamedParameter(token);
       } else if ((groups.positional ?? "") !== "") {
         visitor.acceptPositionalParameter(token);
+      } else if (token === "??") {
+        if (typeof visitor.acceptEscapedQuestionMark === "function") {
+          visitor.acceptEscapedQuestionMark(token);
+        } else {
+          visitor.acceptOther("?");
+        }
       } else {
         visitor.acceptOther(token);
       }

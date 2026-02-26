@@ -238,7 +238,7 @@ describe("Platform MetadataProvider surfaces (async, Doctrine-parity intent)", (
             [["public", "users_id_seq", 1, 1]],
         },
         {
-          "SELECT table_schema,\n       table_name,\n       COALESCE(NULLIF(data_type, 'USER-DEFINED'), udt_name) AS data_type,\n       column_name,\n       is_nullable,\n       column_default,\n       character_maximum_length,\n       numeric_precision,\n       numeric_scale\nFROM information_schema.columns\nWHERE table_schema NOT LIKE 'pg\\\\_%'\n  AND table_schema != 'information_schema'\nORDER BY table_schema, table_name, ordinal_position":
+          "SELECT table_schema,\n       table_name,\n       COALESCE(NULLIF(data_type, 'USER-DEFINED'), udt_name) AS data_type,\n       column_name,\n       is_nullable,\n       column_default,\n       character_maximum_length,\n       collation_name,\n       numeric_precision,\n       numeric_scale\nFROM information_schema.columns\nWHERE table_schema NOT LIKE 'pg\\\\_%'\n  AND table_schema != 'information_schema'\nORDER BY table_schema, table_name, ordinal_position":
             [
               {
                 table_schema: "public",
@@ -246,6 +246,7 @@ describe("Platform MetadataProvider surfaces (async, Doctrine-parity intent)", (
                 data_type: "integer",
                 column_name: "id",
                 is_nullable: "NO",
+                collation_name: null,
               },
             ],
           "SELECT tc.table_schema,\n       tc.table_name,\n       tc.constraint_name,\n       kcu.column_name\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\n AND tc.table_name = kcu.table_name\nWHERE tc.constraint_type = 'PRIMARY KEY'\nORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position":
@@ -449,7 +450,7 @@ describe("Platform MetadataProvider surfaces (async, Doctrine-parity intent)", (
                 is_nullable: "NO",
               },
             ],
-          "SELECT s.name AS table_schema,\n       t.name AS table_name,\n       i.name AS index_name,\n       i.type_desc AS index_type,\n       i.is_unique AS is_unique,\n       i.type_desc LIKE 'CLUSTERED%' AS is_clustered,\n       i.filter_definition AS predicate,\n       c.name AS column_name\nFROM sys.indexes i\nJOIN sys.tables t ON t.object_id = i.object_id\nJOIN sys.schemas s ON s.schema_id = t.schema_id\nJOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id\nJOIN sys.columns c ON c.object_id = t.object_id AND c.column_id = ic.column_id\nWHERE i.is_primary_key = 0\n  AND i.is_hypothetical = 0\n  AND s.name NOT IN ('guest', 'INFORMATION_SCHEMA', 'sys')\nORDER BY s.name, t.name, i.name, ic.key_ordinal":
+          "SELECT s.name AS table_schema,\n       t.name AS table_name,\n       i.name AS index_name,\n       i.type_desc AS index_type,\n       i.is_unique AS is_unique,\n       CASE WHEN i.type_desc LIKE 'CLUSTERED%' THEN 1 ELSE 0 END AS is_clustered,\n       i.filter_definition AS predicate,\n       c.name AS column_name\nFROM sys.indexes i\nJOIN sys.tables t ON t.object_id = i.object_id\nJOIN sys.schemas s ON s.schema_id = t.schema_id\nJOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id\nJOIN sys.columns c ON c.object_id = t.object_id AND c.column_id = ic.column_id\nWHERE i.is_primary_key = 0\n  AND i.is_hypothetical = 0\n  AND s.name NOT IN ('guest', 'INFORMATION_SCHEMA', 'sys')\nORDER BY s.name, t.name, i.name, ic.key_ordinal":
             [
               {
                 table_schema: "dbo",
@@ -462,7 +463,7 @@ describe("Platform MetadataProvider surfaces (async, Doctrine-parity intent)", (
                 column_name: "email",
               },
             ],
-          "SELECT s.name AS table_schema,\n       t.name AS table_name,\n       kc.name AS constraint_name,\n       i.type_desc LIKE 'CLUSTERED%' AS is_clustered,\n       c.name AS column_name\nFROM sys.key_constraints kc\nJOIN sys.tables t ON t.object_id = kc.parent_object_id\nJOIN sys.schemas s ON s.schema_id = t.schema_id\nJOIN sys.indexes i ON i.object_id = kc.parent_object_id AND i.index_id = kc.unique_index_id\nJOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id\nJOIN sys.columns c ON c.object_id = i.object_id AND c.column_id = ic.column_id\nWHERE kc.type = 'PK'\nORDER BY s.name, t.name, kc.name, ic.key_ordinal":
+          "SELECT s.name AS table_schema,\n       t.name AS table_name,\n       kc.name AS constraint_name,\n       CASE WHEN i.type_desc LIKE 'CLUSTERED%' THEN 1 ELSE 0 END AS is_clustered,\n       c.name AS column_name\nFROM sys.key_constraints kc\nJOIN sys.tables t ON t.object_id = kc.parent_object_id\nJOIN sys.schemas s ON s.schema_id = t.schema_id\nJOIN sys.indexes i ON i.object_id = kc.parent_object_id AND i.index_id = kc.unique_index_id\nJOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id\nJOIN sys.columns c ON c.object_id = i.object_id AND c.column_id = ic.column_id\nWHERE kc.type = 'PK'\nORDER BY s.name, t.name, kc.name, ic.key_ordinal":
             [
               {
                 table_schema: "dbo",

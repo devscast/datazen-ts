@@ -33,6 +33,8 @@ export abstract class AbstractSchemaManager {
     protected readonly platform: AbstractPlatform,
   ) {}
 
+  public async initialize(): Promise<void> {}
+
   public async listDatabases(): Promise<string[]> {
     return this.fetchListedNames(this.getListDatabasesSQL());
   }
@@ -376,7 +378,7 @@ export abstract class AbstractSchemaManager {
   }
 
   public createComparator(): Comparator {
-    return new Comparator();
+    return new Comparator(this.platform);
   }
 
   public getConnection(): Connection {

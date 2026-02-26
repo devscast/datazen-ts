@@ -1,5 +1,7 @@
 import type { Connection } from "../connection";
+import { ColumnValuesRequired } from "../exception/invalid-column-type/column-values-required";
 import { MySQLSchemaManager } from "../schema/mysql-schema-manager";
+import type { TableDiff } from "../schema/table-diff";
 import { DefaultSelectSQLBuilder } from "../sql/builder/default-select-sql-builder";
 import { SelectSQLBuilder } from "../sql/builder/select-sql-builder";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
@@ -68,6 +70,15 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
 
   public override getBigIntTypeDeclarationSQL(column: Record<string, unknown>): string {
     return `BIGINT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  public override getEnumDeclarationSQL(column: Record<string, unknown>): string {
+    const values = column.values;
+    if (!Array.isArray(values) || values.length === 0) {
+      throw ColumnValuesRequired.new(this, "ENUM");
+    }
+
+    return `ENUM(${values.map((value) => this.quoteStringLiteral(String(value))).join(", ")})`;
   }
 
   public override getSmallIntTypeDeclarationSQL(column: Record<string, unknown>): string {
@@ -189,6 +200,70 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     return `DROP TEMPORARY TABLE ${table}`;
   }
 
+  public override getAlterTableSQL(diff: unknown): string[] {
+    const tableDiff = diff as TableDiff;
+    const oldTable = this.readTableDiffTable(tableDiff, "getOldTable");
+    if (oldTable === null) {
+      return super.getAlterTableSQL(diff);
+    }
+
+    const tableName = this.readTableQuotedName(oldTable);
+    if (tableName === null) {
+      return super.getAlterTableSQL(diff);
+    }
+
+    const addedColumns = this.readTableDiffColumns(tableDiff, "getAddedColumns");
+    const droppedColumns = this.readTableDiffColumns(tableDiff, "getDroppedColumns");
+    const changedColumns = this.readTableDiffColumnDiffs(tableDiff);
+
+    if (addedColumns.length === 0 && droppedColumns.length === 0 && changedColumns.length === 0) {
+      return super.getAlterTableSQL(diff);
+    }
+
+    const queryParts: string[] = [];
+
+    for (const column of addedColumns) {
+      queryParts.push(`ADD ${this.getMySqlColumnDeclaration(column)}`);
+    }
+
+    for (const column of droppedColumns) {
+      const quotedName = this.readQuotedName(column);
+      if (quotedName !== null) {
+        queryParts.push(`DROP ${quotedName}`);
+      }
+    }
+
+    for (const columnDiff of changedColumns) {
+      const oldColumn = this.readValue<unknown>(columnDiff, "getOldColumn");
+      const newColumn = this.readValue<unknown>(columnDiff, "getNewColumn");
+      if (oldColumn === undefined || newColumn === undefined) {
+        continue;
+      }
+
+      const oldColumnName = this.readQuotedName(oldColumn);
+      const newColumnDeclaration = this.getMySqlColumnDeclaration(newColumn);
+      if (oldColumnName === null || newColumnDeclaration.length === 0) {
+        continue;
+      }
+
+      queryParts.push(`CHANGE ${oldColumnName} ${newColumnDeclaration}`);
+    }
+
+    const sql = [...this.getPreAlterTableIndexForeignKeySQL(diff)];
+
+    if (queryParts.length > 0) {
+      sql.push(`ALTER TABLE ${tableName} ${queryParts.join(", ")}`);
+    }
+
+    const nonColumnSql = this.getAlterTableNonColumnSql(diff);
+    if (nonColumnSql.length > 0) {
+      sql.push(...nonColumnSql);
+    }
+
+    sql.push(...this.getPostAlterTableIndexForeignKeySQL(diff));
+    return sql;
+  }
+
   private appendMySQLTableOptions(sql: string[], table: unknown): string[] {
     if (sql.length === 0) {
       return sql;
@@ -218,5 +293,88 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     return options !== null && typeof options === "object"
       ? { ...(options as Record<string, unknown>) }
       : {};
+  }
+
+  private getMySqlColumnDeclaration(column: unknown): string {
+    const definition = this.readValue<Record<string, unknown>>(column, "toArray") ?? {};
+    const quotedName = this.readQuotedName(column);
+    if (quotedName !== null) {
+      definition.name = quotedName;
+    }
+
+    const comment = this.readValue<string>(column, "getComment");
+    if (typeof comment === "string") {
+      definition.comment = comment;
+    }
+
+    return this.getColumnDeclarationSQL(String(definition.name ?? ""), definition);
+  }
+
+  private getAlterTableNonColumnSql(diff: unknown): string[] {
+    return super.getAlterTableSQL({
+      ...(diff as Record<string, unknown>),
+      addedColumns: [],
+      changedColumns: [],
+      droppedColumns: [],
+      getAddedColumns: () => [],
+      getAddedForeignKeys: () => this.readTableDiffColumns(diff, "getAddedForeignKeys"),
+      getAddedIndexes: () => this.readTableDiffColumns(diff, "getAddedIndexes"),
+      getChangedColumns: () => [],
+      getDroppedColumns: () => [],
+      getDroppedForeignKeys: () => this.readTableDiffColumns(diff, "getDroppedForeignKeys"),
+      getDroppedIndexes: () => this.readTableDiffColumns(diff, "getDroppedIndexes"),
+      getModifiedForeignKeys: () => this.readTableDiffColumns(diff, "getModifiedForeignKeys"),
+      getModifiedIndexes: () => this.readTableDiffColumns(diff, "getModifiedIndexes"),
+      getRenamedIndexes: () =>
+        this.readValue<Record<string, unknown>>(diff, "getRenamedIndexes") ?? {},
+    });
+  }
+
+  private readTableDiffColumns(diff: unknown, methodName: string): unknown[] {
+    const value = this.readValue<unknown>(diff, methodName);
+    return Array.isArray(value) ? value : [];
+  }
+
+  private readTableDiffColumnDiffs(diff: unknown): unknown[] {
+    return this.readTableDiffColumns(diff, "getChangedColumns");
+  }
+
+  private readTableDiffTable(diff: unknown, methodName: string): unknown | null {
+    const value = this.readValue<unknown>(diff, methodName);
+    return value ?? null;
+  }
+
+  private readTableQuotedName(table: unknown): string | null {
+    const quoted = this.readValue<string>(table, "getQuotedName", this);
+    if (typeof quoted === "string" && quoted.length > 0) {
+      return quoted;
+    }
+
+    const name = this.readValue<string>(table, "getName");
+    return typeof name === "string" && name.length > 0 ? name : null;
+  }
+
+  private readQuotedName(column: unknown): string | null {
+    const quoted = this.readValue<string>(column, "getQuotedName", this);
+    if (typeof quoted === "string" && quoted.length > 0) {
+      return quoted;
+    }
+
+    const name = this.readValue<string>(column, "getName");
+    return typeof name === "string" && name.length > 0 ? this.quoteIdentifier(name) : null;
+  }
+
+  private readValue<T>(target: unknown, methodName: string, ...args: unknown[]): T | undefined {
+    if (target === null || target === undefined || typeof target !== "object") {
+      return undefined;
+    }
+
+    const candidate = target as Record<string, unknown>;
+    const fn = candidate[methodName];
+    if (typeof fn === "function") {
+      return (fn as (...callArgs: unknown[]) => T).apply(target, args);
+    }
+
+    return candidate[methodName] as T | undefined;
   }
 }

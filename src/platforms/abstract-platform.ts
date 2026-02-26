@@ -1,4 +1,6 @@
 import type { Connection } from "../connection";
+import { InvalidArgumentException } from "../exception/invalid-argument-exception";
+import { ColumnValuesRequired } from "../exception/invalid-column-type/column-values-required";
 import { LockMode } from "../lock-mode";
 import type { AbstractSchemaManager } from "../schema/abstract-schema-manager";
 import type { MetadataProvider } from "../schema/metadata/metadata-provider";
@@ -102,7 +104,12 @@ export abstract class AbstractPlatform {
   }
 
   public getStringTypeDeclarationSQL(column: Record<string, unknown>): string {
-    return this.getVarcharTypeDeclarationSQLSnippet(this.readLength(column));
+    const length = this.readLength(column);
+    if (this.readBoolean(column, "fixed")) {
+      return this.getCharTypeDeclarationSQLSnippet(length);
+    }
+
+    return this.getVarcharTypeDeclarationSQLSnippet(length);
   }
 
   public getBinaryTypeDeclarationSQL(column: Record<string, unknown>): string {
@@ -184,11 +191,23 @@ export abstract class AbstractPlatform {
   public getEnumDeclarationSQL(column: Record<string, unknown>): string {
     const values = column.values;
     if (!Array.isArray(values) || values.length === 0) {
-      return this.getStringTypeDeclarationSQL(column);
+      throw ColumnValuesRequired.new(this, "ENUM");
     }
 
-    const quoted = values.map((value) => this.quoteStringLiteral(String(value)));
-    return `ENUM(${quoted.join(", ")})`;
+    const maxValueLength = values.reduce((max, value) => Math.max(max, String(value).length), 0);
+    let length = maxValueLength;
+
+    if (typeof column.length === "number" && Number.isFinite(column.length)) {
+      if (maxValueLength > column.length) {
+        throw new InvalidArgumentException(
+          `Specified column length (${column.length}) is less than the maximum length of provided values (${maxValueLength}).`,
+        );
+      }
+
+      length = column.length;
+    }
+
+    return this.getStringTypeDeclarationSQL({ length });
   }
 
   protected getCharTypeDeclarationSQLSnippet(length: number | undefined): string {
@@ -200,7 +219,7 @@ export abstract class AbstractPlatform {
   }
 
   protected getBinaryTypeDeclarationSQLSnippet(length: number | undefined): string {
-    return `BINARY(${length ?? 255})`;
+    return length === undefined ? "BINARY" : `BINARY(${length})`;
   }
 
   protected getVarbinaryTypeDeclarationSQLSnippet(length: number | undefined): string {
@@ -220,9 +239,8 @@ export abstract class AbstractPlatform {
     this.datazenTypeMapping![dbType.toLowerCase()] = datazenType;
   }
 
-  // Doctrine-compatible alias kept for port parity.
-  public registerDoctrineTypeMapping(dbType: string, doctrineType: string): void {
-    this.registerDatazenTypeMapping(dbType, doctrineType);
+  public registerDoctrineTypeMapping(dbType: string, datazenType: string): void {
+    this.registerDatazenTypeMapping(dbType, datazenType);
   }
 
   public hasDatazenTypeMappingFor(dbType: string): boolean {
@@ -230,7 +248,6 @@ export abstract class AbstractPlatform {
     return Object.hasOwn(this.datazenTypeMapping!, dbType.toLowerCase());
   }
 
-  // Doctrine-compatible alias kept for port parity.
   public hasDoctrineTypeMappingFor(dbType: string): boolean {
     return this.hasDatazenTypeMappingFor(dbType);
   }
@@ -249,7 +266,6 @@ export abstract class AbstractPlatform {
     return mapped;
   }
 
-  // Doctrine-compatible alias kept for port parity.
   public getDoctrineTypeMapping(dbType: string): string {
     return this.getDatazenTypeMapping(dbType);
   }
@@ -750,12 +766,16 @@ export abstract class AbstractPlatform {
 
     // Column alter SQL differs substantially per platform; keep the implementation
     // explicit until platform-specific column alteration support is ported.
-    if (addedColumns.length > 0 || changedColumns.length > 0 || droppedColumns.length > 0) {
+    if (changedColumns.length > 0 || droppedColumns.length > 0) {
       throw NotSupported.new("getAlterTableSQL");
     }
 
     const tableName = this.getDynamicTableSQLName(newTable);
     const sql = [...this.getPreAlterTableIndexForeignKeySQL(diff)];
+
+    for (const column of addedColumns) {
+      sql.push(`ALTER TABLE ${tableName} ADD ${this.getDynamicColumnDeclarationSQL(column)}`);
+    }
 
     const droppedForeignKeys = this.invokeMethod<unknown[]>(diff, "getDroppedForeignKeys") ?? [];
     for (const foreignKey of droppedForeignKeys) {
@@ -892,6 +912,15 @@ export abstract class AbstractPlatform {
     const defaultValue = column.default;
     if (defaultValue === undefined || defaultValue === null) {
       return column.notnull === true ? "" : " DEFAULT NULL";
+    }
+
+    if (
+      typeof defaultValue === "object" &&
+      defaultValue !== null &&
+      "toSQL" in defaultValue &&
+      typeof defaultValue.toSQL === "function"
+    ) {
+      return ` DEFAULT ${defaultValue.toSQL(this)}`;
     }
 
     if (typeof defaultValue === "boolean") {
@@ -1084,11 +1113,18 @@ export abstract class AbstractPlatform {
   public columnsEqual(column1: unknown, column2: unknown): boolean {
     const left = this.normalizeColumnForComparison(column1);
     const right = this.normalizeColumnForComparison(column2);
+    const placeholderColumnName = "datazen_compare_column";
 
     try {
       if (
-        this.getColumnDeclarationSQL(String(left.name ?? ""), left) !==
-        this.getColumnDeclarationSQL(String(right.name ?? ""), right)
+        this.getColumnDeclarationSQL(placeholderColumnName, {
+          ...left,
+          name: placeholderColumnName,
+        }) !==
+        this.getColumnDeclarationSQL(placeholderColumnName, {
+          ...right,
+          name: placeholderColumnName,
+        })
       ) {
         return false;
       }
@@ -1423,6 +1459,26 @@ export abstract class AbstractPlatform {
     }
 
     return "TEXT";
+  }
+
+  private getDynamicColumnDeclarationSQL(column: unknown): string {
+    const definition =
+      this.invokeMethod<Record<string, unknown>>(column, "toArray") ??
+      (column !== null && typeof column === "object"
+        ? { ...(column as Record<string, unknown>) }
+        : {});
+
+    const quotedName = this.invokeMethod<string>(column, "getQuotedName", this);
+    if (typeof quotedName === "string" && quotedName.length > 0) {
+      definition.name = quotedName;
+    }
+
+    const comment = this.invokeMethod<string>(column, "getComment");
+    if (typeof comment === "string") {
+      definition.comment = comment;
+    }
+
+    return this.getColumnDeclarationSQL(String(definition.name ?? ""), definition);
   }
 
   private normalizeColumnForComparison(column: unknown): Record<string, unknown> {

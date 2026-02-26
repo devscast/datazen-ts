@@ -1,3 +1,3 @@
 export interface CharsetMetadataProvider {
-  getDefaultCharsetCollation(charset: string): string | null;
+  getDefaultCharsetCollation(charset: string): Promise<string | null>;
 }

@@ -21,6 +21,8 @@ export interface SQLite3DatabaseLike {
 export interface SQLite3ConnectionParams extends Record<string, unknown> {
   client?: SQLite3DatabaseLike;
   connection?: SQLite3DatabaseLike;
-  database?: SQLite3DatabaseLike;
+  database?: SQLite3DatabaseLike | string;
+  path?: string;
+  memory?: boolean;
   ownsClient?: boolean;
 }

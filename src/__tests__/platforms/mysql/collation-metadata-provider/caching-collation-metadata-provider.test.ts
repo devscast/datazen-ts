@@ -6,15 +6,15 @@ describe("MySQL CachingCollationMetadataProvider (Doctrine parity)", () => {
   it.each([
     ["utf8mb4_unicode_ci", "utf8mb4"],
     ["utf8mb5_unicode_ci", null],
-  ])("caches collation charset lookups for %s", (collation, charset) => {
+  ])("caches collation charset lookups for %s", async (collation, charset) => {
     const underlying = {
-      getCollationCharset: vi.fn().mockReturnValue(charset),
+      getCollationCharset: vi.fn().mockResolvedValue(charset),
     };
 
     const cachingProvider = new CachingCollationMetadataProvider(underlying);
 
-    expect(cachingProvider.getCollationCharset(collation)).toBe(charset);
-    expect(cachingProvider.getCollationCharset(collation)).toBe(charset);
+    await expect(cachingProvider.getCollationCharset(collation)).resolves.toBe(charset);
+    await expect(cachingProvider.getCollationCharset(collation)).resolves.toBe(charset);
     expect(underlying.getCollationCharset).toHaveBeenCalledTimes(1);
     expect(underlying.getCollationCharset).toHaveBeenCalledWith(collation);
   });

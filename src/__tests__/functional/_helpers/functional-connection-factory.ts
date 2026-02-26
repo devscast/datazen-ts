@@ -242,6 +242,7 @@ async function createMySQL2DriverManagerParams(
   const mysqlModule = mysql2.default ?? mysql2;
 
   const config = {
+    bigNumberStrings: true,
     database: readEnv(target.platform, "DATABASE", "datazen", role),
     host: readEnv(target.platform, "HOST", "127.0.0.1", role),
     password: readEnv(
@@ -251,6 +252,7 @@ async function createMySQL2DriverManagerParams(
       role,
     ),
     port: readNumberEnv(target.platform, "PORT", target.platform === "mariadb" ? 3307 : 3306, role),
+    supportBigNumbers: true,
     user: readEnv(target.platform, "USER", role === "privileged" ? "root" : "datazen", role),
   };
 

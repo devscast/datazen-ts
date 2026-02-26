@@ -1,3 +1,5 @@
+import type { AbstractPlatform } from "../platforms/abstract-platform";
+
 export interface DefaultExpression {
-  toSQL(): string;
+  toSQL(platform: AbstractPlatform): string;
 }

@@ -1,6 +1,7 @@
 import type { Connection } from "../connection";
 import { PostgreSQLSchemaManager } from "../schema/postgre-sql-schema-manager";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
+import { Type } from "../types/type";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
@@ -68,7 +69,7 @@ export class PostgreSQLPlatform extends AbstractPlatform {
       int8: Types.BIGINT,
       integer: Types.INTEGER,
       json: Types.JSON,
-      jsonb: Types.JSON,
+      jsonb: Types.JSONB,
       numeric: Types.DECIMAL,
       real: Types.SMALLFLOAT,
       serial: Types.INTEGER,
@@ -111,7 +112,7 @@ export class PostgreSQLPlatform extends AbstractPlatform {
   }
 
   public getDateDiffExpression(date1: string, date2: string): string {
-    return `DATE_PART('day', (${date1})::timestamp - (${date2})::timestamp)`;
+    return `(DATE(${date1})-DATE(${date2}))`;
   }
 
   public getCurrentDatabaseExpression(): string {
@@ -162,6 +163,10 @@ export class PostgreSQLPlatform extends AbstractPlatform {
     return "BYTEA";
   }
 
+  public override getJsonbTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "JSONB";
+  }
+
   protected override getBinaryTypeDeclarationSQLSnippet(_length: number | undefined): string {
     return "BYTEA";
   }
@@ -192,6 +197,110 @@ export class PostgreSQLPlatform extends AbstractPlatform {
     }
 
     return super.getDefaultValueDeclarationSQL(column);
+  }
+
+  public override getAlterTableSQL(diff: unknown): string[] {
+    const table = this.readTableDiffValue<unknown>(diff, "getOldTable");
+    const tableNameSQL = this.readQuotedName(table);
+    if (table === undefined || tableNameSQL === null) {
+      return super.getAlterTableSQL(diff);
+    }
+
+    const sql: string[] = [];
+    const commentsSql: string[] = [];
+
+    for (const addedColumn of this.readTableDiffList(diff, "getAddedColumns")) {
+      const query = `ADD ${this.getPostgreSqlColumnDeclaration(addedColumn)}`;
+      sql.push(`ALTER TABLE ${tableNameSQL} ${query}`);
+
+      const comment = this.readTableDiffValue<string>(addedColumn, "getComment");
+      if (typeof comment === "string" && comment.length > 0) {
+        const quotedColumnName = this.readQuotedName(addedColumn);
+        if (quotedColumnName !== null) {
+          commentsSql.push(this.getCommentOnColumnSQL(tableNameSQL, quotedColumnName, comment));
+        }
+      }
+    }
+
+    for (const droppedColumn of this.readTableDiffList(diff, "getDroppedColumns")) {
+      const quotedColumnName = this.readQuotedName(droppedColumn);
+      if (quotedColumnName !== null) {
+        sql.push(`ALTER TABLE ${tableNameSQL} DROP ${quotedColumnName}`);
+      }
+    }
+
+    for (const columnDiff of this.readTableDiffList(diff, "getChangedColumns")) {
+      const oldColumn = this.readTableDiffValue<unknown>(columnDiff, "getOldColumn");
+      const newColumn = this.readTableDiffValue<unknown>(columnDiff, "getNewColumn");
+      if (oldColumn === undefined || newColumn === undefined) {
+        continue;
+      }
+
+      const oldColumnName = this.readQuotedName(oldColumn);
+      const newColumnName = this.readQuotedName(newColumn);
+      if (oldColumnName === null || newColumnName === null) {
+        continue;
+      }
+
+      if (this.readTableDiffFlag(columnDiff, "hasNameChanged")) {
+        sql.push(...this.getRenameColumnSQL(tableNameSQL, oldColumnName, newColumnName));
+      }
+
+      const newTypeSQLDeclaration = this.getTypeSQLDeclaration(newColumn);
+      const oldTypeSQLDeclaration = this.getTypeSQLDeclaration(oldColumn);
+      if (oldTypeSQLDeclaration !== newTypeSQLDeclaration) {
+        sql.push(
+          `ALTER TABLE ${tableNameSQL} ALTER ${newColumnName} TYPE ${newTypeSQLDeclaration}`,
+        );
+      }
+
+      if (this.readTableDiffFlag(columnDiff, "hasDefaultChanged")) {
+        const newDefault = this.readTableDiffValue<unknown>(newColumn, "getDefault");
+        const defaultClause =
+          newDefault === null || newDefault === undefined
+            ? " DROP DEFAULT"
+            : ` SET${this.getDefaultValueDeclarationSQL(this.getColumnArray(newColumn))}`;
+        sql.push(`ALTER TABLE ${tableNameSQL} ALTER ${newColumnName}${defaultClause}`);
+      }
+
+      if (this.readTableDiffFlag(columnDiff, "hasNotNullChanged")) {
+        const notNull = this.readTableDiffValue<boolean>(newColumn, "getNotnull") === true;
+        sql.push(
+          `ALTER TABLE ${tableNameSQL} ALTER ${newColumnName} ${notNull ? "SET" : "DROP"} NOT NULL`,
+        );
+      }
+
+      if (this.readTableDiffFlag(columnDiff, "hasAutoIncrementChanged")) {
+        const autoincrement =
+          this.readTableDiffValue<boolean>(newColumn, "getAutoincrement") === true;
+        sql.push(
+          `ALTER TABLE ${tableNameSQL} ALTER ${newColumnName} ${
+            autoincrement ? "ADD GENERATED BY DEFAULT AS IDENTITY" : "DROP IDENTITY"
+          }`,
+        );
+      }
+
+      if (this.readTableDiffFlag(columnDiff, "hasCommentChanged")) {
+        commentsSql.push(
+          this.getCommentOnColumnSQL(
+            tableNameSQL,
+            newColumnName,
+            this.readTableDiffValue<string>(newColumn, "getComment") ?? "",
+          ),
+        );
+      }
+    }
+
+    if (this.tableDiffHasNonColumnChanges(diff)) {
+      sql.push(...this.getAlterTableNonColumnSql(diff));
+    }
+
+    return [
+      ...this.getPreAlterTableIndexForeignKeySQL(diff),
+      ...sql,
+      ...commentsSql,
+      ...this.getPostAlterTableIndexForeignKeySQL(diff),
+    ];
   }
 
   public setUseBooleanTrueFalseStrings(flag: boolean): void {
@@ -241,5 +350,111 @@ export class PostgreSQLPlatform extends AbstractPlatform {
     }
 
     return this.convertSingleBooleanValue(item, callback);
+  }
+
+  private getTypeSQLDeclaration(column: unknown): string {
+    const columnObject = column as {
+      getType?: () => Type;
+      toArray?: () => Record<string, unknown>;
+    };
+    const type = columnObject.getType?.();
+    if (!(type instanceof Type)) {
+      return this.resolveColumnDeclarationFallback(column);
+    }
+
+    const columnDefinition = { ...this.getColumnArray(column), autoincrement: false };
+    return type.getSQLDeclaration(columnDefinition, this);
+  }
+
+  private resolveColumnDeclarationFallback(column: unknown): string {
+    const definition = this.getColumnArray(column);
+    const type = definition.type;
+    if (typeof type === "string") {
+      return type.toUpperCase();
+    }
+
+    return this.getColumnDeclarationSQL(String(definition.name ?? "column"), definition);
+  }
+
+  private getColumnArray(column: unknown): Record<string, unknown> {
+    const definition = this.readTableDiffValue<Record<string, unknown>>(column, "toArray") ?? {};
+    const quotedName = this.readQuotedName(column);
+    if (quotedName !== null) {
+      definition.name = quotedName;
+    }
+
+    return definition;
+  }
+
+  private getPostgreSqlColumnDeclaration(column: unknown): string {
+    const definition = this.getColumnArray(column);
+    const comment = this.readTableDiffValue<string>(column, "getComment");
+    if (typeof comment === "string") {
+      definition.comment = comment;
+    }
+
+    return this.getColumnDeclarationSQL(String(definition.name ?? ""), definition);
+  }
+
+  private getAlterTableNonColumnSql(diff: unknown): string[] {
+    return super.getAlterTableSQL({
+      ...(diff as Record<string, unknown>),
+      addedColumns: [],
+      changedColumns: [],
+      droppedColumns: [],
+      getAddedColumns: () => [],
+      getChangedColumns: () => [],
+      getDroppedColumns: () => [],
+    });
+  }
+
+  private tableDiffHasNonColumnChanges(diff: unknown): boolean {
+    return (
+      this.readTableDiffList(diff, "getAddedIndexes").length > 0 ||
+      this.readTableDiffList(diff, "getModifiedIndexes").length > 0 ||
+      this.readTableDiffList(diff, "getDroppedIndexes").length > 0 ||
+      Object.keys(this.readTableDiffValue<Record<string, unknown>>(diff, "getRenamedIndexes") ?? {})
+        .length > 0 ||
+      this.readTableDiffList(diff, "getAddedForeignKeys").length > 0 ||
+      this.readTableDiffList(diff, "getModifiedForeignKeys").length > 0 ||
+      this.readTableDiffList(diff, "getDroppedForeignKeys").length > 0
+    );
+  }
+
+  private readQuotedName(target: unknown): string | null {
+    const quoted = this.readTableDiffValue<string>(target, "getQuotedName", this);
+    if (typeof quoted === "string" && quoted.length > 0) {
+      return quoted;
+    }
+
+    const name = this.readTableDiffValue<string>(target, "getName");
+    return typeof name === "string" && name.length > 0 ? this.quoteIdentifier(name) : null;
+  }
+
+  private readTableDiffList(target: unknown, methodName: string): unknown[] {
+    const value = this.readTableDiffValue<unknown>(target, methodName);
+    return Array.isArray(value) ? value : [];
+  }
+
+  private readTableDiffFlag(target: unknown, methodName: string): boolean {
+    return this.readTableDiffValue<boolean>(target, methodName) === true;
+  }
+
+  private readTableDiffValue<T>(
+    target: unknown,
+    methodName: string,
+    ...args: unknown[]
+  ): T | undefined {
+    if (target === null || target === undefined || typeof target !== "object") {
+      return undefined;
+    }
+
+    const candidate = target as Record<string, unknown>;
+    const fn = candidate[methodName];
+    if (typeof fn === "function") {
+      return (fn as (...callArgs: unknown[]) => T).apply(target, args);
+    }
+
+    return candidate[methodName] as T | undefined;
   }
 }
