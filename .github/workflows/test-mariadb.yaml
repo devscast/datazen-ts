@@ -2,8 +2,6 @@ name: Functional Tests (mariadb)
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-  pull_request:
 
 jobs:
   test-mariadb:

@@ -2,8 +2,6 @@ name: Functional Tests (sqlserver)
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-  pull_request:
 
 jobs:
   test-sqlserver:

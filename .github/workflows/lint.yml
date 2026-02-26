@@ -1,8 +1,7 @@
 name: Quality Assurance
 on:
   workflow_call:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   typecheck:

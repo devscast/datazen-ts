@@ -2,8 +2,6 @@ name: Functional Tests (sqlite3)
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-  pull_request:
 
 jobs:
   test-sqlite3:
