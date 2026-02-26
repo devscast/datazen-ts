@@ -99,9 +99,10 @@
   "scripts": {
     "build": "tsup --minify",
     "dev": "tsup --watch",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:all": "vitest run",
     "test:functional": "node scripts/run-functional-tests.mjs",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --config vitest.unit.config.ts --coverage",
     "test:watch": "vitest",
     "============= HUSKY =============": "",
     "prepare": "husky",

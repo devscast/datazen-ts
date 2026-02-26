@@ -319,9 +319,19 @@ function normalizeDefaultValue(
 
     // MariaDB, PostgreSQL and SQL Server can expose SQL NULL as bare NULL in metadata.
     // MySQL returns literal "NULL" for string defaults unquoted in COLUMN_DEFAULT, so keep it.
-    if (!isMySql && (sourceKey === "column_default" || sourceKey === "COLUMN_DEFAULT")) {
+    if (
+      (isMariaDb || !isMySql) &&
+      (sourceKey === "column_default" || sourceKey === "COLUMN_DEFAULT")
+    ) {
       return null;
     }
+  }
+
+  // MariaDB may expose COLUMN_DEFAULT as an unquoted string with MySQL-style escapes
+  // (varies across versions / sql_mode). Decode those escapes to align introspection with
+  // the original column default value expected by Datazen/Doctrine tests.
+  if (isMariaDb && (sourceKey === "column_default" || sourceKey === "COLUMN_DEFAULT")) {
+    return decodeMySqlLikeMetadataEscapes(normalized);
   }
 
   return normalized;

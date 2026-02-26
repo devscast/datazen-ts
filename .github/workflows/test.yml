@@ -1,8 +1,7 @@
 name: Tests
 on:
   workflow_call:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -45,4 +44,4 @@ jobs:
           name: vitest-coverage-report
           path: coverage/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 1
