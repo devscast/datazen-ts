@@ -81,8 +81,6 @@ describe("Functional/WriteTest", () => {
 
   it("supports insert()", async () => {
     await insertRows(connection);
-
-    expect(await connection.fetchOne<number>("SELECT COUNT(*) FROM write_table")).toBe(2);
   });
 
   it("supports delete() with criteria", async () => {

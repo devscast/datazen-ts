@@ -153,7 +153,7 @@ export function createColumnFromMetadataRow(
   );
   const charset = pickString(row, "character_set_name", "CHARACTER_SET_NAME", "charset");
   const collation = pickString(row, "collation_name", "COLLATION_NAME", "collation");
-  const defaultValue = pickDefaultValue(row);
+  const defaultValue = pickDefaultValue(platform, row);
 
   const options: Record<string, unknown> = {
     notnull: nullable === null ? true : !nullable,
@@ -257,7 +257,7 @@ function readNullable(row: Record<string, unknown>): boolean | null {
   return null;
 }
 
-function pickDefaultValue(row: Record<string, unknown>): unknown {
+function pickDefaultValue(platform: AbstractPlatform, row: Record<string, unknown>): unknown {
   for (const key of [
     "column_default",
     "COLUMN_DEFAULT",
@@ -267,11 +267,291 @@ function pickDefaultValue(row: Record<string, unknown>): unknown {
     "DFLT_VALUE",
   ]) {
     if (Object.hasOwn(row, key)) {
-      return row[key];
+      return normalizeDefaultValue(platform, row[key], key);
     }
   }
 
   return undefined;
+}
+
+function normalizeDefaultValue(
+  platform: AbstractPlatform,
+  value: unknown,
+  sourceKey: string,
+): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const vendor = platform.constructor.name;
+  const isMariaDb = vendor.includes("MariaDB");
+  const isMySql = vendor.includes("MySQL");
+
+  let normalized = value.trim();
+
+  if (normalized === "") {
+    return normalized;
+  }
+
+  const unwrapped = unwrapDefaultExpressionParentheses(normalized);
+  if (unwrapped !== null) {
+    normalized = unwrapped;
+  }
+
+  const castStripped = stripPostgreSqlCastSuffix(normalized);
+  if (castStripped !== null) {
+    normalized = castStripped;
+  }
+
+  const parsedSqlLiteral = parseSqlStringLiteral(normalized);
+  if (parsedSqlLiteral !== undefined) {
+    return isMariaDb ? decodeMySqlLikeMetadataEscapes(parsedSqlLiteral) : parsedSqlLiteral;
+  }
+
+  if (normalized.toUpperCase() === "NULL") {
+    if (sourceKey === "dflt_value" || sourceKey === "DFLT_VALUE") {
+      return null;
+    }
+
+    // MariaDB, PostgreSQL and SQL Server can expose SQL NULL as bare NULL in metadata.
+    // MySQL returns literal "NULL" for string defaults unquoted in COLUMN_DEFAULT, so keep it.
+    if (!isMySql && (sourceKey === "column_default" || sourceKey === "COLUMN_DEFAULT")) {
+      return null;
+    }
+  }
+
+  return normalized;
+}
+
+function unwrapDefaultExpressionParentheses(value: string): string | null {
+  let current = value;
+  let changed = false;
+
+  while (current.length >= 2 && current.startsWith("(") && current.endsWith(")")) {
+    let depth = 0;
+    let inString = false;
+    let valid = true;
+
+    for (let i = 0; i < current.length; i += 1) {
+      const char = current[i];
+      const next = current[i + 1];
+
+      if (inString) {
+        if (char === "'" && next === "'") {
+          i += 1;
+          continue;
+        }
+
+        if (char === "'") {
+          inString = false;
+        }
+
+        continue;
+      }
+
+      if (char === "'") {
+        inString = true;
+        continue;
+      }
+
+      if (char === "(") {
+        depth += 1;
+      } else if (char === ")") {
+        depth -= 1;
+        if (depth < 0) {
+          valid = false;
+          break;
+        }
+
+        if (depth === 0 && i !== current.length - 1) {
+          valid = false;
+          break;
+        }
+      }
+    }
+
+    if (!valid || depth !== 0 || inString) {
+      break;
+    }
+
+    current = current.slice(1, -1).trim();
+    changed = true;
+  }
+
+  return changed ? current : null;
+}
+
+function stripPostgreSqlCastSuffix(value: string): string | null {
+  if (!value.includes("::")) {
+    return null;
+  }
+
+  let inString = false;
+  for (let i = 0; i < value.length - 1; i += 1) {
+    const char = value[i];
+    const next = value[i + 1];
+
+    if (inString) {
+      if (char === "'" && next === "'") {
+        i += 1;
+        continue;
+      }
+
+      if (char === "'") {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (char === "'") {
+      inString = true;
+      continue;
+    }
+
+    if (char === ":" && next === ":") {
+      const lhs = value.slice(0, i).trim();
+      const rhs = value.slice(i + 2).trim();
+      if (lhs === "" || rhs === "") {
+        return null;
+      }
+
+      return lhs;
+    }
+  }
+
+  return null;
+}
+
+function parseSqlStringLiteral(value: string): string | undefined {
+  let offset = 0;
+
+  if ((value.startsWith("N'") || value.startsWith("n'")) && value.length >= 3) {
+    offset = 1;
+  } else if ((value.startsWith("E'") || value.startsWith("e'")) && value.length >= 3) {
+    offset = 1;
+  }
+
+  if (value[offset] !== "'" || !value.endsWith("'")) {
+    return undefined;
+  }
+
+  const body = value.slice(offset + 1, -1);
+  const unquoted = body.replaceAll("''", "'");
+  const isEscapeString = offset === 1 && (value[0] === "E" || value[0] === "e");
+
+  return isEscapeString ? decodePgEscapeString(unquoted) : unquoted;
+}
+
+function decodePgEscapeString(value: string): string {
+  let out = "";
+
+  for (let i = 0; i < value.length; i += 1) {
+    const char = value[i];
+    if (char !== "\\") {
+      out += char;
+      continue;
+    }
+
+    const next = value[i + 1];
+    if (next === undefined) {
+      out += "\\";
+      continue;
+    }
+
+    i += 1;
+    switch (next) {
+      case "b":
+        out += "\b";
+        break;
+      case "f":
+        out += "\f";
+        break;
+      case "n":
+        out += "\n";
+        break;
+      case "r":
+        out += "\r";
+        break;
+      case "t":
+        out += "\t";
+        break;
+      case "\\":
+        out += "\\";
+        break;
+      case "'":
+        out += "'";
+        break;
+      default:
+        out += next;
+        break;
+    }
+  }
+
+  return out;
+}
+
+function decodeMySqlLikeMetadataEscapes(value: string): string {
+  if (!value.includes("\\")) {
+    return value;
+  }
+
+  let out = "";
+
+  for (let i = 0; i < value.length; i += 1) {
+    const char = value[i];
+    if (char !== "\\") {
+      out += char;
+      continue;
+    }
+
+    const next = value[i + 1];
+    if (next === undefined) {
+      out += "\\";
+      continue;
+    }
+
+    i += 1;
+    switch (next) {
+      case "0":
+        out += "\0";
+        break;
+      case "b":
+        out += "\b";
+        break;
+      case "n":
+        out += "\n";
+        break;
+      case "r":
+        out += "\r";
+        break;
+      case "t":
+        out += "\t";
+        break;
+      case "Z":
+        out += "\x1a";
+        break;
+      case "\\":
+        out += "\\";
+        break;
+      case "'":
+        out += "'";
+        break;
+      case '"':
+        out += '"';
+        break;
+      default:
+        // Preserve the backslash for unknown sequences to avoid over-conversion.
+        out += `\\${next}`;
+        break;
+    }
+  }
+
+  return out;
 }
 
 function normalizeDbType(dbType: string | null): string {

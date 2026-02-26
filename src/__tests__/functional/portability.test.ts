@@ -176,7 +176,7 @@ async function createPortabilityTable(connection: DatazenConnection): Promise<vo
     )
     .create();
 
-  const schemaManager = connection.createSchemaManager();
+  const schemaManager = await connection.createSchemaManager();
   try {
     await schemaManager.dropTable("portability_table");
   } catch {

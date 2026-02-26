@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Connection as DBALConnection } from "../../connection";
 import { ArrayResult } from "../../driver/array-result";
 import type { Result as DriverResult } from "../../driver/result";
+import { InvalidColumnIndex } from "../../exception/invalid-column-index";
 import { NoKeyValue } from "../../exception/no-key-value";
 import { Result } from "../../result";
 
@@ -139,7 +140,7 @@ describe("Result", () => {
     expect(result.rowCount()).toBe(42);
     expect(result.columnCount()).toBe(2);
     expect(result.getColumnName(0)).toBe("id");
-    expect(() => result.getColumnName(2)).toThrow(RangeError);
+    expect(() => result.getColumnName(2)).toThrow(InvalidColumnIndex);
   });
 
   it("releases rows when free() is called", () => {

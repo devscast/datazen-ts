@@ -19,6 +19,8 @@ export class SQLite3Driver extends AbstractSQLiteDriver {
       );
     }
 
-    return new SQLite3Connection(client, Boolean(connectionParams.ownsClient));
+    const connection = new SQLite3Connection(client, Boolean(connectionParams.ownsClient));
+    await connection.query("PRAGMA foreign_keys=ON");
+    return connection;
   }
 }

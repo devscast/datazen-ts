@@ -1,9 +1,16 @@
+import { existsSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Connection } from "../../connection";
+import { DriverManager } from "../../driver-manager";
 import { CommitFailedRollbackOnly } from "../../exception/commit-failed-rollback-only";
 import { DriverException } from "../../exception/driver-exception";
+import { SavepointsNotSupported } from "../../exception/savepoints-not-supported";
 import { UniqueConstraintViolationException } from "../../exception/unique-constraint-violation-exception";
+import { SQLitePlatform } from "../../platforms/sqlite-platform";
 import { Column } from "../../schema/column";
 import { PrimaryKeyConstraint } from "../../schema/primary-key-constraint";
 import { Table } from "../../schema/table";
@@ -171,9 +178,39 @@ describe("Functional/ConnectionTest", () => {
     await expect(statement.executeStatement()).rejects.toThrow(DriverException);
   });
 
-  it.skip("resets transaction nesting level after reconnecting a file-backed SQLite connection", async () => {
-    // Doctrine creates a fresh params-based file-backed SQLite connection.
-    // The current functional harness uses a generic env-selected native client factory.
+  it("resets transaction nesting level after reconnecting a file-backed SQLite connection", async ({
+    skip,
+  }) => {
+    if (!connection.getDatabasePlatform().supportsSavepoints()) {
+      skip();
+    }
+
+    if (!(connection.getDatabasePlatform() instanceof SQLitePlatform)) {
+      skip();
+    }
+
+    const dbFile = join(tmpdir(), `datazen_test_nesting_${Date.now()}_${Math.random()}.sqlite`);
+    const fileConnection = await createFileBackedSQLiteConnection(dbFile, connection);
+
+    try {
+      await fileConnection.executeStatement("DROP TABLE IF EXISTS test_nesting");
+      await fileConnection.executeStatement("CREATE TABLE test_nesting(test int not null)");
+
+      await fileConnection.beginTransaction();
+      await fileConnection.beginTransaction();
+      await fileConnection.close(); // runtime close/reset (Doctrine intent: lost/closed connection)
+
+      await fileConnection.beginTransaction();
+      await fileConnection.executeStatement("INSERT INTO test_nesting VALUES (33)");
+      await fileConnection.rollBack();
+
+      expect(Number(await fileConnection.fetchOne("SELECT count(*) FROM test_nesting"))).toBe(0);
+    } finally {
+      await closeFileBackedSQLiteConnection(fileConnection);
+      if (existsSync(dbFile)) {
+        unlinkSync(dbFile);
+      }
+    }
   });
 
   it.skip("connects without an explicit database name", async () => {
@@ -188,8 +225,14 @@ describe("Functional/ConnectionTest", () => {
     // PDO/native persistent connection attributes are PHP-native and out of scope for the Node sqlite3 adapter.
   });
 
-  it.skip("savepoint methods throw when platform does not support savepoints", async () => {
-    // SQLite supports savepoints in this harness; Doctrine covers this on non-savepoint platforms.
+  it("savepoint methods throw when platform does not support savepoints", async ({ skip }) => {
+    if (connection.getDatabasePlatform().supportsSavepoints()) {
+      skip();
+    }
+
+    await expect(connection.createSavepoint("foo")).rejects.toThrow(SavepointsNotSupported);
+    await expect(connection.releaseSavepoint("foo")).rejects.toThrow(SavepointsNotSupported);
+    await expect(connection.rollbackSavepoint("foo")).rejects.toThrow(SavepointsNotSupported);
   });
 });
 
@@ -205,4 +248,64 @@ async function createConnectionTestTable(
       .create(),
   );
   await connection.insert("connection_test", { id: 1 });
+}
+
+async function createFileBackedSQLiteConnection(
+  path: string,
+  sourceConnection: Connection,
+): Promise<Connection> {
+  const sqliteModule = await import("sqlite3");
+  const sqlite3 = (sqliteModule.default ?? sqliteModule) as {
+    Database: new (
+      filename: string,
+      callback: (error: Error | null) => void,
+    ) => { close?: (callback: (error: Error | null) => void) => void };
+  };
+
+  const client = await new Promise<object>((resolve, reject) => {
+    const db = new sqlite3.Database(path, (error) => {
+      if (error !== null) {
+        reject(error);
+        return;
+      }
+
+      resolve(db as object);
+    });
+  });
+
+  const fileConnection = DriverManager.getConnection(
+    {
+      client: client as Record<string, unknown>,
+      driver: "sqlite3",
+      // Keep the underlying file DB open across Connection.close() calls so the wrapper can
+      // exercise Doctrine's transaction-nesting-reset-on-reconnect behavior on the same object.
+      ownsClient: false,
+    },
+    sourceConnection.getConfiguration(),
+  );
+  await fileConnection.resolveDatabasePlatform();
+
+  return fileConnection;
+}
+
+async function closeFileBackedSQLiteConnection(connection: Connection): Promise<void> {
+  try {
+    await connection.close();
+  } finally {
+    const native = (await connection.getNativeConnection()) as {
+      close?: (cb: (e: Error | null) => void) => void;
+    };
+    if (typeof native?.close === "function") {
+      await new Promise<void>((resolve, reject) => {
+        native.close?.((error) => {
+          if (error !== null) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+    }
+  }
 }

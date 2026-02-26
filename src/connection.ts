@@ -56,6 +56,8 @@ export class Connection {
   private rollbackOnly = false;
   private exceptionConverter: ExceptionConverter | null = null;
   private databasePlatform: AbstractPlatform | null = null;
+  private databasePlatformPromise: Promise<AbstractPlatform> | null = null;
+  private resolvingDatabasePlatform = false;
   private parser: SQLParser | null = null;
   private readonly schemaManagerFactory: SchemaManagerFactory;
   private nestTransactionsWithSavepoints = true;
@@ -81,7 +83,12 @@ export class Connection {
 
   public getDatabase(): string | null {
     const dbname = this.params.dbname;
-    return typeof dbname === "string" ? dbname : null;
+    if (typeof dbname === "string") {
+      return dbname;
+    }
+
+    const database = this.params.database;
+    return typeof database === "string" ? database : null;
   }
 
   public getConfiguration(): Configuration {
@@ -158,6 +165,7 @@ export class Connection {
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
   ): Promise<Result> {
+    await this.connect();
     const [boundParams, boundTypes] = this.normalizeParameters(params, types);
     const compiledQuery = this.compileQuery(sql, boundParams, boundTypes);
     const query = new Query(sql, params, types);
@@ -173,6 +181,7 @@ export class Connection {
   public async executeQueryObject(query: Query): Promise<Result>;
   public async executeQueryObject<T extends AssociativeRow>(query: Query): Promise<Result<T>>;
   public async executeQueryObject(query: Query): Promise<Result> {
+    await this.connect();
     const [boundParams, boundTypes] = this.normalizeParameters(query.parameters, query.types);
     const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
 
@@ -189,6 +198,7 @@ export class Connection {
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
   ): Promise<number> {
+    await this.connect();
     const [boundParams, boundTypes] = this.normalizeParameters(params, types);
     const compiledQuery = this.compileQuery(sql, boundParams, boundTypes);
     const query = new Query(sql, params, types);
@@ -201,6 +211,7 @@ export class Connection {
   }
 
   public async executeStatementObject(query: Query): Promise<number> {
+    await this.connect();
     const [boundParams, boundTypes] = this.normalizeParameters(query.parameters, query.types);
     const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
 
@@ -388,37 +399,53 @@ export class Connection {
     try {
       const connection = await this.connect();
 
-      if (this.transactionNestingLevel === 0) {
+      this.transactionNestingLevel += 1;
+
+      if (this.transactionNestingLevel === 1) {
         await connection.beginTransaction();
-        this.transactionNestingLevel = 1;
         return;
       }
 
-      const platform = this.getDatabasePlatform();
-      if (!platform.supportsSavepoints()) {
-        throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
-      }
-
-      const savepointName = this.getNestedTransactionSavePointName(
-        this.transactionNestingLevel + 1,
+      await this.createSavepoint(
+        this.getNestedTransactionSavePointName(this.transactionNestingLevel),
       );
-      await this.executeStatement(platform.createSavePoint(savepointName));
-      this.transactionNestingLevel += 1;
     } catch (error) {
       throw this.convertException(error, "beginTransaction");
     }
   }
 
   public async createSavepoint(savepoint: string): Promise<void> {
-    await this.executeStatement(this.getDatabasePlatform().createSavePoint(savepoint));
+    await this.connect();
+    const platform = this.getDatabasePlatform();
+    if (!platform.supportsSavepoints()) {
+      throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
+    }
+
+    await this.executeStatement(platform.createSavePoint(savepoint));
   }
 
   public async releaseSavepoint(savepoint: string): Promise<void> {
-    await this.executeStatement(this.getDatabasePlatform().releaseSavePoint(savepoint));
+    await this.connect();
+    const platform = this.getDatabasePlatform();
+    if (!platform.supportsSavepoints()) {
+      throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
+    }
+
+    if (!platform.supportsReleaseSavepoints()) {
+      return;
+    }
+
+    await this.executeStatement(platform.releaseSavePoint(savepoint));
   }
 
   public async rollbackSavepoint(savepoint: string): Promise<void> {
-    await this.executeStatement(this.getDatabasePlatform().rollbackSavePoint(savepoint));
+    await this.connect();
+    const platform = this.getDatabasePlatform();
+    if (!platform.supportsSavepoints()) {
+      throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
+    }
+
+    await this.executeStatement(platform.rollbackSavePoint(savepoint));
   }
 
   public async commit(): Promise<void> {
@@ -436,15 +463,8 @@ export class Connection {
       if (this.transactionNestingLevel === 1) {
         await connection.commit();
       } else {
-        const platform = this.getDatabasePlatform();
-        if (!platform.supportsSavepoints() || !platform.supportsReleaseSavepoints()) {
-          throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
-        }
-
-        await this.executeStatement(
-          platform.releaseSavePoint(
-            this.getNestedTransactionSavePointName(this.transactionNestingLevel),
-          ),
+        await this.releaseSavepoint(
+          this.getNestedTransactionSavePointName(this.transactionNestingLevel),
         );
       }
     } catch (error) {
@@ -477,15 +497,8 @@ export class Connection {
         return;
       }
 
-      const platform = this.getDatabasePlatform();
-      if (!platform.supportsSavepoints()) {
-        throw SavepointsNotSupported.new({ driverName: this.getDriverName() });
-      }
-
-      await this.executeStatement(
-        platform.rollbackSavePoint(
-          this.getNestedTransactionSavePointName(this.transactionNestingLevel),
-        ),
+      await this.rollbackSavepoint(
+        this.getNestedTransactionSavePointName(this.transactionNestingLevel),
       );
       this.transactionNestingLevel -= 1;
     } catch (error) {
@@ -517,7 +530,16 @@ export class Connection {
       await this.commit();
       return result;
     } catch (error) {
-      await this.rollBack();
+      if (this.isTransactionActive()) {
+        try {
+          await this.rollBack();
+        } catch (rollbackError) {
+          if (!(rollbackError instanceof NoActiveTransaction)) {
+            throw rollbackError;
+          }
+        }
+      }
+
       throw error;
     }
   }
@@ -571,11 +593,13 @@ export class Connection {
     }
   }
 
-  public createSchemaManager(): AbstractSchemaManager {
+  public async createSchemaManager(): Promise<AbstractSchemaManager> {
+    await this.resolveDatabasePlatform();
     return this.schemaManagerFactory.createSchemaManager(this);
   }
 
   public async setTransactionIsolation(level: TransactionIsolationLevel): Promise<void> {
+    await this.connect();
     await this.executeStatement(this.getDatabasePlatform().getSetTransactionIsolationSQL(level));
     this.transactionIsolationLevel = level;
   }
@@ -901,22 +925,66 @@ export class Connection {
       return this.databasePlatform;
     }
 
-    let versionProvider: ServerVersionProvider = this;
-
-    if (typeof this.params.serverVersion === "string") {
-      versionProvider = new StaticServerVersionProvider(this.params.serverVersion);
-    } else {
-      const primary = this.params.primary;
-      if (primary !== null && typeof primary === "object") {
-        const primaryServerVersion = (primary as Record<string, unknown>).serverVersion;
-        if (typeof primaryServerVersion === "string") {
-          versionProvider = new StaticServerVersionProvider(primaryServerVersion);
-        }
-      }
+    const platform = this.driver.getDatabasePlatform(this.getDatabasePlatformVersionProvider());
+    if (!this.isPromiseLike(platform)) {
+      this.databasePlatform = platform;
+      return this.databasePlatform;
     }
 
-    this.databasePlatform = this.driver.getDatabasePlatform(versionProvider);
-    return this.databasePlatform;
+    if (this.databasePlatformPromise === null) {
+      this.resolvingDatabasePlatform = true;
+      this.databasePlatformPromise = platform
+        .then((resolvedPlatform) => {
+          this.databasePlatform = resolvedPlatform;
+          return resolvedPlatform;
+        })
+        .finally(() => {
+          this.databasePlatformPromise = null;
+          this.resolvingDatabasePlatform = false;
+        });
+    }
+
+    throw new Error(
+      "Database platform is not resolved yet. Await connection.resolveDatabasePlatform() " +
+        "or connection.connect() before calling getDatabasePlatform().",
+    );
+  }
+
+  public async resolveDatabasePlatform(): Promise<AbstractPlatform> {
+    if (this.databasePlatform !== null) {
+      return this.databasePlatform;
+    }
+
+    const customPlatform = this.params.platform;
+    if (customPlatform instanceof AbstractPlatform) {
+      this.databasePlatform = customPlatform;
+      return this.databasePlatform;
+    }
+
+    if (this.databasePlatformPromise !== null) {
+      return this.databasePlatformPromise;
+    }
+
+    const versionProvider = this.getDatabasePlatformVersionProvider();
+    this.resolvingDatabasePlatform = true;
+    try {
+      this.databasePlatformPromise = Promise.resolve(
+        this.driver.getDatabasePlatform(versionProvider),
+      )
+        .then((platform) => {
+          this.databasePlatform = platform;
+          return platform;
+        })
+        .finally(() => {
+          this.databasePlatformPromise = null;
+          this.resolvingDatabasePlatform = false;
+        });
+    } catch (error) {
+      this.resolvingDatabasePlatform = false;
+      throw error;
+    }
+
+    return this.databasePlatformPromise;
   }
 
   public async connect(): Promise<DriverConnection> {
@@ -926,6 +994,9 @@ export class Connection {
 
     try {
       this.driverConnection = await this.performConnect();
+      if (!this.resolvingDatabasePlatform) {
+        await this.resolveDatabasePlatform();
+      }
 
       if (!this.autoCommit) {
         await this.beginTransaction();
@@ -953,6 +1024,8 @@ export class Connection {
     this.driverConnection = null;
     this.transactionNestingLevel = 0;
     this.rollbackOnly = false;
+    this.databasePlatformPromise = null;
+    this.resolvingDatabasePlatform = false;
   }
 
   public convertException(error: unknown, operation: string, query?: Query): Exception {
@@ -968,6 +1041,26 @@ export class Connection {
     }
 
     return converted;
+  }
+
+  private getDatabasePlatformVersionProvider(): ServerVersionProvider {
+    if (typeof this.params.serverVersion === "string") {
+      return new StaticServerVersionProvider(this.params.serverVersion);
+    }
+
+    const primary = this.params.primary;
+    if (primary !== null && typeof primary === "object") {
+      const primaryServerVersion = (primary as Record<string, unknown>).serverVersion;
+      if (typeof primaryServerVersion === "string") {
+        return new StaticServerVersionProvider(primaryServerVersion);
+      }
+    }
+
+    return this;
+  }
+
+  private isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+    return typeof value === "object" && value !== null && "then" in value;
   }
 
   private normalizeParameters(

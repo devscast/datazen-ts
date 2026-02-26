@@ -889,13 +889,9 @@ export abstract class AbstractPlatform {
   }
 
   public getDefaultValueDeclarationSQL(column: Record<string, unknown>): string {
-    if (!Object.hasOwn(column, "default")) {
-      return column.notnull === true ? "" : " DEFAULT NULL";
-    }
-
     const defaultValue = column.default;
-    if (defaultValue === null) {
-      return " DEFAULT NULL";
+    if (defaultValue === undefined || defaultValue === null) {
+      return column.notnull === true ? "" : " DEFAULT NULL";
     }
 
     if (typeof defaultValue === "boolean") {
@@ -1167,7 +1163,7 @@ export abstract class AbstractPlatform {
   }
 
   protected multiplyInterval(interval: string, factor: number): string {
-    return `${interval} * ${factor}`;
+    return `(${interval} * ${factor})`;
   }
 
   protected getLikeWildcardCharacters(): string {
@@ -1264,41 +1260,40 @@ export abstract class AbstractPlatform {
     const columns = createTableLike
       .getColumns()
       .map((column) => this.columnToCreateTableArray(column));
-    let columnListSql = this.getColumnDeclarationListSQL(columns);
 
     const indexes = this.invokeMethod<unknown[]>(table, "getIndexes") ?? [];
+    const indexDefinitions: unknown[] = [];
+    let primaryIndex: unknown | null = null;
     let primaryColumns: string[] = [];
     for (const index of indexes) {
       if (this.invokeMethod<boolean>(index, "isPrimary") === true) {
+        primaryIndex = index;
         primaryColumns = this.getQuotedColumns(index);
         continue;
       }
+      indexDefinitions.push(index);
+    }
 
-      columnListSql += `, ${this.getIndexDeclarationSQL(index)}`;
+    const options = this.readCreateTableOptions(table);
+    if (indexDefinitions.length > 0) {
+      options.indexes = indexDefinitions;
     }
 
     if (primaryColumns.length > 0) {
-      columnListSql += `, PRIMARY KEY (${[...new Set(primaryColumns)].join(", ")})`;
+      options.primary = [...new Set(primaryColumns)];
+      if (primaryIndex !== null) {
+        options.primary_index = primaryIndex;
+      }
     }
 
-    const check = this.getCheckDeclarationSQL(columns);
-    let query = `CREATE TABLE ${tableName} (${columnListSql}`;
-    if (check.length > 0) {
-      query += `, ${check}`;
-    }
-    query += ")";
-
-    const sql = [query];
-    if (!createForeignKeys) {
-      return sql;
+    if (createForeignKeys) {
+      const foreignKeys = this.invokeMethod<unknown[]>(table, "getForeignKeys") ?? [];
+      if (foreignKeys.length > 0) {
+        options.foreignKeys = foreignKeys;
+      }
     }
 
-    const foreignKeys = this.invokeMethod<unknown[]>(table, "getForeignKeys") ?? [];
-    for (const foreignKey of foreignKeys) {
-      sql.push(this.getCreateForeignKeySQL(foreignKey, tableName));
-    }
-
-    return sql;
+    return this._getCreateTableSQL(tableName, columns, options);
   }
 
   private asCreateTableLike(table: unknown): {
@@ -1337,6 +1332,22 @@ export abstract class AbstractPlatform {
     }
 
     return definition;
+  }
+
+  private readCreateTableOptions(table: unknown): Record<string, unknown> {
+    if (table === null || typeof table !== "object") {
+      return {};
+    }
+
+    const getOptions = (table as { getOptions?: () => unknown }).getOptions;
+    if (typeof getOptions !== "function") {
+      return {};
+    }
+
+    const options = getOptions.call(table);
+    return options !== null && typeof options === "object"
+      ? { ...(options as Record<string, unknown>) }
+      : {};
   }
 
   private getDynamicTableSQLName(table: unknown): string {

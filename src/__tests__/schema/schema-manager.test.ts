@@ -190,7 +190,7 @@ class CustomSchemaManagerFactory implements SchemaManagerFactory {
 describe("Connection schema manager integration", () => {
   it("creates platform schema manager by default", async () => {
     const connection = new Connection({}, new SchemaSpyDriver());
-    const manager = connection.createSchemaManager();
+    const manager = await connection.createSchemaManager();
 
     expect(manager).toBeInstanceOf(AbstractSchemaManager);
     await expect(manager.listTableNames()).resolves.toEqual(["users", "posts"]);
@@ -234,13 +234,13 @@ describe("Connection schema manager integration", () => {
     expect(manager.createComparator()).toBeInstanceOf(Comparator);
   });
 
-  it("uses custom schema manager factory from configuration", () => {
+  it("uses custom schema manager factory from configuration", async () => {
     const configuration = new Configuration({
       schemaManagerFactory: new CustomSchemaManagerFactory(),
     });
 
     const connection = new Connection({}, new SchemaSpyDriver(), configuration);
-    const manager = connection.createSchemaManager();
+    const manager = await connection.createSchemaManager();
 
     expect(manager).toBeInstanceOf(CustomSchemaManager);
   });
@@ -285,7 +285,7 @@ describe("Connection schema manager integration", () => {
   it("executes mutating schema manager API shims through platform SQL", async () => {
     const driver = new SchemaSpyDriver();
     const connection = new Connection({}, driver);
-    const manager = connection.createSchemaManager();
+    const manager = await connection.createSchemaManager();
 
     const table = new Table("users");
     table.addColumn("id", Types.INTEGER);

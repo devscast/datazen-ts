@@ -6,5 +6,7 @@ import type { ServerVersionProvider } from "./server-version-provider";
 export interface Driver {
   connect(params: Record<string, unknown>): Promise<DriverConnection>;
   getExceptionConverter(): ExceptionConverter;
-  getDatabasePlatform(versionProvider: ServerVersionProvider): AbstractPlatform;
+  getDatabasePlatform(
+    versionProvider: ServerVersionProvider,
+  ): AbstractPlatform | Promise<AbstractPlatform>;
 }

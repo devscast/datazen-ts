@@ -58,6 +58,36 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     };
   }
 
+  public override getBooleanTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "TINYINT";
+  }
+
+  public override getIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `INT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  public override getBigIntTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `BIGINT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  public override getSmallIntTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return `SMALLINT${this._getCommonIntegerTypeDeclarationSQL(column)}`;
+  }
+
+  protected override _getCommonIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {
+    let sql = "";
+
+    if (column.unsigned === true) {
+      sql += " UNSIGNED";
+    }
+
+    if (column.autoincrement === true) {
+      sql += " AUTO_INCREMENT";
+    }
+
+    return sql;
+  }
+
   protected doModifyLimitQuery(query: string, limit: number | null, offset: number): string {
     if (limit !== null) {
       query += ` LIMIT ${limit}`;
@@ -153,6 +183,10 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
 
   public createSelectSQLBuilder(): SelectSQLBuilder {
     return new DefaultSelectSQLBuilder(this, "FOR UPDATE", null);
+  }
+
+  public override getDropTemporaryTableSQL(table: string): string {
+    return `DROP TEMPORARY TABLE ${table}`;
   }
 
   private appendMySQLTableOptions(sql: string[], table: unknown): string[] {

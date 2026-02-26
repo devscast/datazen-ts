@@ -14,9 +14,18 @@ describe("SQLite3Driver", () => {
 
   it("prefers database over connection/client", async () => {
     const driver = new SQLite3Driver();
-    const database = { all: () => undefined, run: () => undefined };
-    const connection = { all: () => undefined, run: () => undefined };
-    const client = { all: () => undefined, run: () => undefined };
+    const makeDb = () => ({
+      all: (_sql: string, _params: unknown[], cb: (e: Error | null, rows?: unknown[]) => void) =>
+        cb(null, []),
+      run: (
+        _sql: string,
+        _params: unknown[],
+        cb?: (this: { changes: number; lastID: number }, e: Error | null) => void,
+      ) => cb?.call({ changes: 0, lastID: 0 }, null),
+    });
+    const database = makeDb();
+    const connection = makeDb();
+    const client = makeDb();
 
     const driverConnection = await driver.connect({
       client,

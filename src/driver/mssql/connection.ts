@@ -1,4 +1,7 @@
+import { createRequire } from "node:module";
+
 import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
+import { Parser, type Visitor } from "../../sql/parser";
 import type { Connection as DriverConnection } from "../connection";
 import { IdentityColumnsNotSupported } from "../exception/identity-columns-not-supported";
 import type { Result as DriverResult } from "../result";
@@ -7,7 +10,16 @@ import { Result as MSSQLResult } from "./result";
 import { MSSQLStatement } from "./statement";
 import type { MSSQLPoolLike, MSSQLRequestLike, MSSQLTransactionLike } from "./types";
 
+const require = createRequire(import.meta.url);
+const mssqlModule = require("mssql") as unknown;
+
+type MSSQLTypedParameter = {
+  typeHint: "varbinary";
+  value: unknown;
+};
+
 export class MSSQLConnection implements DriverConnection {
+  private readonly parser = new Parser(false);
   private transaction: MSSQLTransactionLike | null = null;
   private serialQueue: Promise<void> = Promise.resolve();
 
@@ -103,8 +115,9 @@ export class MSSQLConnection implements DriverConnection {
   ): Promise<DriverResult> {
     return this.runSerial(async () => {
       const request = this.createRequest();
+      const convertedSql = this.convertPlaceholders(sql);
       this.bindNamedParameters(request, parameters);
-      const payload = await request.query(sql);
+      const payload = await request.query(convertedSql);
 
       return this.toDriverResult(payload);
     });
@@ -123,8 +136,50 @@ export class MSSQLConnection implements DriverConnection {
     parameters: Record<string, unknown>,
   ): void {
     for (const [name, value] of Object.entries(parameters)) {
+      if (this.isTypedParameter(value)) {
+        this.bindTypedParameter(request, name, value);
+        continue;
+      }
+
       request.input(name, value);
     }
+  }
+
+  private bindTypedParameter(
+    request: MSSQLRequestLike,
+    name: string,
+    parameter: MSSQLTypedParameter,
+  ): void {
+    switch (parameter.typeHint) {
+      case "varbinary": {
+        const sql = (mssqlModule as unknown as { default?: unknown })?.default ?? mssqlModule;
+        const max = (sql as { MAX?: unknown }).MAX;
+        const varBinaryFactory = (sql as { VarBinary?: unknown }).VarBinary;
+
+        if (typeof varBinaryFactory === "function" && max !== undefined) {
+          request.input(
+            name,
+            (varBinaryFactory as (length: unknown) => unknown)(max),
+            parameter.value,
+          );
+          return;
+        }
+
+        request.input(name, parameter.value);
+        return;
+      }
+    }
+  }
+
+  private isTypedParameter(value: unknown): value is MSSQLTypedParameter {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      "typeHint" in value &&
+      "value" in value &&
+      (value as { typeHint?: unknown }).typeHint === "varbinary"
+    );
   }
 
   public toNamedParameters(parameters: unknown): Record<string, unknown> {
@@ -137,13 +192,37 @@ export class MSSQLConnection implements DriverConnection {
     );
   }
 
+  private convertPlaceholders(sql: string): string {
+    const parts: string[] = [];
+    let position = 0;
+
+    const visitor: Visitor = {
+      acceptNamedParameter: (token: string): void => {
+        const name = token.slice(1);
+        parts.push(`@${name}`);
+      },
+      acceptOther: (fragment: string): void => {
+        parts.push(fragment);
+      },
+      acceptPositionalParameter: (): void => {
+        position += 1;
+        parts.push(`@p${position}`);
+      },
+    };
+
+    this.parser.parse(sql, visitor);
+
+    return parts.join("");
+  }
+
   private toDriverResult(payload: unknown): DriverResult {
     const rows = this.toRows(payload);
     const firstRow = rows[0];
+    const columns = this.toColumns(payload, firstRow);
 
     return new MSSQLResult(
       rows,
-      firstRow === undefined ? [] : Object.keys(firstRow),
+      columns,
       rows.length > 0 ? rows.length : this.getRowsAffected(payload),
     );
   }
@@ -153,6 +232,7 @@ export class MSSQLConnection implements DriverConnection {
       return [];
     }
 
+    const columnTypeNames = this.readColumnTypeNames(payload);
     const recordset = (payload as { recordset?: unknown }).recordset;
     if (!Array.isArray(recordset)) {
       return [];
@@ -161,11 +241,28 @@ export class MSSQLConnection implements DriverConnection {
     const rows: Array<Record<string, unknown>> = [];
     for (const row of recordset) {
       if (row !== null && typeof row === "object" && !Array.isArray(row)) {
-        rows.push(row as Record<string, unknown>);
+        rows.push(this.normalizeRowValues(row as Record<string, unknown>, columnTypeNames));
       }
     }
 
     return rows;
+  }
+
+  private toColumns(payload: unknown, firstRow: Record<string, unknown> | undefined): string[] {
+    if (payload !== null && typeof payload === "object") {
+      const recordset = (payload as { recordset?: unknown }).recordset;
+      if (recordset !== null && typeof recordset === "object") {
+        const columns = (recordset as { columns?: unknown }).columns;
+        if (columns !== null && typeof columns === "object" && !Array.isArray(columns)) {
+          const names = Object.keys(columns);
+          if (names.length > 0) {
+            return names;
+          }
+        }
+      }
+    }
+
+    return firstRow === undefined ? [] : Object.keys(firstRow);
   }
 
   private getRowsAffected(payload: unknown): number {
@@ -185,6 +282,91 @@ export class MSSQLConnection implements DriverConnection {
 
       return total;
     }, 0);
+  }
+
+  private readColumnTypeNames(payload: unknown): Record<string, string> {
+    if (payload === null || typeof payload !== "object") {
+      return {};
+    }
+
+    const recordset = (payload as { recordset?: unknown }).recordset;
+    if (recordset === null || typeof recordset !== "object") {
+      return {};
+    }
+
+    const columns = (recordset as { columns?: unknown }).columns;
+    if (columns === null || typeof columns !== "object" || Array.isArray(columns)) {
+      return {};
+    }
+
+    const typeNames: Record<string, string> = {};
+    for (const [columnName, metadata] of Object.entries(columns)) {
+      if (metadata === null || typeof metadata !== "object") {
+        continue;
+      }
+
+      const type = (metadata as { type?: unknown }).type;
+      const typeName =
+        type !== null && (typeof type === "object" || typeof type === "function")
+          ? (type as { name?: unknown }).name
+          : undefined;
+
+      if (typeof typeName === "string" && typeName.length > 0) {
+        typeNames[columnName] = typeName;
+      }
+    }
+
+    return typeNames;
+  }
+
+  private normalizeRowValues(
+    row: Record<string, unknown>,
+    columnTypeNames: Record<string, string>,
+  ): Record<string, unknown> {
+    const normalized: Record<string, unknown> = {};
+
+    for (const [columnName, value] of Object.entries(row)) {
+      normalized[columnName] = this.normalizeColumnValue(value, columnTypeNames[columnName]);
+    }
+
+    return normalized;
+  }
+
+  private normalizeColumnValue(value: unknown, typeName: string | undefined): unknown {
+    if (!(value instanceof Date) || typeof typeName !== "string") {
+      return value;
+    }
+
+    switch (typeName) {
+      case "Date":
+        return this.formatUtcDate(value);
+      case "Time":
+        return this.formatUtcTime(value);
+      case "DateTime":
+      case "DateTime2":
+      case "SmallDateTime":
+        return this.formatUtcDateTime(value);
+      case "DateTimeOffset":
+        return `${this.formatUtcDateTime(value)} +00:00`;
+      default:
+        return value;
+    }
+  }
+
+  private formatUtcDateTime(date: Date): string {
+    return `${this.formatUtcDate(date)} ${this.formatUtcTime(date)}.${this.pad(date.getUTCMilliseconds() * 1000, 6)}`;
+  }
+
+  private formatUtcDate(date: Date): string {
+    return `${this.pad(date.getUTCFullYear(), 4)}-${this.pad(date.getUTCMonth() + 1)}-${this.pad(date.getUTCDate())}`;
+  }
+
+  private formatUtcTime(date: Date): string {
+    return `${this.pad(date.getUTCHours())}:${this.pad(date.getUTCMinutes())}:${this.pad(date.getUTCSeconds())}`;
+  }
+
+  private pad(value: number, width = 2): string {
+    return String(value).padStart(width, "0");
   }
 
   private runSerial<T>(work: () => Promise<T>): Promise<T> {

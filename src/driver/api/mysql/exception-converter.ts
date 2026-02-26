@@ -31,14 +31,18 @@ const SQL_SYNTAX_CODES = new Set([
 const CONNECTION_ERROR_CODES = new Set([
   1044, 1045, 1046, 1049, 1095, 1142, 1143, 1227, 1370, 1429, 2002, 2005, 2054,
 ]);
-const CONNECTION_LOST_CODES = new Set([2006, 4031]);
+const CONNECTION_LOST_CODES = new Set([2006, 2013, 4031]);
+const CONNECTION_LOST_STRINGS = new Set([
+  "ECONNRESET",
+  "EPIPE",
+  "PROTOCOL_CONNECTION_LOST",
+  "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR",
+  "PROTOCOL_ENQUEUE_AFTER_QUIT",
+]);
 const CONNECTION_ERROR_STRINGS = new Set([
   "ECONNREFUSED",
   "ER_ACCESS_DENIED_ERROR",
   "ER_BAD_DB_ERROR",
-  "PROTOCOL_CONNECTION_LOST",
-  "PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR",
-  "PROTOCOL_ENQUEUE_AFTER_QUIT",
   "ETIMEDOUT",
 ]);
 
@@ -91,6 +95,10 @@ export class ExceptionConverter implements ExceptionConverterInterface {
     }
 
     if (typeof details.code === "number" && CONNECTION_LOST_CODES.has(details.code)) {
+      return new ConnectionLost(details.message, details);
+    }
+
+    if (this.isConnectionLost(details.code, details.message)) {
       return new ConnectionLost(details.message, details);
     }
 
@@ -150,6 +158,24 @@ export class ExceptionConverter implements ExceptionConverterInterface {
     }
 
     return "mysql2 driver error.";
+  }
+
+  private isConnectionLost(code: number | string | undefined, message: string): boolean {
+    if (typeof code === "number") {
+      return CONNECTION_LOST_CODES.has(code);
+    }
+
+    if (typeof code === "string" && CONNECTION_LOST_STRINGS.has(code)) {
+      return true;
+    }
+
+    const normalizedMessage = message.toLowerCase();
+    return (
+      normalizedMessage.includes("socket has been ended by the other party") ||
+      normalizedMessage.includes("server has gone away") ||
+      normalizedMessage.includes("lost connection to mysql server") ||
+      normalizedMessage.includes("closed state")
+    );
   }
 
   private isConnectionError(code: number | string | undefined): boolean {

@@ -128,10 +128,17 @@ describe("FunctionalTestCase helpers", () => {
     ).toBe('"public"."users"');
   });
 
-  it("throws NotSupported for dropSchemaIfExists on sqlite", async () => {
-    await expect(ft.dropSchemaIfExists(UnqualifiedName.unquoted("app"))).rejects.toThrow(
-      NotSupported,
-    );
+  it("dropSchemaIfExists() respects platform schema support", async () => {
+    const platform = ft.connection().getDatabasePlatform();
+
+    if (!platform.supportsSchemas()) {
+      await expect(ft.dropSchemaIfExists(UnqualifiedName.unquoted("app"))).rejects.toThrow(
+        NotSupported,
+      );
+      return;
+    }
+
+    await expect(ft.dropSchemaIfExists(UnqualifiedName.unquoted("app"))).resolves.toBeUndefined();
   });
 });
 

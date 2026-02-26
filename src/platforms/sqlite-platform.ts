@@ -3,10 +3,12 @@ import { SQLiteSchemaManager } from "../schema/sqlite-schema-manager";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
+import { DateIntervalUnit } from "./date-interval-unit";
 import { NotSupported } from "./exception/not-supported";
 import type { KeywordList } from "./keywords/keyword-list";
 import { SQLiteKeywords } from "./keywords/sqlite-keywords";
 import { SQLiteMetadataProvider } from "./sqlite/sqlite-metadata-provider";
+import { TrimMode } from "./trim-mode";
 
 export class SQLitePlatform extends AbstractPlatform {
   protected initializeDatazenTypeMappings(): Record<string, string> {
@@ -36,11 +38,29 @@ export class SQLitePlatform extends AbstractPlatform {
     substring: string,
     start: string | null = null,
   ): string {
-    if (start === null) {
+    if (start === null || start === "1") {
       return `INSTR(${string}, ${substring})`;
     }
 
-    return `(INSTR(SUBSTR(${string}, ${start}), ${substring}) + ${start} - 1)`;
+    return (
+      `CASE WHEN INSTR(SUBSTR(${string}, ${start}), ${substring}) > 0 ` +
+      `THEN INSTR(SUBSTR(${string}, ${start}), ${substring}) + ${start} - 1 ELSE 0 END`
+    );
+  }
+
+  public override getTrimExpression(
+    str: string,
+    mode: TrimMode = TrimMode.UNSPECIFIED,
+    char: string | null = null,
+  ): string {
+    const trimFunction =
+      mode === TrimMode.LEADING ? "LTRIM" : mode === TrimMode.TRAILING ? "RTRIM" : "TRIM";
+
+    if (char === null) {
+      return `${trimFunction}(${str})`;
+    }
+
+    return `${trimFunction}(${str}, ${char})`;
   }
 
   public getSubstringExpression(
@@ -65,6 +85,42 @@ export class SQLitePlatform extends AbstractPlatform {
 
   public getCurrentTimeSQL(): string {
     return "TIME('now')";
+  }
+
+  protected override getDateArithmeticIntervalExpression(
+    date: string,
+    operator: string,
+    interval: string,
+    unit: DateIntervalUnit,
+  ): string {
+    let mappedInterval = interval;
+    let mappedUnit = unit;
+
+    if (mappedUnit === DateIntervalUnit.WEEK) {
+      mappedInterval = this.multiplyInterval(mappedInterval, 7);
+      mappedUnit = DateIntervalUnit.DAY;
+    } else if (mappedUnit === DateIntervalUnit.QUARTER) {
+      mappedInterval = this.multiplyInterval(mappedInterval, 3);
+      mappedUnit = DateIntervalUnit.MONTH;
+    }
+
+    return `DATETIME(${date}, ${this.getConcatExpression(
+      this.quoteStringLiteral(operator),
+      mappedInterval,
+      this.quoteStringLiteral(` ${mappedUnit}`),
+    )})`;
+  }
+
+  public override getTruncateTableSQL(tableName: string, _cascade = false): string {
+    return `DELETE FROM ${this.quoteIdentifier(tableName)}`;
+  }
+
+  public override getCreateForeignKeySQL(): string {
+    throw NotSupported.new("getCreateForeignKeySQL");
+  }
+
+  public override getDropForeignKeySQL(): string {
+    throw NotSupported.new("getDropForeignKeySQL");
   }
 
   public override getIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {

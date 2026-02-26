@@ -10,6 +10,7 @@ export class PgDriver extends AbstractPostgreSQLDriver {
 
   public async connect(params: Record<string, unknown>): Promise<DriverConnection> {
     const connectionParams = params as PgConnectionParams;
+    const usesPool = connectionParams.pool !== undefined;
     const client = connectionParams.pool ?? connectionParams.connection ?? connectionParams.client;
 
     if (client === undefined) {
@@ -19,6 +20,6 @@ export class PgDriver extends AbstractPostgreSQLDriver {
     }
 
     const ownsClient = Boolean(connectionParams.ownsPool ?? connectionParams.ownsClient);
-    return new PgConnection(client, ownsClient);
+    return new PgConnection(client, ownsClient, usesPool);
   }
 }

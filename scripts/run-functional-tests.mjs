@@ -25,7 +25,15 @@ for (let index = 0; index < args.length; index += 1) {
 }
 
 const bunCommand = "bun";
-const vitestArgs = ["x", "vitest", "run", "src/__tests__/functional", ...forwarded];
+const vitestArgs = [
+  "x",
+  "vitest",
+  "run",
+  "src/__tests__/functional",
+  "--exclude",
+  "src/__tests__/functional/_helpers/**/*.test.ts",
+  ...forwarded,
+];
 
 console.log(
   `Running functional tests for platform=${env.DATAZEN_FUNCTIONAL_PLATFORM ?? "sqlite3"} (${vitestArgs.join(" ")})`,

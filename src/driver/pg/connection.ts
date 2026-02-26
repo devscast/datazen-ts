@@ -12,11 +12,18 @@ export class PgConnection implements DriverConnection {
   private readonly parser = new Parser(false);
   private transactionClient: PgPoolClientLike | null = null;
   private inTransaction = false;
+  private baseClientErrorListener: ((error: unknown) => void) | null = null;
+  private transactionClientErrorListener: ((error: unknown) => void) | null = null;
 
   constructor(
     private readonly client: PgPoolLike | PgPoolClientLike,
     private readonly ownsClient: boolean,
-  ) {}
+    private readonly pooledClient = true,
+  ) {
+    if (!this.pooledClient) {
+      this.attachBaseClientErrorListener(client);
+    }
+  }
 
   public async prepare(sql: string): Promise<DriverStatement> {
     return new PgStatement(this, sql);
@@ -45,8 +52,16 @@ export class PgConnection implements DriverConnection {
       throw new Error("A transaction is already active on this connection.");
     }
 
-    if (this.transactionClient === null && this.isPool(this.client)) {
-      this.transactionClient = await this.client.connect();
+    if (this.transactionClient === null && this.pooledClient) {
+      const pool = this.client as PgPoolLike;
+      const connect = pool.connect;
+      if (typeof connect !== "function") {
+        throw new Error("Expected a pg pool connection with connect() support.");
+      }
+
+      const transactionClient = await connect.call(pool);
+      this.transactionClient = transactionClient;
+      this.attachTransactionClientErrorListener(transactionClient);
     }
 
     await this.getQueryable().query("BEGIN");
@@ -103,6 +118,7 @@ export class PgConnection implements DriverConnection {
     }
 
     this.releaseTransactionClient();
+    this.detachBaseClientErrorListener();
 
     if (this.ownsClient && "end" in this.client && typeof this.client.end === "function") {
       await this.client.end();
@@ -124,18 +140,95 @@ export class PgConnection implements DriverConnection {
     return this.transactionClient ?? this.client;
   }
 
-  private isPool(
-    client: PgPoolLike | PgPoolClientLike,
-  ): client is PgPoolLike & { connect: NonNullable<PgPoolLike["connect"]> } {
-    return typeof (client as PgPoolLike).connect === "function";
-  }
-
   private releaseTransactionClient(): void {
+    if (this.transactionClient !== null) {
+      this.detachTransactionClientErrorListener(this.transactionClient);
+    }
+
     if (this.transactionClient?.release !== undefined) {
       this.transactionClient.release();
     }
 
     this.transactionClient = null;
+  }
+
+  private attachTransactionClientErrorListener(connection: PgPoolClientLike): void {
+    if (this.transactionClientErrorListener !== null) {
+      return;
+    }
+
+    const emitter = connection as {
+      on?: (event: string, listener: (error: unknown) => void) => unknown;
+    };
+
+    if (typeof emitter.on !== "function") {
+      return;
+    }
+
+    this.transactionClientErrorListener = () => {
+      // Swallow asynchronous fatal client events and let the next awaited query/tx operation
+      // surface the error through the DBAL exception conversion path.
+    };
+    emitter.on("error", this.transactionClientErrorListener);
+  }
+
+  private detachTransactionClientErrorListener(connection: PgPoolClientLike): void {
+    const listener = this.transactionClientErrorListener;
+    if (listener === null) {
+      return;
+    }
+
+    const emitter = connection as {
+      off?: (event: string, listener: (error: unknown) => void) => unknown;
+      removeListener?: (event: string, listener: (error: unknown) => void) => unknown;
+    };
+
+    if (typeof emitter.off === "function") {
+      emitter.off("error", listener);
+    } else if (typeof emitter.removeListener === "function") {
+      emitter.removeListener("error", listener);
+    }
+
+    this.transactionClientErrorListener = null;
+  }
+
+  private attachBaseClientErrorListener(connection: PgPoolClientLike): void {
+    if (this.baseClientErrorListener !== null) {
+      return;
+    }
+
+    const emitter = connection as {
+      on?: (event: string, listener: (error: unknown) => void) => unknown;
+    };
+
+    if (typeof emitter.on !== "function") {
+      return;
+    }
+
+    this.baseClientErrorListener = () => {
+      // Node pg emits async fatal connection errors. Keep them on the awaited query path.
+    };
+    emitter.on("error", this.baseClientErrorListener);
+  }
+
+  private detachBaseClientErrorListener(): void {
+    const listener = this.baseClientErrorListener;
+    if (listener === null) {
+      return;
+    }
+
+    const emitter = this.client as {
+      off?: (event: string, listener: (error: unknown) => void) => unknown;
+      removeListener?: (event: string, listener: (error: unknown) => void) => unknown;
+    };
+
+    if (typeof emitter.off === "function") {
+      emitter.off("error", listener);
+    } else if (typeof emitter.removeListener === "function") {
+      emitter.removeListener("error", listener);
+    }
+
+    this.baseClientErrorListener = null;
   }
 
   private convertPositionalPlaceholders(sql: string): string {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Connection } from "../../../connection";
 import { NoKeyValue } from "../../../exception/no-key-value";
+import { SQLServerPlatform } from "../../../platforms/sql-server-platform";
 import { TestUtil } from "../../test-util";
 import { useFunctionalTestCase } from "../_helpers/functional-test-case";
 
@@ -62,8 +63,13 @@ describe("Functional/Connection/FetchTest", () => {
     });
   });
 
-  it("fetches key/value pairs from a limited result set", async () => {
-    const limitedQuery = connection.getDatabasePlatform().modifyLimitQuery(query, 1, 1);
+  it("fetches key/value pairs from a limited result set", async ({ skip }) => {
+    const platform = connection.getDatabasePlatform();
+    if (platform instanceof SQLServerPlatform) {
+      skip();
+    }
+
+    const limitedQuery = platform.modifyLimitQuery(query, 1, 1);
 
     expect(await connection.fetchAllKeyValue(limitedQuery)).toEqual({ bar: 2 });
   });

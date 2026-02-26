@@ -1,5 +1,4 @@
 import type { Driver } from "../../driver";
-import type { AbstractPlatform } from "../../platforms/abstract-platform";
 import type { ServerVersionProvider } from "../../server-version-provider";
 import type { ExceptionConverter } from "../api/exception-converter";
 import type { Connection as DriverConnection } from "../connection";
@@ -11,7 +10,9 @@ export abstract class AbstractDriverMiddleware implements Driver {
     return this.wrappedDriver.connect(params);
   }
 
-  public getDatabasePlatform(versionProvider: ServerVersionProvider): AbstractPlatform {
+  public getDatabasePlatform(
+    versionProvider: ServerVersionProvider,
+  ): ReturnType<Driver["getDatabasePlatform"]> {
     return this.wrappedDriver.getDatabasePlatform(versionProvider);
   }
 

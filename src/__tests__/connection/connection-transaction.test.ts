@@ -235,7 +235,7 @@ describe("Connection transactions and state", () => {
     await expect(connection.beginTransaction()).rejects.toThrow(SavepointsNotSupported);
   });
 
-  it("throws when commit savepoints are not supported", async () => {
+  it("commits nested transactions when release savepoints are not supported", async () => {
     const driverConnection = new SpyDriverConnection();
     const connection = new Connection(
       {},
@@ -244,7 +244,11 @@ describe("Connection transactions and state", () => {
 
     await connection.beginTransaction();
     await connection.beginTransaction();
-    await expect(connection.commit()).rejects.toThrow(SavepointsNotSupported);
+    expect(driverConnection.execCalls).toEqual(["SAVEPOINT DATAZEN_2"]);
+
+    await expect(connection.commit()).resolves.toBeUndefined();
+    expect(connection.getTransactionNestingLevel()).toBe(1);
+    expect(driverConnection.execCalls).toEqual(["SAVEPOINT DATAZEN_2"]);
   });
 
   it("throws for commit/rollback when there is no active transaction", async () => {

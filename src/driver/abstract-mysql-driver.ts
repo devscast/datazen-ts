@@ -16,12 +16,10 @@ import type { ExceptionConverter as DriverExceptionConverter } from "./api/excep
 import { ExceptionConverter } from "./api/mysql/exception-converter";
 
 export abstract class AbstractMySQLDriver implements Driver {
-  public getDatabasePlatform(versionProvider: ServerVersionProvider): AbstractMySQLPlatform {
-    const version = versionProvider.getServerVersion();
-
-    if (typeof version !== "string") {
-      return new MySQLPlatform();
-    }
+  public async getDatabasePlatform(
+    versionProvider: ServerVersionProvider,
+  ): Promise<AbstractMySQLPlatform> {
+    const version = await versionProvider.getServerVersion();
 
     if (version.toLowerCase().includes("mariadb")) {
       const mariaDbVersion = this.getMariaDbMysqlVersionNumber(version);

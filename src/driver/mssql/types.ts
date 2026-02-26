@@ -1,4 +1,5 @@
 export interface MSSQLRequestLike {
+  input(name: string, type: unknown, value: unknown): MSSQLRequestLike;
   input(name: string, value: unknown): MSSQLRequestLike;
   query(sql: string): Promise<unknown>;
 }
