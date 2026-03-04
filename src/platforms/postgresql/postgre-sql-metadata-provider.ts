@@ -163,10 +163,12 @@ ORDER BY sequence_schema, sequence_name`;
   ): Promise<TableColumnMetadataRow[]> {
     const sql = `SELECT table_schema,
        table_name,
-       COALESCE(NULLIF(data_type, 'USER-DEFINED'), udt_name) AS data_type,
+       COALESCE(domain_name, udt_name) AS data_type,
+       udt_name AS domain_type,
        column_name,
        is_nullable,
        column_default,
+       is_identity,
        character_maximum_length,
        collation_name,
        numeric_precision,
@@ -174,7 +176,11 @@ ORDER BY sequence_schema, sequence_name`;
 FROM information_schema.columns
 WHERE table_schema NOT LIKE 'pg\\_%'
   AND table_schema != 'information_schema'${schemaName === null ? "" : "\n  AND table_schema = ?"}${
-    tableName === null ? "" : "\n  AND table_name = ?"
+    tableName === null
+      ? ""
+      : schemaName === null
+        ? "\n  AND table_schema = ANY(current_schemas(false))\n  AND table_name = ?"
+        : "\n  AND table_name = ?"
   }
 ORDER BY table_schema, table_name, ordinal_position`;
     const params = [
@@ -197,14 +203,14 @@ ORDER BY table_schema, table_name, ordinal_position`;
     schemaName: string | null,
     tableName: string | null,
   ): Promise<IndexColumnMetadataRow[]> {
-    const sql = `SELECT ns.nspname AS table_schema,
-       tbl.relname AS table_name,
-       idx.relname AS index_name,
+    const sql = `SELECT quote_ident(ns.nspname) AS table_schema,
+       quote_ident(tbl.relname) AS table_name,
+       quote_ident(idx.relname) AS index_name,
        am.amname AS index_type,
        ind.indisunique AS is_unique,
        ind.indisclustered AS is_clustered,
        pg_get_expr(ind.indpred, ind.indrelid) AS predicate,
-       att.attname AS column_name
+       quote_ident(att.attname) AS column_name
 FROM pg_index ind
 JOIN pg_class tbl ON tbl.oid = ind.indrelid
 JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
@@ -243,10 +249,10 @@ ORDER BY ns.nspname, tbl.relname, idx.relname, key.ord`;
     schemaName: string | null,
     tableName: string | null,
   ): Promise<PrimaryKeyConstraintColumnRow[]> {
-    const sql = `SELECT tc.table_schema,
-       tc.table_name,
-       tc.constraint_name,
-       kcu.column_name
+    const sql = `SELECT quote_ident(tc.table_schema) AS table_schema,
+       quote_ident(tc.table_name) AS table_name,
+       quote_ident(tc.constraint_name) AS constraint_name,
+       quote_ident(kcu.column_name) AS column_name
 FROM information_schema.table_constraints tc
 JOIN information_schema.key_column_usage kcu
   ON tc.constraint_schema = kcu.constraint_schema
@@ -278,37 +284,57 @@ ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position`;
     schemaName: string | null,
     tableName: string | null,
   ): Promise<ForeignKeyConstraintColumnMetadataRow[]> {
-    const sql = `SELECT kcu.table_schema,
-       kcu.table_name,
-       kcu.constraint_name,
-       kcu.ordinal_position,
-       kcu.column_name,
-       ccu.table_schema AS referenced_table_schema,
-       ccu.table_name AS referenced_table_name,
-       ccu.column_name AS referenced_column_name,
-       rc.match_option,
-       rc.update_rule,
-       rc.delete_rule,
-       tc.is_deferrable,
-       tc.initially_deferred
-FROM information_schema.key_column_usage kcu
-JOIN information_schema.table_constraints tc
-  ON tc.constraint_schema = kcu.constraint_schema
- AND tc.constraint_name = kcu.constraint_name
-JOIN information_schema.referential_constraints rc
-  ON rc.constraint_schema = tc.constraint_schema
- AND rc.constraint_name = tc.constraint_name
-JOIN information_schema.constraint_column_usage ccu
-  ON ccu.constraint_schema = rc.unique_constraint_schema
- AND ccu.constraint_name = rc.unique_constraint_name
-WHERE tc.constraint_type = 'FOREIGN KEY'${schemaName === null ? "" : "\n  AND kcu.table_schema = ?"}${
-      tableName === null ? "" : "\n  AND kcu.table_name = ?"
-    }
-ORDER BY kcu.table_schema, kcu.table_name, kcu.constraint_name, kcu.ordinal_position`;
-    const params = [
-      ...(schemaName === null ? [] : [schemaName]),
-      ...(tableName === null ? [] : [tableName]),
+    const conditions = [
+      "r.contype = 'f'",
+      "pkn.nspname NOT LIKE 'pg\\_%'",
+      "pkn.nspname != 'information_schema'",
     ];
+    const params: string[] = [];
+
+    if (schemaName !== null) {
+      conditions.push("pkn.nspname = ?");
+      params.push(schemaName);
+    } else if (tableName !== null) {
+      conditions.push("pkn.nspname = CURRENT_SCHEMA()");
+    }
+
+    if (tableName !== null) {
+      conditions.push("pkc.relname = ?");
+      params.push(tableName);
+    }
+
+    const sql = `SELECT quote_ident(pkn.nspname) AS table_schema,
+       quote_ident(pkc.relname) AS table_name,
+       quote_ident(r.conname) AS constraint_name,
+       quote_ident(fkn.nspname) AS referenced_table_schema,
+       quote_ident(fkc.relname) AS referenced_table_name,
+       r.confupdtype AS update_rule,
+       r.confdeltype AS delete_rule,
+       r.condeferrable AS is_deferrable,
+       r.condeferred AS initially_deferred,
+       quote_ident(pka.attname) AS column_name,
+       quote_ident(fka.attname) AS referenced_column_name
+FROM pg_constraint r
+JOIN pg_class fkc
+  ON fkc.oid = r.confrelid
+JOIN pg_namespace fkn
+  ON fkn.oid = fkc.relnamespace
+JOIN unnest(r.confkey) WITH ORDINALITY AS fk_attnum(attnum, ord)
+  ON TRUE
+JOIN pg_attribute fka
+  ON fka.attrelid = fkc.oid
+ AND fka.attnum = fk_attnum.attnum
+JOIN pg_class pkc
+  ON pkc.oid = r.conrelid
+JOIN pg_namespace pkn
+  ON pkn.oid = pkc.relnamespace
+JOIN unnest(r.conkey) WITH ORDINALITY AS pk_attnum(attnum, ord)
+  ON pk_attnum.ord = fk_attnum.ord
+JOIN pg_attribute pka
+  ON pka.attrelid = pkc.oid
+ AND pka.attnum = pk_attnum.attnum
+WHERE ${conditions.join("\n  AND ")}
+ORDER BY pkn.nspname, pkc.relname, r.conname, fk_attnum.ord`;
     const rows = await this.connection.fetchAllAssociative(sql, params);
 
     return rows.map((row) => {
@@ -317,18 +343,35 @@ ORDER BY kcu.table_schema, kcu.table_name, kcu.constraint_name, kcu.ordinal_posi
       return new ForeignKeyConstraintColumnMetadataRow(
         pickString(row, "table_schema"),
         pickString(row, "table_name") ?? "",
-        pickNumber(row, "ordinal_position"),
+        null,
         name,
         pickString(row, "referenced_table_schema"),
         pickString(row, "referenced_table_name") ?? "",
-        mapMatchType(pickString(row, "match_option")),
-        mapReferentialAction(pickString(row, "update_rule")),
-        mapReferentialAction(pickString(row, "delete_rule")),
+        mapMatchType("SIMPLE"),
+        mapPgReferentialAction(pickString(row, "update_rule")),
+        mapPgReferentialAction(pickString(row, "delete_rule")),
         pickBoolean(row, "is_deferrable") === true,
         pickBoolean(row, "initially_deferred") === true,
         pickString(row, "column_name") ?? "",
         pickString(row, "referenced_column_name") ?? "",
       );
     });
+  }
+}
+
+function mapPgReferentialAction(code: string | null): ReturnType<typeof mapReferentialAction> {
+  switch (code) {
+    case "a":
+      return mapReferentialAction("NO ACTION");
+    case "r":
+      return mapReferentialAction("RESTRICT");
+    case "c":
+      return mapReferentialAction("CASCADE");
+    case "n":
+      return mapReferentialAction("SET NULL");
+    case "d":
+      return mapReferentialAction("SET DEFAULT");
+    default:
+      return mapReferentialAction(code);
   }
 }

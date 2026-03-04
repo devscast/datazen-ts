@@ -153,20 +153,31 @@ JOIN sys.schemas AS scm ON scm.schema_id = seq.schema_id`;
     schemaName: string | null,
     tableName: string | null,
   ): Promise<TableColumnMetadataRow[]> {
-    const sql = `SELECT TABLE_SCHEMA AS table_schema,
-       TABLE_NAME AS table_name,
-       COLUMN_NAME AS column_name,
-       DATA_TYPE AS data_type,
-       CHARACTER_MAXIMUM_LENGTH AS character_maximum_length,
-       NUMERIC_PRECISION AS numeric_precision,
-       NUMERIC_SCALE AS numeric_scale,
-       IS_NULLABLE AS is_nullable,
-       COLUMN_DEFAULT AS column_default
-FROM INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA NOT IN ('guest', 'INFORMATION_SCHEMA', 'sys')${
-      schemaName === null ? "" : "\n  AND TABLE_SCHEMA = ?"
-    }${tableName === null ? "" : "\n  AND TABLE_NAME = ?"}
-ORDER BY TABLE_SCHEMA, TABLE_NAME, ORDINAL_POSITION`;
+    const sql = `SELECT c.TABLE_SCHEMA AS table_schema,
+       c.TABLE_NAME AS table_name,
+       c.COLUMN_NAME AS column_name,
+       c.DATA_TYPE AS data_type,
+       c.CHARACTER_MAXIMUM_LENGTH AS character_maximum_length,
+       c.NUMERIC_PRECISION AS numeric_precision,
+       c.NUMERIC_SCALE AS numeric_scale,
+       c.IS_NULLABLE AS is_nullable,
+       c.COLLATION_NAME AS collation_name,
+       c.COLUMN_DEFAULT AS column_default,
+       d.name AS default_constraint_name
+FROM INFORMATION_SCHEMA.COLUMNS c
+LEFT JOIN sys.tables t
+  ON t.name = c.TABLE_NAME
+ AND t.schema_id = SCHEMA_ID(c.TABLE_SCHEMA)
+LEFT JOIN sys.columns sc
+  ON sc.object_id = t.object_id
+ AND sc.name = c.COLUMN_NAME
+LEFT JOIN sys.default_constraints d
+  ON d.parent_object_id = sc.object_id
+ AND d.parent_column_id = sc.column_id
+WHERE c.TABLE_SCHEMA NOT IN ('guest', 'INFORMATION_SCHEMA', 'sys')${
+      schemaName === null ? "" : "\n  AND c.TABLE_SCHEMA = ?"
+    }${tableName === null ? "" : "\n  AND c.TABLE_NAME = ?"}
+ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION`;
     const params = [
       ...(schemaName === null ? [] : [schemaName]),
       ...(tableName === null ? [] : [tableName]),
@@ -309,8 +320,8 @@ ORDER BY s.name, t.name, fk.name, fkc.constraint_column_id`;
           mapMatchType(null),
           mapReferentialAction(pickString(row, "update_rule")),
           mapReferentialAction(pickString(row, "delete_rule")),
-          false,
-          false,
+          null,
+          null,
           pickString(row, "column_name") ?? "",
           pickString(row, "referenced_column_name") ?? "",
         ),

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Connection } from "../../connection";
+import { ParameterBindingStyle } from "../../driver/_internal";
+import { ParameterType } from "../../parameter-type";
+import { AbstractMySQLPlatform } from "../../platforms/abstract-mysql-platform";
 import { Column } from "../../schema/column";
 import { Table } from "../../schema/table";
 import { Types } from "../../types/types";
@@ -118,7 +121,8 @@ describe("Functional/StatementTest", () => {
     stmt.bindValue(2, "banana");
     stmt.bindValue(1, "apple");
 
-    expect((await stmt.executeQuery()).fetchNumeric()).toEqual([5, 6]);
+    const row = (await stmt.executeQuery()).fetchNumeric();
+    expect((row ?? []).map((value) => Number(value))).toEqual([5, 6]);
   });
 
   it("fetches a single column result with fetchOne()", async () => {
@@ -126,13 +130,13 @@ describe("Functional/StatementTest", () => {
       connection.getDatabasePlatform().getDummySelectSQL(),
     );
 
-    expect(result.fetchOne()).toBe(1);
+    expect(Number(result.fetchOne())).toBe(1);
   });
 
   it("executes query via prepared statement", async () => {
     const stmt = await connection.prepare(connection.getDatabasePlatform().getDummySelectSQL());
 
-    expect((await stmt.executeQuery()).fetchOne()).toBe(1);
+    expect(Number((await stmt.executeQuery()).fetchOne())).toBe(1);
   });
 
   it("executes statements and returns affected rows", async () => {
@@ -148,16 +152,54 @@ describe("Functional/StatementTest", () => {
     expect(await stmt.executeStatement()).toBe(1);
   });
 
-  it.skip("does not report invalid named parameter binding on SQLite3 in Doctrine's native sqlite3 driver", async () => {
-    // Doctrine skips this for sqlite3. Datazen's sqlite3 adapter currently rejects named binding earlier.
+  it("binds invalid named parameter", async ({ skip }) => {
+    if (!driverSupportsNamedParameters(connection)) {
+      skip();
+    }
+
+    const platform = connection.getDatabasePlatform();
+    const statement = await connection.prepare(platform.getDummySelectSQL(":foo"));
+
+    statement.bindValue("bar", "baz");
+
+    await expect(statement.executeQuery()).rejects.toThrow();
   });
 
-  it.skip("fetches long BLOB values through Node stream conversion", async () => {
-    // Doctrine asserts PHP stream conversion semantics for BLOBs. Datazen returns Node values (Buffer/Uint8Array/string).
+  it("fetches long BLOB values", async () => {
+    await functional.dropAndCreateTable(
+      Table.editor()
+        .setUnquotedName("stmt_long_blob")
+        .setColumns(
+          Column.editor()
+            .setUnquotedName("contents")
+            .setTypeName(Types.BLOB)
+            .setLength(0xffffffff)
+            .create(),
+        )
+        .create(),
+    );
+
+    const contents = Buffer.from("X".repeat(1024 * 1024), "utf8");
+    await connection.insert("stmt_long_blob", { contents }, [ParameterType.LARGE_OBJECT]);
+
+    const result = await connection.prepare("SELECT contents FROM stmt_long_blob");
+    const raw = (await result.executeQuery()).fetchOne();
+    const converted = connection.convertToNodeValue(raw, Types.BLOB);
+
+    expect(asBuffer(converted)).toEqual(contents);
   });
 
-  it.skip("surfaces redundant parameter execution errors consistently across drivers", async () => {
-    // Doctrine marks this as intentionally driver-dependent. SQLite behavior is adapter/driver-specific.
+  it("executes with redundant parameters", async ({ skip }) => {
+    if (!driverReportsRedundantParameters(connection)) {
+      skip();
+    }
+
+    const platform = connection.getDatabasePlatform();
+    const statement = await connection.prepare(platform.getDummySelectSQL());
+
+    statement.bindValue(1, null);
+
+    await expect(statement.executeQuery()).rejects.toThrow();
   });
 });
 
@@ -173,4 +215,38 @@ async function resetStmtTestTable(
       )
       .create(),
   );
+}
+
+function driverSupportsNamedParameters(connection: Connection): boolean {
+  const driver = connection.getDriver() as { bindingStyle?: unknown };
+  return driver.bindingStyle === ParameterBindingStyle.NAMED;
+}
+
+function driverReportsRedundantParameters(connection: Connection): boolean {
+  const driver = connection.getDriver() as { bindingStyle?: unknown };
+  if (driver.bindingStyle === ParameterBindingStyle.NAMED) {
+    return false;
+  }
+
+  return !(connection.getDatabasePlatform() instanceof AbstractMySQLPlatform);
+}
+
+function asBuffer(value: unknown): Buffer {
+  if (Buffer.isBuffer(value)) {
+    return value;
+  }
+
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value);
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return Buffer.from(new Uint8Array(value));
+  }
+
+  if (typeof value === "string") {
+    return Buffer.from(value, "utf8");
+  }
+
+  throw new Error(`Unsupported blob value: ${String(value)}`);
 }

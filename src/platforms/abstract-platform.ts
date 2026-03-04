@@ -559,7 +559,7 @@ export abstract class AbstractPlatform {
   }
 
   public getDropForeignKeySQL(foreignKey: string, table: string): string {
-    return `ALTER TABLE ${table} DROP FOREIGN KEY ${foreignKey}`;
+    return this.getDropConstraintSQL(foreignKey, table);
   }
 
   public getDropUniqueConstraintSQL(name: string, tableName: string): string {
@@ -642,9 +642,10 @@ export abstract class AbstractPlatform {
   }
 
   public getDropTablesSQL(tables: Iterable<unknown>): string[] {
+    const materializedTables = [...tables];
     const sql: string[] = [];
 
-    for (const table of tables) {
+    for (const table of materializedTables) {
       const tableName = this.getDynamicTableSQLName(table);
       const foreignKeys = this.invokeMethod<unknown[]>(table, "getForeignKeys") ?? [];
 
@@ -655,8 +656,10 @@ export abstract class AbstractPlatform {
           String(foreignKey);
         sql.push(this.getDropForeignKeySQL(foreignKeyName, tableName));
       }
+    }
 
-      sql.push(this.getDropTableSQL(tableName));
+    for (const table of materializedTables) {
+      sql.push(this.getDropTableSQL(this.getDynamicTableSQLName(table)));
     }
 
     return sql;
@@ -923,8 +926,30 @@ export abstract class AbstractPlatform {
       return ` DEFAULT ${defaultValue.toSQL(this)}`;
     }
 
-    if (typeof defaultValue === "boolean") {
-      return ` DEFAULT ${this.convertBooleans(defaultValue)}`;
+    if (column.type === undefined) {
+      return ` DEFAULT ${this.quoteStringLiteral(String(defaultValue))}`;
+    }
+
+    const typeName = getColumnTypeName(column.type);
+
+    if (isIntegerMappingTypeName(typeName)) {
+      return ` DEFAULT ${String(defaultValue)}`;
+    }
+
+    if (isDateTimeMappingTypeName(typeName) && defaultValue === this.getCurrentTimestampSQL()) {
+      return ` DEFAULT ${this.getCurrentTimestampSQL()}`;
+    }
+
+    if (isTimeMappingTypeName(typeName) && defaultValue === this.getCurrentTimeSQL()) {
+      return ` DEFAULT ${this.getCurrentTimeSQL()}`;
+    }
+
+    if (isDateMappingTypeName(typeName) && defaultValue === this.getCurrentDateSQL()) {
+      return ` DEFAULT ${this.getCurrentDateSQL()}`;
+    }
+
+    if (isBooleanTypeName(typeName)) {
+      return ` DEFAULT ${String(this.convertBooleans(defaultValue))}`;
     }
 
     if (typeof defaultValue === "number" || typeof defaultValue === "bigint") {
@@ -1010,6 +1035,11 @@ export abstract class AbstractPlatform {
       sql += ` ON DELETE ${this.getForeignKeyReferentialActionSQL(String(this.getConstraintOption(foreignKey, "onDelete")))}`;
     }
 
+    const deferrabilitySQL = this.getConstraintDeferrabilitySQL(foreignKey);
+    if (deferrabilitySQL.length > 0) {
+      sql += deferrabilitySQL;
+    }
+
     return sql;
   }
 
@@ -1027,8 +1057,24 @@ export abstract class AbstractPlatform {
     }
   }
 
-  protected getConstraintDeferrabilitySQL(_deferrability: unknown): string {
-    return "";
+  protected getConstraintDeferrabilitySQL(foreignKey: unknown): string {
+    let sql = "";
+
+    if (this.constraintHasOption(foreignKey, "deferrable")) {
+      sql +=
+        this.getConstraintOption(foreignKey, "deferrable") !== false
+          ? " DEFERRABLE"
+          : " NOT DEFERRABLE";
+    }
+
+    if (this.constraintHasOption(foreignKey, "deferred")) {
+      sql +=
+        this.getConstraintOption(foreignKey, "deferred") !== false
+          ? " INITIALLY DEFERRED"
+          : " INITIALLY IMMEDIATE";
+    }
+
+    return sql;
   }
 
   public getForeignKeyBaseDeclarationSQL(foreignKey: unknown): string {
@@ -1329,7 +1375,33 @@ export abstract class AbstractPlatform {
       }
     }
 
-    return this._getCreateTableSQL(tableName, columns, options);
+    const sql = this._getCreateTableSQL(tableName, columns, options);
+
+    if (this.supportsCommentOnStatement()) {
+      const tableHasComment = this.invokeMethod<boolean>(table, "hasOption", "comment") === true;
+      if (tableHasComment) {
+        const tableComment = this.invokeMethod<unknown>(table, "getOption", "comment");
+        if (typeof tableComment === "string") {
+          sql.push(this.getCommentOnTableSQL(tableName, tableComment));
+        }
+      }
+
+      for (const column of createTableLike.getColumns()) {
+        const comment = this.invokeMethod<unknown>(column, "getComment");
+        if (typeof comment !== "string" || comment.length === 0) {
+          continue;
+        }
+
+        const quotedColumnName = this.invokeMethod<string>(column, "getQuotedName", this);
+        if (typeof quotedColumnName !== "string" || quotedColumnName.length === 0) {
+          continue;
+        }
+
+        sql.push(this.getCommentOnColumnSQL(tableName, quotedColumnName, comment));
+      }
+    }
+
+    return sql;
   }
 
   private asCreateTableLike(table: unknown): {
@@ -1524,4 +1596,39 @@ export abstract class AbstractPlatform {
     _options: Record<string, unknown>,
     _methodName: string,
   ): void {}
+}
+
+function getColumnTypeName(type: unknown): string {
+  if (type === null || type === undefined || typeof type !== "object") {
+    return "";
+  }
+
+  return type.constructor.name;
+}
+
+function isIntegerMappingTypeName(typeName: string): boolean {
+  return ["IntegerType", "SmallIntType", "BigIntType"].includes(typeName);
+}
+
+function isBooleanTypeName(typeName: string): boolean {
+  return typeName === "BooleanType";
+}
+
+function isDateTimeMappingTypeName(typeName: string): boolean {
+  return [
+    "DateTimeType",
+    "DateTimeImmutableType",
+    "DateTimeTzType",
+    "DateTimeTzImmutableType",
+    "VarDateTimeType",
+    "VarDateTimeImmutableType",
+  ].includes(typeName);
+}
+
+function isTimeMappingTypeName(typeName: string): boolean {
+  return ["TimeType", "TimeImmutableType"].includes(typeName);
+}
+
+function isDateMappingTypeName(typeName: string): boolean {
+  return ["DateType", "DateImmutableType"].includes(typeName);
 }

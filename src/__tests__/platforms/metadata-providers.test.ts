@@ -124,7 +124,7 @@ describe("Platform MetadataProvider surfaces (async, Doctrine-parity intent)", (
             [["active_users", "SELECT * FROM users"]],
         },
         {
-          "SELECT TABLE_NAME,\n       COLUMN_NAME,\n       DATA_TYPE,\n       COLUMN_TYPE,\n       IS_NULLABLE,\n       COLUMN_DEFAULT,\n       CHARACTER_MAXIMUM_LENGTH,\n       NUMERIC_PRECISION,\n       NUMERIC_SCALE,\n       EXTRA,\n       COLUMN_COMMENT,\n       CHARACTER_SET_NAME,\n       COLLATION_NAME\nFROM information_schema.COLUMNS\nWHERE TABLE_SCHEMA = ?\nORDER BY TABLE_NAME, ORDINAL_POSITION":
+          "SELECT c.TABLE_NAME,\n       c.COLUMN_NAME,\n       c.DATA_TYPE AS DATA_TYPE,\n       c.COLUMN_TYPE,\n       c.IS_NULLABLE,\n       c.COLUMN_DEFAULT,\n       c.CHARACTER_MAXIMUM_LENGTH,\n       c.NUMERIC_PRECISION,\n       c.NUMERIC_SCALE,\n       c.EXTRA,\n       c.COLUMN_COMMENT,\n       c.CHARACTER_SET_NAME,\n       c.COLLATION_NAME\nFROM information_schema.COLUMNS c\nWHERE c.TABLE_SCHEMA = ?\nORDER BY c.TABLE_NAME, c.ORDINAL_POSITION":
             [
               {
                 TABLE_NAME: "users",
@@ -238,7 +238,7 @@ describe("Platform MetadataProvider surfaces (async, Doctrine-parity intent)", (
             [["public", "users_id_seq", 1, 1]],
         },
         {
-          "SELECT table_schema,\n       table_name,\n       COALESCE(NULLIF(data_type, 'USER-DEFINED'), udt_name) AS data_type,\n       column_name,\n       is_nullable,\n       column_default,\n       character_maximum_length,\n       collation_name,\n       numeric_precision,\n       numeric_scale\nFROM information_schema.columns\nWHERE table_schema NOT LIKE 'pg\\\\_%'\n  AND table_schema != 'information_schema'\nORDER BY table_schema, table_name, ordinal_position":
+          "SELECT table_schema,\n       table_name,\n       COALESCE(domain_name, udt_name) AS data_type,\n       udt_name AS domain_type,\n       column_name,\n       is_nullable,\n       column_default,\n       is_identity,\n       character_maximum_length,\n       collation_name,\n       numeric_precision,\n       numeric_scale\nFROM information_schema.columns\nWHERE table_schema NOT LIKE 'pg\\\\_%'\n  AND table_schema != 'information_schema'\nORDER BY table_schema, table_name, ordinal_position":
             [
               {
                 table_schema: "public",
@@ -249,7 +249,7 @@ describe("Platform MetadataProvider surfaces (async, Doctrine-parity intent)", (
                 collation_name: null,
               },
             ],
-          "SELECT tc.table_schema,\n       tc.table_name,\n       tc.constraint_name,\n       kcu.column_name\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\n AND tc.table_name = kcu.table_name\nWHERE tc.constraint_type = 'PRIMARY KEY'\nORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position":
+          "SELECT quote_ident(tc.table_schema) AS table_schema,\n       quote_ident(tc.table_name) AS table_name,\n       quote_ident(tc.constraint_name) AS constraint_name,\n       quote_ident(kcu.column_name) AS column_name\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\n AND tc.table_name = kcu.table_name\nWHERE tc.constraint_type = 'PRIMARY KEY'\nORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position":
             [
               {
                 table_schema: "public",
@@ -258,20 +258,18 @@ describe("Platform MetadataProvider surfaces (async, Doctrine-parity intent)", (
                 column_name: "id",
               },
             ],
-          "SELECT kcu.table_schema,\n       kcu.table_name,\n       kcu.constraint_name,\n       kcu.ordinal_position,\n       kcu.column_name,\n       ccu.table_schema AS referenced_table_schema,\n       ccu.table_name AS referenced_table_name,\n       ccu.column_name AS referenced_column_name,\n       rc.match_option,\n       rc.update_rule,\n       rc.delete_rule,\n       tc.is_deferrable,\n       tc.initially_deferred\nFROM information_schema.key_column_usage kcu\nJOIN information_schema.table_constraints tc\n  ON tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.referential_constraints rc\n  ON rc.constraint_schema = tc.constraint_schema\n AND rc.constraint_name = tc.constraint_name\nJOIN information_schema.constraint_column_usage ccu\n  ON ccu.constraint_schema = rc.unique_constraint_schema\n AND ccu.constraint_name = rc.unique_constraint_name\nWHERE tc.constraint_type = 'FOREIGN KEY'\nORDER BY kcu.table_schema, kcu.table_name, kcu.constraint_name, kcu.ordinal_position":
+          "SELECT quote_ident(pkn.nspname) AS table_schema,\n       quote_ident(pkc.relname) AS table_name,\n       quote_ident(r.conname) AS constraint_name,\n       quote_ident(fkn.nspname) AS referenced_table_schema,\n       quote_ident(fkc.relname) AS referenced_table_name,\n       r.confupdtype AS update_rule,\n       r.confdeltype AS delete_rule,\n       r.condeferrable AS is_deferrable,\n       r.condeferred AS initially_deferred,\n       quote_ident(pka.attname) AS column_name,\n       quote_ident(fka.attname) AS referenced_column_name\nFROM pg_constraint r\nJOIN pg_class fkc\n  ON fkc.oid = r.confrelid\nJOIN pg_namespace fkn\n  ON fkn.oid = fkc.relnamespace\nJOIN unnest(r.confkey) WITH ORDINALITY AS fk_attnum(attnum, ord)\n  ON TRUE\nJOIN pg_attribute fka\n  ON fka.attrelid = fkc.oid\n AND fka.attnum = fk_attnum.attnum\nJOIN pg_class pkc\n  ON pkc.oid = r.conrelid\nJOIN pg_namespace pkn\n  ON pkn.oid = pkc.relnamespace\nJOIN unnest(r.conkey) WITH ORDINALITY AS pk_attnum(attnum, ord)\n  ON pk_attnum.ord = fk_attnum.ord\nJOIN pg_attribute pka\n  ON pka.attrelid = pkc.oid\n AND pka.attnum = pk_attnum.attnum\nWHERE r.contype = 'f'\n  AND pkn.nspname NOT LIKE 'pg\\\\_%'\n  AND pkn.nspname != 'information_schema'\nORDER BY pkn.nspname, pkc.relname, r.conname, fk_attnum.ord":
             [
               {
                 table_schema: "public",
                 table_name: "users",
                 constraint_name: "fk_users_roles",
-                ordinal_position: 1,
                 column_name: "role_id",
                 referenced_table_schema: "public",
                 referenced_table_name: "roles",
                 referenced_column_name: "id",
-                match_option: "SIMPLE",
-                update_rule: "NO ACTION",
-                delete_rule: "CASCADE",
+                update_rule: "a",
+                delete_rule: "c",
                 is_deferrable: true,
                 initially_deferred: false,
               },

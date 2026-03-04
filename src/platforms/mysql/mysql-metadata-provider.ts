@@ -130,22 +130,23 @@ ORDER BY TABLE_NAME`;
   }
 
   private async fetchTableColumns(tableName: string | null): Promise<TableColumnMetadataRow[]> {
-    const sql = `SELECT TABLE_NAME,
-       COLUMN_NAME,
-       DATA_TYPE,
-       COLUMN_TYPE,
-       IS_NULLABLE,
-       COLUMN_DEFAULT,
-       CHARACTER_MAXIMUM_LENGTH,
-       NUMERIC_PRECISION,
-       NUMERIC_SCALE,
-       EXTRA,
-       COLUMN_COMMENT,
-       CHARACTER_SET_NAME,
-       COLLATION_NAME
-FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = ?${tableName === null ? "" : "\n  AND TABLE_NAME = ?"}
-ORDER BY TABLE_NAME, ORDINAL_POSITION`;
+    const dataTypeSql = this._platform.getColumnTypeSQLSnippet("c", this.databaseName);
+    const sql = `SELECT c.TABLE_NAME,
+       c.COLUMN_NAME,
+       ${dataTypeSql} AS DATA_TYPE,
+       c.COLUMN_TYPE,
+       c.IS_NULLABLE,
+       c.COLUMN_DEFAULT,
+       c.CHARACTER_MAXIMUM_LENGTH,
+       c.NUMERIC_PRECISION,
+       c.NUMERIC_SCALE,
+       c.EXTRA,
+       c.COLUMN_COMMENT,
+       c.CHARACTER_SET_NAME,
+       c.COLLATION_NAME
+FROM information_schema.COLUMNS c
+WHERE c.TABLE_SCHEMA = ?${tableName === null ? "" : "\n  AND c.TABLE_NAME = ?"}
+ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION`;
     const params = tableName === null ? [this.databaseName] : [this.databaseName, tableName];
     const rows = await this.connection.fetchAllAssociative(sql, params);
 
@@ -238,19 +239,24 @@ ORDER BY kcu.TABLE_NAME, kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION`;
 
     return rows.map((row) => {
       const fkName = pickString(row, "CONSTRAINT_NAME", "constraint_name");
+      const rowId =
+        fkName ??
+        pickNumber(row, "ORDINAL_POSITION", "ordinal_position") ??
+        pickString(row, "TABLE_NAME", "table_name") ??
+        "";
 
       return new ForeignKeyConstraintColumnMetadataRow(
         null,
         pickString(row, "TABLE_NAME", "table_name") ?? "",
-        pickNumber(row, "ORDINAL_POSITION", "ordinal_position"),
+        rowId,
         fkName,
-        pickString(row, "REFERENCED_TABLE_SCHEMA", "referenced_table_schema"),
+        null,
         pickString(row, "REFERENCED_TABLE_NAME", "referenced_table_name") ?? "",
         mapMatchType(pickString(row, "MATCH_OPTION", "match_option")),
         mapReferentialAction(pickString(row, "UPDATE_RULE", "update_rule")),
         mapReferentialAction(pickString(row, "DELETE_RULE", "delete_rule")),
-        false,
-        false,
+        null,
+        null,
         pickString(row, "COLUMN_NAME", "column_name") ?? "",
         pickString(row, "REFERENCED_COLUMN_NAME", "referenced_column_name") ?? "",
       );

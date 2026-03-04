@@ -29,7 +29,7 @@ export class Index extends AbstractAsset {
     this.primary = isPrimary;
 
     for (const column of columns) {
-      this.columns.push(new Identifier(column));
+      this._addColumn(column);
     }
 
     for (const flag of flags) {
@@ -260,7 +260,15 @@ export class Index extends AbstractAsset {
   }
 
   protected _addColumn(column: string): void {
-    this.columns.push(new Identifier(column));
+    const existingIndex = this.columns.findIndex((existing) => existing.getName() === column);
+    const identifier = new Identifier(column);
+
+    if (existingIndex === -1) {
+      this.columns.push(identifier);
+      return;
+    }
+
+    this.columns[existingIndex] = identifier;
   }
 
   private readOption(name: string): unknown {

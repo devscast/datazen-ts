@@ -240,11 +240,15 @@ async function createMySQL2DriverManagerParams(
 ): Promise<ConnectionParams> {
   const mysql2 = await importOptional("mysql2/promise", target);
   const mysqlModule = mysql2.default ?? mysql2;
+  const charset = readEnv(target.platform, "CHARSET", "utf8mb4", role);
+  const collation = readEnv(target.platform, "COLLATION", "utf8mb4_general_ci", role);
 
   const config = {
-    bigNumberStrings: true,
+    bigNumberStrings: false,
+    charset,
     database: readEnv(target.platform, "DATABASE", "datazen", role),
     host: readEnv(target.platform, "HOST", "127.0.0.1", role),
+    jsonStrings: true,
     password: readEnv(
       target.platform,
       "PASSWORD",
@@ -264,6 +268,8 @@ async function createMySQL2DriverManagerParams(
     const connection = await mysqlModule.createConnection(config);
 
     return {
+      charset,
+      collation,
       database: config.database,
       dbname: config.database,
       host: config.host,
@@ -284,6 +290,8 @@ async function createMySQL2DriverManagerParams(
   const pool = mysqlModule.createPool(config);
 
   return {
+    charset,
+    collation,
     database: config.database,
     dbname: config.database,
     host: config.host,

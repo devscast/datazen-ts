@@ -62,7 +62,7 @@ export class ForeignKeyConstraint extends AbstractAsset {
 
   public getColumns(): string[] {
     return validateForeignKeyColumnNames(
-      this.localColumns.map((column) => column.getName()),
+      this.localColumns.map((column) => formatIdentifierName(column)),
       () => InvalidState.foreignKeyConstraintHasInvalidReferencingColumnNames(this.getName()),
     );
   }
@@ -81,7 +81,7 @@ export class ForeignKeyConstraint extends AbstractAsset {
 
   public getForeignColumns(): string[] {
     return validateForeignKeyColumnNames(
-      this.foreignColumns.map((column) => column.getName()),
+      this.foreignColumns.map((column) => formatIdentifierName(column)),
       () => InvalidState.foreignKeyConstraintHasInvalidReferencedColumnNames(this.getName()),
     );
   }
@@ -154,7 +154,8 @@ export class ForeignKeyConstraint extends AbstractAsset {
   }
 
   public hasOption(name: string): boolean {
-    return Object.hasOwn(this.options, name);
+    const value = this.options[name];
+    return value !== undefined && value !== null;
   }
 
   public getOption(name: string): unknown {
@@ -209,8 +210,8 @@ function normalizeReferentialActionString(value: unknown): string | null {
   }
 
   const normalized = value.toUpperCase();
-  if (normalized === ReferentialAction.RESTRICT) {
-    return ReferentialAction.NO_ACTION;
+  if (normalized === ReferentialAction.NO_ACTION || normalized === ReferentialAction.RESTRICT) {
+    return null;
   }
 
   return normalized;
@@ -275,4 +276,13 @@ function validateForeignKeyColumnNames(
   }
 
   return names;
+}
+
+function formatIdentifierName(identifier: Identifier): string {
+  const name = identifier.getName();
+  if (!identifier.isQuoted()) {
+    return name;
+  }
+
+  return `"${name.replaceAll('"', '""')}"`;
 }

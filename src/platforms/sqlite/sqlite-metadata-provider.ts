@@ -7,6 +7,8 @@ import { PrimaryKeyConstraintColumnRow } from "../../schema/metadata/primary-key
 import { TableColumnMetadataRow } from "../../schema/metadata/table-column-metadata-row";
 import { TableMetadataRow } from "../../schema/metadata/table-metadata-row";
 import { ViewMetadataRow } from "../../schema/metadata/view-metadata-row";
+import { Type } from "../../types/type";
+import { Types } from "../../types/types";
 import {
   createColumnFromMetadataRow,
   mapMatchType,
@@ -64,22 +66,35 @@ WHERE type = 'table'
   ): Promise<TableColumnMetadataRow[]> {
     const sql = `PRAGMA table_info('${escapeSqliteIdentifier(tableName)}')`;
     const rows = await this.connection.fetchAllAssociative<Record<string, unknown>>(sql);
+    const tableSql = await this.getCreateTableSQL(tableName);
+    const primaryKeyRows = rows.filter((row) => (pickNumber(row, "pk") ?? 0) > 0);
+    const hasSingleIntegerPrimaryKey =
+      primaryKeyRows.length === 1 &&
+      (pickString(primaryKeyRows[0] ?? {}, "type")
+        ?.toLowerCase()
+        .includes("int") ??
+        false);
 
-    return rows.map(
-      (row) =>
-        new TableColumnMetadataRow(
-          null,
-          tableName,
-          createColumnFromMetadataRow(this._platform, {
-            ...row,
-            column_name: pickString(row, "name"),
-            data_type: pickString(row, "type"),
-            length: parseSqliteTypeLength(pickString(row, "type")),
-            precision: parseSqliteTypePrecision(pickString(row, "type")),
-            scale: parseSqliteTypeScale(pickString(row, "type")),
-          }),
-        ),
-    );
+    return rows.map((row) => {
+      const columnName = pickString(row, "name");
+      const column = createColumnFromMetadataRow(this._platform, {
+        ...row,
+        collation: this.parseColumnCollationFromSQL(columnName ?? "", tableSql),
+        column_name: columnName,
+        data_type: pickString(row, "type"),
+        is_identity:
+          hasSingleIntegerPrimaryKey && (pickNumber(row, "pk") ?? 0) > 0 ? true : undefined,
+        length: parseSqliteTypeLength(pickString(row, "type")),
+        precision: parseSqliteTypePrecision(pickString(row, "type")),
+        scale: parseSqliteTypeScale(pickString(row, "type")),
+      });
+
+      if (this.isStringLikeColumn(column) && column.getCollation() === null) {
+        column.setPlatformOption("collation", "BINARY");
+      }
+
+      return new TableColumnMetadataRow(null, tableName, column);
+    });
   }
 
   public async getIndexColumnsForAllTables(): Promise<IndexColumnMetadataRow[]> {
@@ -238,10 +253,66 @@ ORDER BY name`;
   public async getAllSequences(): Promise<never[]> {
     throw NotSupported.new("SQLiteMetadataProvider.getAllSequences");
   }
+
+  private async getCreateTableSQL(tableName: string): Promise<string> {
+    const sql = await this.connection.fetchOne<string>(
+      `SELECT sql
+FROM (
+  SELECT *
+  FROM sqlite_master
+  UNION ALL
+  SELECT *
+  FROM sqlite_temp_master
+)
+WHERE type = 'table'
+  AND name = ?`,
+      [tableName],
+    );
+
+    return sql === false ? "" : String(sql);
+  }
+
+  private parseColumnCollationFromSQL(columnName: string, tableSql: string): string | null {
+    if (columnName.length === 0 || tableSql.length === 0) {
+      return null;
+    }
+
+    const pattern = new RegExp(
+      `${this.buildIdentifierPattern(columnName)}[^,(]+(?:\\([^()]+\\)[^,]*)?(?:(?:DEFAULT|CHECK)\\s*(?:\\(.*?\\))?[^,]*)*COLLATE\\s+["']?([^\\s,"')]+)`,
+      "is",
+    );
+    const match = pattern.exec(tableSql);
+    const collation = match?.[1];
+
+    return typeof collation === "string" && collation.length > 0 ? collation : null;
+  }
+
+  private buildIdentifierPattern(identifier: string): string {
+    const unquoted = escapeRegex(identifier);
+    const quoted = escapeRegex(this._platform.quoteSingleIdentifier(identifier));
+
+    return `(?:\\W${unquoted}\\W|\\W${quoted}\\W)`;
+  }
+
+  private isStringLikeColumn(column: ReturnType<typeof createColumnFromMetadataRow>): boolean {
+    let typeName: string | null = null;
+
+    try {
+      typeName = Type.lookupName(column.getType());
+    } catch {
+      return false;
+    }
+
+    return typeName === Types.STRING || typeName === Types.TEXT;
+  }
 }
 
 function escapeSqliteIdentifier(identifier: string): string {
   return identifier.replaceAll("'", "''");
+}
+
+function escapeRegex(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function parseSqliteTypeLength(type: string | null): number | null {

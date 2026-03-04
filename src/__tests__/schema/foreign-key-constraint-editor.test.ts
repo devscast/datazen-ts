@@ -73,7 +73,7 @@ describe("Schema/ForeignKeyConstraintEditor (Doctrine parity, supported scenario
       .setQuotedReferencedColumnNames("unused1", "unused2")
       .create();
 
-    expect(constraint.getReferencingColumnNames()).toEqual(["account_id", "user_id"]);
+    expect(constraint.getReferencingColumnNames()).toEqual(['"account_id"', '"user_id"']);
   });
 
   it("sets an unquoted referenced table name", () => {
@@ -117,7 +117,7 @@ describe("Schema/ForeignKeyConstraintEditor (Doctrine parity, supported scenario
       .setQuotedReferencedColumnNames("account_id", "id")
       .create();
 
-    expect(constraint.getReferencedColumnNames()).toEqual(["account_id", "id"]);
+    expect(constraint.getReferencedColumnNames()).toEqual(['"account_id"', '"id"']);
   });
 
   it("sets match type", () => {

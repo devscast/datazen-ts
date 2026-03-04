@@ -329,8 +329,9 @@ export class Table extends AbstractAsset {
   }
 
   public addForeignKeyObject(foreignKey: ForeignKeyConstraint): void {
-    const key = getAssetKey(foreignKey.getName());
+    const key = this.getForeignKeyStorageKey(foreignKey);
     this.foreignKeys[key] = foreignKey;
+    this.addImplicitForeignKeyIndex(foreignKey);
   }
 
   public hasForeignKey(name: string): boolean {
@@ -562,6 +563,22 @@ export class Table extends AbstractAsset {
     return this;
   }
 
+  private getForeignKeyStorageKey(foreignKey: ForeignKeyConstraint): string {
+    const normalizedName = getAssetKey(foreignKey.getName());
+    if (normalizedName.length > 0) {
+      return normalizedName;
+    }
+
+    let index = Object.keys(this.foreignKeys).length;
+    let candidate = `__unnamed_fk_${index}`;
+    while (Object.hasOwn(this.foreignKeys, candidate)) {
+      index += 1;
+      candidate = `__unnamed_fk_${index}`;
+    }
+
+    return candidate;
+  }
+
   private renameColumnInIndexes(oldName: string, newName: string): void {
     for (const [key, index] of Object.entries(this.indexes)) {
       const originalColumns = index.getColumns();
@@ -629,6 +646,24 @@ export class Table extends AbstractAsset {
         .setColumnNames(...columns)
         .create();
     }
+  }
+
+  private addImplicitForeignKeyIndex(foreignKey: ForeignKeyConstraint): void {
+    const localColumns = foreignKey.getLocalColumns();
+    const indexName = this._generateIdentifierName(
+      [this.getName(), ...localColumns],
+      "idx",
+      this._getMaxIdentifierLength(),
+    );
+    const indexCandidate = new Index(indexName, localColumns, false, false);
+
+    for (const existingIndex of this.getIndexes()) {
+      if (indexCandidate.isFulfilledBy(existingIndex)) {
+        return;
+      }
+    }
+
+    this.addIndexObject(indexCandidate);
   }
 }
 

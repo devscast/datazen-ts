@@ -23,7 +23,7 @@ export class Comparator extends BaseComparator {
     private readonly defaultTableOptions: DefaultTableOptions,
     config?: ComparatorConfig,
   ) {
-    super(config);
+    super(mysqlPlatform, config);
   }
 
   public override compareTables(oldTable: Table, newTable: Table): TableDiff | null {

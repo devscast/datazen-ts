@@ -2,6 +2,8 @@ import type { Connection } from "../connection";
 import { ColumnLengthRequired } from "../exception/invalid-column-type/column-length-required";
 import { LockMode } from "../lock-mode";
 import { SQLServerSchemaManager } from "../schema/sql-server-schema-manager";
+import type { SelectSQLBuilder } from "../sql/builder/select-sql-builder";
+import { SQLServerSelectSQLBuilder } from "../sql/builder/sql-server-select-sql-builder";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
@@ -14,6 +16,10 @@ import { TrimMode } from "./trim-mode";
 
 export class SQLServerPlatform extends AbstractPlatform {
   public static readonly OPTION_DEFAULT_CONSTRAINT_NAME = "default_constraint_name";
+
+  public override createSelectSQLBuilder(): SelectSQLBuilder {
+    return new SQLServerSelectSQLBuilder(this);
+  }
 
   protected override _getCreateTableSQL(
     name: string,
@@ -171,6 +177,10 @@ export class SQLServerPlatform extends AbstractPlatform {
 
   public supportsSequences(): boolean {
     return true;
+  }
+
+  public override getDropIndexSQL(name: string, table: string): string {
+    return `DROP INDEX ${name} ON ${table}`;
   }
 
   public override getIntegerTypeDeclarationSQL(column: Record<string, unknown>): string {
@@ -344,13 +354,11 @@ export class SQLServerPlatform extends AbstractPlatform {
       this.readDiffArray(diff, "getDroppedForeignKeys").length > 0;
 
     if (hasAnyOtherDiffs) {
-      sql.push(
-        ...super.getAlterTableSQL({
-          ...(diff as Record<string, unknown>),
-          addedColumns: [],
-          getAddedColumns: () => [],
-        }),
-      );
+      const diffWithoutAddedColumns = Object.create(diff as object) as Record<string, unknown>;
+      diffWithoutAddedColumns.addedColumns = [];
+      diffWithoutAddedColumns.getAddedColumns = () => [];
+
+      sql.push(...super.getAlterTableSQL(diffWithoutAddedColumns));
     }
 
     return [...sql, ...commentsSql];
@@ -714,6 +722,17 @@ export class SQLServerPlatform extends AbstractPlatform {
     }
 
     return `${name} ${declaration}`;
+  }
+
+  public override columnsEqual(column1: unknown, column2: unknown): boolean {
+    if (!super.columnsEqual(column1, column2)) {
+      return false;
+    }
+
+    const left = this.toSqlServerColumnDefinition(column1);
+    const right = this.toSqlServerColumnDefinition(column2);
+
+    return this.getDefaultValueDeclarationSQL(left) === this.getDefaultValueDeclarationSQL(right);
   }
 
   public override getColumnCollationDeclarationSQL(collation: string): string {
