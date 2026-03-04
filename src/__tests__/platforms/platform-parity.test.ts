@@ -227,7 +227,7 @@ describe("Platform parity extensions", () => {
     expect(platform.getDropTemporaryTableSQL("tmp_users")).toBe("DROP TABLE tmp_users");
     expect(platform.getDropIndexSQL("idx_users_email", "users")).toBe("DROP INDEX idx_users_email");
     expect(platform.getDropForeignKeySQL("fk_users_roles", "users")).toBe(
-      "ALTER TABLE users DROP FOREIGN KEY fk_users_roles",
+      "ALTER TABLE users DROP CONSTRAINT fk_users_roles",
     );
     expect(platform.getDropUniqueConstraintSQL("uniq_users_email", "users")).toBe(
       "ALTER TABLE users DROP CONSTRAINT uniq_users_email",
@@ -277,10 +277,10 @@ describe("Platform parity extensions", () => {
 
     const sql = platform.getCreateTablesSQL([users, roles]);
 
-    expect(sql.slice(0, 2)).toEqual([
-      "CREATE TABLE users (id INT, role_id INT, PRIMARY KEY (id))",
-      "CREATE TABLE roles (id INT, PRIMARY KEY (id))",
-    ]);
+    expect(sql[0]).toMatch(
+      /^CREATE TABLE users \(id INT, role_id INT, PRIMARY KEY \(id\), INDEX .+ \(role_id\)\)$/,
+    );
+    expect(sql[1]).toBe("CREATE TABLE roles (id INT, PRIMARY KEY (id))");
     expect(sql[2]).toBe(
       "ALTER TABLE users ADD CONSTRAINT fk_users_roles FOREIGN KEY (role_id) REFERENCES roles (id)",
     );

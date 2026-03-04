@@ -12,6 +12,14 @@ import type { KeywordList } from "./keywords/keyword-list";
 import { MySQLKeywords } from "./keywords/mysql-keywords";
 
 export abstract class AbstractMySQLPlatform extends AbstractPlatform {
+  public static readonly LENGTH_LIMIT_TINYTEXT = 255;
+  public static readonly LENGTH_LIMIT_TEXT = 65535;
+  public static readonly LENGTH_LIMIT_MEDIUMTEXT = 16777215;
+
+  public static readonly LENGTH_LIMIT_TINYBLOB = 255;
+  public static readonly LENGTH_LIMIT_BLOB = 65535;
+  public static readonly LENGTH_LIMIT_MEDIUMBLOB = 16777215;
+
   public override getCreateTableSQL(table: {
     getColumns(): readonly unknown[];
     getName(): string;
@@ -79,6 +87,44 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     }
 
     return `ENUM(${values.map((value) => this.quoteStringLiteral(String(value))).join(", ")})`;
+  }
+
+  public override getClobTypeDeclarationSQL(column: Record<string, unknown>): string {
+    const length = this.readPositiveNumericColumnLength(column);
+    if (length !== null) {
+      if (length <= AbstractMySQLPlatform.LENGTH_LIMIT_TINYTEXT) {
+        return "TINYTEXT";
+      }
+
+      if (length <= AbstractMySQLPlatform.LENGTH_LIMIT_TEXT) {
+        return "TEXT";
+      }
+
+      if (length <= AbstractMySQLPlatform.LENGTH_LIMIT_MEDIUMTEXT) {
+        return "MEDIUMTEXT";
+      }
+    }
+
+    return "LONGTEXT";
+  }
+
+  public override getBlobTypeDeclarationSQL(column: Record<string, unknown>): string {
+    const length = this.readPositiveNumericColumnLength(column);
+    if (length !== null) {
+      if (length <= AbstractMySQLPlatform.LENGTH_LIMIT_TINYBLOB) {
+        return "TINYBLOB";
+      }
+
+      if (length <= AbstractMySQLPlatform.LENGTH_LIMIT_BLOB) {
+        return "BLOB";
+      }
+
+      if (length <= AbstractMySQLPlatform.LENGTH_LIMIT_MEDIUMBLOB) {
+        return "MEDIUMBLOB";
+      }
+    }
+
+    return "LONGBLOB";
   }
 
   public override getSmallIntTypeDeclarationSQL(column: Record<string, unknown>): string {
@@ -184,6 +230,10 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     return true;
   }
 
+  public override getColumnCharsetDeclarationSQL(charset: string): string {
+    return `CHARACTER SET ${charset}`;
+  }
+
   protected createReservedKeywordsList(): KeywordList {
     return new MySQLKeywords();
   }
@@ -198,6 +248,30 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
 
   public override getDropTemporaryTableSQL(table: string): string {
     return `DROP TEMPORARY TABLE ${table}`;
+  }
+
+  public override getDropForeignKeySQL(foreignKey: string, table: string): string {
+    return `ALTER TABLE ${table} DROP FOREIGN KEY ${foreignKey}`;
+  }
+
+  public override getJsonTypeDeclarationSQL(_column: Record<string, unknown>): string {
+    return "JSON";
+  }
+
+  public getColumnTypeSQLSnippet(tableAlias: string, _databaseName: string): string {
+    return `${tableAlias}.DATA_TYPE`;
+  }
+
+  protected override getCreateIndexSQLFlags(index: unknown): string {
+    if (hasIndexFlag(index, "fulltext")) {
+      return "FULLTEXT ";
+    }
+
+    if (hasIndexFlag(index, "spatial")) {
+      return "SPATIAL ";
+    }
+
+    return super.getCreateIndexSQLFlags(index);
   }
 
   public override getAlterTableSQL(diff: unknown): string[] {
@@ -215,10 +289,14 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     const addedColumns = this.readTableDiffColumns(tableDiff, "getAddedColumns");
     const droppedColumns = this.readTableDiffColumns(tableDiff, "getDroppedColumns");
     const changedColumns = this.readTableDiffColumnDiffs(tableDiff);
-
-    if (addedColumns.length === 0 && droppedColumns.length === 0 && changedColumns.length === 0) {
-      return super.getAlterTableSQL(diff);
-    }
+    const droppedForeignKeys = this.readTableDiffColumns(tableDiff, "getDroppedForeignKeys");
+    const addedForeignKeys = this.readTableDiffColumns(tableDiff, "getAddedForeignKeys");
+    const modifiedForeignKeys = this.readTableDiffColumns(tableDiff, "getModifiedForeignKeys");
+    const droppedIndexes = [...this.readTableDiffColumns(tableDiff, "getDroppedIndexes")];
+    const addedIndexes = [...this.readTableDiffColumns(tableDiff, "getAddedIndexes")];
+    const modifiedIndexes = [...this.readTableDiffColumns(tableDiff, "getModifiedIndexes")];
+    const renamedIndexes =
+      this.readValue<Record<string, unknown>>(tableDiff, "getRenamedIndexes") ?? {};
 
     const queryParts: string[] = [];
 
@@ -249,15 +327,90 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
       queryParts.push(`CHANGE ${oldColumnName} ${newColumnDeclaration}`);
     }
 
+    const droppedPrimaryIndex = takePrimaryIndex(droppedIndexes, this.isPrimaryIndex.bind(this));
+    const addedPrimaryIndex = takePrimaryIndex(addedIndexes, this.isPrimaryIndex.bind(this));
+    const modifiedPrimaryIndex = takePrimaryIndex(modifiedIndexes, this.isPrimaryIndex.bind(this));
+
+    if (droppedPrimaryIndex !== null || modifiedPrimaryIndex !== null) {
+      queryParts.push("DROP PRIMARY KEY");
+    }
+
+    const primaryIndexToAdd = addedPrimaryIndex ?? modifiedPrimaryIndex;
+    if (primaryIndexToAdd !== null) {
+      const primaryColumns = [...new Set(this.readIndexColumns(primaryIndexToAdd))];
+      if (primaryColumns.length > 0) {
+        queryParts.push(`ADD PRIMARY KEY (${primaryColumns.join(", ")})`);
+      }
+    }
+
     const sql = [...this.getPreAlterTableIndexForeignKeySQL(diff)];
 
     if (queryParts.length > 0) {
       sql.push(`ALTER TABLE ${tableName} ${queryParts.join(", ")}`);
     }
 
-    const nonColumnSql = this.getAlterTableNonColumnSql(diff);
-    if (nonColumnSql.length > 0) {
-      sql.push(...nonColumnSql);
+    const droppedForeignKeyNames = new Set<string>();
+    for (const foreignKey of droppedForeignKeys) {
+      const name =
+        this.readValue<string>(foreignKey, "getQuotedName", this) ??
+        this.readValue<string>(foreignKey, "getName");
+      if (typeof name === "string" && name.length > 0) {
+        sql.push(this.getDropForeignKeySQL(name, tableName));
+        droppedForeignKeyNames.add(name.toLowerCase());
+      }
+    }
+
+    for (const [oldName, renamedIndex] of Object.entries(renamedIndexes)) {
+      if (oldName.toLowerCase() === "primary") {
+        continue;
+      }
+
+      sql.push(this.getDropIndexSQL(oldName, tableName));
+      sql.push(this.getCreateIndexSQL(renamedIndex, tableName));
+    }
+
+    for (const index of droppedIndexes) {
+      const name = this.readIndexName(index);
+      if (name === null || name.toLowerCase() === "primary") {
+        continue;
+      }
+
+      sql.push(this.getDropIndexSQL(name, tableName));
+    }
+
+    for (const index of modifiedIndexes) {
+      const name = this.readIndexName(index);
+      if (name !== null && name.toLowerCase() !== "primary") {
+        sql.push(this.getDropIndexSQL(name, tableName));
+      }
+
+      sql.push(this.getCreateIndexSQL(index, tableName));
+    }
+
+    for (const index of addedIndexes) {
+      sql.push(this.getCreateIndexSQL(index, tableName));
+    }
+
+    for (const foreignKey of modifiedForeignKeys) {
+      const name =
+        this.readValue<string>(foreignKey, "getQuotedName", this) ??
+        this.readValue<string>(foreignKey, "getName");
+      const normalizedName = typeof name === "string" ? name.toLowerCase() : null;
+
+      if (
+        typeof name === "string" &&
+        name.length > 0 &&
+        !droppedForeignKeyNames.has(normalizedName ?? "")
+      ) {
+        sql.push(this.getDropForeignKeySQL(name, tableName));
+        droppedForeignKeyNames.add(normalizedName ?? "");
+      }
+
+      sql.push(this.getCreateForeignKeySQL(foreignKey, tableName));
+    }
+
+    for (const foreignKey of addedForeignKeys) {
+      sql.push(this.getCreateForeignKeySQL(foreignKey, tableName));
     }
 
     sql.push(...this.getPostAlterTableIndexForeignKeySQL(diff));
@@ -270,13 +423,51 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     }
 
     const options = this.readTableOptions(table);
-    const charset = options.charset;
-
-    if (typeof charset === "string" && charset.length > 0) {
-      sql[0] = `${sql[0]} DEFAULT CHARACTER SET ${charset}`;
+    const tableOptions = this.buildMySqlTableOptions(options);
+    if (tableOptions.length > 0) {
+      sql[0] = `${sql[0]} ${tableOptions.join(" ")}`;
     }
 
     return sql;
+  }
+
+  private buildMySqlTableOptions(options: Record<string, unknown>): string[] {
+    if (typeof options.table_options === "string" && options.table_options.length > 0) {
+      return [options.table_options];
+    }
+
+    const tableOptions: string[] = [];
+    if (typeof options.charset === "string" && options.charset.length > 0) {
+      tableOptions.push(`DEFAULT CHARACTER SET ${options.charset}`);
+    }
+
+    if (typeof options.collation === "string" && options.collation.length > 0) {
+      tableOptions.push(this.getColumnCollationDeclarationSQL(options.collation));
+    }
+
+    if (typeof options.engine === "string" && options.engine.length > 0) {
+      tableOptions.push(`ENGINE = ${options.engine}`);
+    }
+
+    const autoIncrement =
+      typeof options.auto_increment === "number"
+        ? options.auto_increment
+        : typeof options.autoincrement === "number"
+          ? options.autoincrement
+          : null;
+    if (autoIncrement !== null && Number.isFinite(autoIncrement)) {
+      tableOptions.push(`AUTO_INCREMENT = ${String(autoIncrement)}`);
+    }
+
+    if (typeof options.comment === "string") {
+      tableOptions.push(`COMMENT = ${this.quoteStringLiteral(options.comment)}`);
+    }
+
+    if (typeof options.row_format === "string" && options.row_format.length > 0) {
+      tableOptions.push(`ROW_FORMAT = ${options.row_format}`);
+    }
+
+    return tableOptions;
   }
 
   private readTableOptions(table: unknown): Record<string, unknown> {
@@ -308,26 +499,6 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     }
 
     return this.getColumnDeclarationSQL(String(definition.name ?? ""), definition);
-  }
-
-  private getAlterTableNonColumnSql(diff: unknown): string[] {
-    return super.getAlterTableSQL({
-      ...(diff as Record<string, unknown>),
-      addedColumns: [],
-      changedColumns: [],
-      droppedColumns: [],
-      getAddedColumns: () => [],
-      getAddedForeignKeys: () => this.readTableDiffColumns(diff, "getAddedForeignKeys"),
-      getAddedIndexes: () => this.readTableDiffColumns(diff, "getAddedIndexes"),
-      getChangedColumns: () => [],
-      getDroppedColumns: () => [],
-      getDroppedForeignKeys: () => this.readTableDiffColumns(diff, "getDroppedForeignKeys"),
-      getDroppedIndexes: () => this.readTableDiffColumns(diff, "getDroppedIndexes"),
-      getModifiedForeignKeys: () => this.readTableDiffColumns(diff, "getModifiedForeignKeys"),
-      getModifiedIndexes: () => this.readTableDiffColumns(diff, "getModifiedIndexes"),
-      getRenamedIndexes: () =>
-        this.readValue<Record<string, unknown>>(diff, "getRenamedIndexes") ?? {},
-    });
   }
 
   private readTableDiffColumns(diff: unknown, methodName: string): unknown[] {
@@ -364,6 +535,30 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
     return typeof name === "string" && name.length > 0 ? this.quoteIdentifier(name) : null;
   }
 
+  private readIndexName(index: unknown): string | null {
+    const quoted = this.readValue<string>(index, "getQuotedName", this);
+    if (typeof quoted === "string" && quoted.length > 0) {
+      return quoted;
+    }
+
+    const name = this.readValue<string>(index, "getName");
+    return typeof name === "string" && name.length > 0 ? name : null;
+  }
+
+  private readIndexColumns(index: unknown): string[] {
+    const quotedColumns = this.readValue<string[]>(index, "getQuotedColumns", this);
+    if (Array.isArray(quotedColumns) && quotedColumns.length > 0) {
+      return quotedColumns;
+    }
+
+    const columns = this.readValue<string[]>(index, "getColumns");
+    return Array.isArray(columns) ? columns : [];
+  }
+
+  private isPrimaryIndex(index: unknown): boolean {
+    return this.readValue<boolean>(index, "isPrimary") === true;
+  }
+
   private readValue<T>(target: unknown, methodName: string, ...args: unknown[]): T | undefined {
     if (target === null || target === undefined || typeof target !== "object") {
       return undefined;
@@ -377,4 +572,47 @@ export abstract class AbstractMySQLPlatform extends AbstractPlatform {
 
     return candidate[methodName] as T | undefined;
   }
+
+  private readPositiveNumericColumnLength(column: Record<string, unknown>): number | null {
+    const rawLength = column.length;
+    if (typeof rawLength === "number" && Number.isFinite(rawLength) && rawLength > 0) {
+      return rawLength;
+    }
+
+    if (typeof rawLength === "string" && rawLength.trim().length > 0) {
+      const parsed = Number(rawLength);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+}
+
+function hasIndexFlag(index: unknown, flag: string): boolean {
+  if (index === null || typeof index !== "object") {
+    return false;
+  }
+
+  const candidate = index as Record<string, unknown>;
+  const hasFlag = candidate.hasFlag;
+  if (typeof hasFlag !== "function") {
+    return false;
+  }
+
+  return hasFlag.call(index, flag) === true;
+}
+
+function takePrimaryIndex(
+  indexes: unknown[],
+  isPrimary: (index: unknown) => boolean,
+): unknown | null {
+  const index = indexes.findIndex((candidate) => isPrimary(candidate));
+  if (index === -1) {
+    return null;
+  }
+
+  const [primaryIndex] = indexes.splice(index, 1);
+  return primaryIndex ?? null;
 }

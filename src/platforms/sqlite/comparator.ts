@@ -40,5 +40,15 @@ function cloneTable(table: Table): Table {
     editor.setPrimaryKeyConstraint(primaryKeyConstraint.edit().create());
   }
 
-  return editor.create();
+  const cloned = editor.create();
+  const renamedColumns = table.getRenamedColumns();
+  const clonedInternals = cloned as unknown as { renamedColumns?: Record<string, string> };
+
+  if (clonedInternals.renamedColumns !== undefined) {
+    for (const [newColumnName, oldColumnName] of Object.entries(renamedColumns)) {
+      clonedInternals.renamedColumns[newColumnName] = oldColumnName;
+    }
+  }
+
+  return cloned;
 }

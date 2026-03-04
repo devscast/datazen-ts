@@ -25,8 +25,16 @@ export class IndexEditor {
     return this.setName(`"${name}"`);
   }
 
-  public setColumns(...columnNames: string[]): this {
-    this.columns = [...columnNames];
+  public setColumns(...columns: Array<IndexedColumn | string>): this {
+    this.columns = [];
+    const options = { ...this.options };
+    delete options.lengths;
+    this.options = options;
+
+    for (const column of columns) {
+      this.addColumn(column);
+    }
+
     return this;
   }
 

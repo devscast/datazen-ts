@@ -1,5 +1,6 @@
 import type { Connection } from "../connection";
 import { PostgreSQLSchemaManager } from "../schema/postgre-sql-schema-manager";
+import type { Sequence } from "../schema/sequence";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Type } from "../types/type";
 import { Types } from "../types/types";
@@ -10,7 +11,11 @@ import { PostgreSQLKeywords } from "./keywords/postgresql-keywords";
 import { PostgreSQLMetadataProvider } from "./postgresql/postgre-sql-metadata-provider";
 
 export class PostgreSQLPlatform extends AbstractPlatform {
-  protected useBooleanTrueFalseStrings = false;
+  protected useBooleanTrueFalseStrings = true;
+
+  private readonly booleanLiterals = {
+    false: ["f", "false", "n", "no", "off", "0"],
+  };
 
   protected override _getCreateTableSQL(
     name: string,
@@ -53,32 +58,42 @@ export class PostgreSQLPlatform extends AbstractPlatform {
 
   protected initializeDatazenTypeMappings(): Record<string, string> {
     return {
+      _varchar: Types.STRING,
       bigint: Types.BIGINT,
       bigserial: Types.BIGINT,
       bool: Types.BOOLEAN,
       boolean: Types.BOOLEAN,
-      bytea: Types.BINARY,
+      bpchar: Types.STRING,
+      bytea: Types.BLOB,
       char: Types.STRING,
       date: Types.DATE_MUTABLE,
+      decimal: Types.DECIMAL,
       "double precision": Types.FLOAT,
+      float: Types.FLOAT,
       float4: Types.SMALLFLOAT,
       float8: Types.FLOAT,
+      inet: Types.STRING,
       int: Types.INTEGER,
       int2: Types.SMALLINT,
       int4: Types.INTEGER,
       int8: Types.BIGINT,
       integer: Types.INTEGER,
+      interval: Types.STRING,
       json: Types.JSON,
-      jsonb: Types.JSONB,
+      jsonb: Types.JSON,
+      money: Types.DECIMAL,
       numeric: Types.DECIMAL,
       real: Types.SMALLFLOAT,
       serial: Types.INTEGER,
+      serial4: Types.INTEGER,
+      serial8: Types.BIGINT,
       smallint: Types.SMALLINT,
       text: Types.TEXT,
       time: Types.TIME_MUTABLE,
       timestamp: Types.DATETIME_MUTABLE,
       timestamptz: Types.DATETIMETZ_MUTABLE,
-      timetz: Types.DATETIMETZ_MUTABLE,
+      timetz: Types.TIME_MUTABLE,
+      tsvector: Types.TEXT,
       uuid: Types.GUID,
       varchar: Types.STRING,
     };
@@ -123,6 +138,23 @@ export class PostgreSQLPlatform extends AbstractPlatform {
     return `SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL ${this.getTransactionIsolationLevelSQL(level)}`;
   }
 
+  public override getAdvancedForeignKeyOptionsSQL(foreignKey: unknown): string {
+    let query = "";
+    const hasOption = (foreignKey as { hasOption?: (name: string) => boolean }).hasOption;
+    const getOption = (foreignKey as { getOption?: (name: string) => unknown }).getOption;
+
+    if (typeof hasOption === "function" && hasOption.call(foreignKey, "match")) {
+      const matchOption =
+        typeof getOption === "function" ? getOption.call(foreignKey, "match") : null;
+      if (typeof matchOption === "string" && matchOption.length > 0) {
+        query += ` MATCH ${matchOption}`;
+      }
+    }
+
+    query += super.getAdvancedForeignKeyOptionsSQL(foreignKey);
+    return query;
+  }
+
   public supportsSchemas(): boolean {
     return true;
   }
@@ -132,6 +164,14 @@ export class PostgreSQLPlatform extends AbstractPlatform {
   }
 
   public supportsIdentityColumns(): boolean {
+    return true;
+  }
+
+  public override supportsPartialIndexes(): boolean {
+    return true;
+  }
+
+  public override supportsCommentOnStatement(): boolean {
     return true;
   }
 
@@ -161,6 +201,10 @@ export class PostgreSQLPlatform extends AbstractPlatform {
 
   public override getBlobTypeDeclarationSQL(_column: Record<string, unknown>): string {
     return "BYTEA";
+  }
+
+  public override getJsonTypeDeclarationSQL(column: Record<string, unknown>): string {
+    return column.jsonb === true ? "JSONB" : "JSON";
   }
 
   public override getJsonbTypeDeclarationSQL(_column: Record<string, unknown>): string {
@@ -197,6 +241,52 @@ export class PostgreSQLPlatform extends AbstractPlatform {
     }
 
     return super.getDefaultValueDeclarationSQL(column);
+  }
+
+  public override getCreateSequenceSQL(sequence: Sequence): string {
+    return (
+      `CREATE SEQUENCE ${sequence.getQuotedName(this)}` +
+      ` INCREMENT BY ${sequence.getAllocationSize()}` +
+      ` MINVALUE ${sequence.getInitialValue()}` +
+      ` START ${sequence.getInitialValue()}` +
+      this.getSequenceCacheSQL(sequence.getCacheSize())
+    );
+  }
+
+  public override getAlterSequenceSQL(sequence: Sequence): string {
+    return (
+      `ALTER SEQUENCE ${sequence.getQuotedName(this)}` +
+      ` INCREMENT BY ${sequence.getAllocationSize()}` +
+      this.getSequenceCacheSQL(sequence.getCacheSize())
+    );
+  }
+
+  public override getDropSequenceSQL(name: string): string {
+    return `${super.getDropSequenceSQL(name)} CASCADE`;
+  }
+
+  public override getDropForeignKeySQL(foreignKey: string, table: string): string {
+    return this.getDropConstraintSQL(foreignKey, table);
+  }
+
+  public override getDropIndexSQL(name: string, table: string): string {
+    const primaryKeyName = table.endsWith('"') ? `${table.slice(0, -1)}_pkey"` : `${table}_pkey`;
+
+    if (name === '"primary"' || name === primaryKeyName) {
+      return this.getDropConstraintSQL(primaryKeyName, table);
+    }
+
+    let qualifiedIndexName = name;
+    if (table.includes(".")) {
+      const [schema] = table.split(".", 1);
+      qualifiedIndexName = `${schema}.${name}`;
+    }
+
+    return super.getDropIndexSQL(qualifiedIndexName, table);
+  }
+
+  public override getSequenceNextValSQL(sequence: string): string {
+    return `SELECT NEXTVAL('${sequence}')`;
   }
 
   public override getAlterTableSQL(diff: unknown): string[] {
@@ -307,6 +397,39 @@ export class PostgreSQLPlatform extends AbstractPlatform {
     this.useBooleanTrueFalseStrings = flag;
   }
 
+  public override convertBooleans(item: unknown): unknown {
+    if (!this.useBooleanTrueFalseStrings) {
+      return super.convertBooleans(item);
+    }
+
+    return this.doConvertBooleans(item, (value) => {
+      if (value === null) {
+        return "NULL";
+      }
+
+      return value === true ? "true" : "false";
+    });
+  }
+
+  public override convertBooleansToDatabaseValue(item: unknown): unknown {
+    if (!this.useBooleanTrueFalseStrings) {
+      return super.convertBooleansToDatabaseValue(item);
+    }
+
+    return this.doConvertBooleans(item, (value) => (value === null ? null : Number(value)));
+  }
+
+  public override convertFromBoolean(item: unknown): boolean | null {
+    if (
+      typeof item === "string" &&
+      this.booleanLiterals.false.includes(item.toLowerCase().trim())
+    ) {
+      return false;
+    }
+
+    return super.convertFromBoolean(item);
+  }
+
   public getDefaultColumnValueSQLSnippet(): string {
     return [
       "SELECT",
@@ -331,25 +454,51 @@ export class PostgreSQLPlatform extends AbstractPlatform {
 
   private convertSingleBooleanValue(
     value: unknown,
-    callback: (booleanValue: boolean) => unknown,
+    callback: (booleanValue: boolean | null) => unknown,
   ): unknown {
+    if (value === null) {
+      return callback(null);
+    }
+
     if (typeof value === "boolean") {
       return callback(value);
     }
 
-    if (value === 0 || value === 1) {
-      return callback(value === 1);
+    if (typeof value === "number") {
+      return callback(value !== 0);
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (this.booleanLiterals.false.includes(normalized)) {
+        return callback(false);
+      }
+
+      if (["t", "true", "y", "yes", "on", "1"].includes(normalized)) {
+        return callback(true);
+      }
     }
 
     return value;
   }
 
-  private doConvertBooleans(item: unknown, callback: (booleanValue: boolean) => unknown): unknown {
+  private doConvertBooleans(
+    item: unknown,
+    callback: (booleanValue: boolean | null) => unknown,
+  ): unknown {
     if (Array.isArray(item)) {
       return item.map((value) => this.doConvertBooleans(value, callback));
     }
 
     return this.convertSingleBooleanValue(item, callback);
+  }
+
+  private getSequenceCacheSQL(cacheSize: number | null): string {
+    if (typeof cacheSize === "number" && cacheSize > 1) {
+      return ` CACHE ${cacheSize}`;
+    }
+
+    return "";
   }
 
   private getTypeSQLDeclaration(column: unknown): string {
@@ -398,13 +547,21 @@ export class PostgreSQLPlatform extends AbstractPlatform {
 
   private getAlterTableNonColumnSql(diff: unknown): string[] {
     return super.getAlterTableSQL({
-      ...(diff as Record<string, unknown>),
-      addedColumns: [],
-      changedColumns: [],
-      droppedColumns: [],
       getAddedColumns: () => [],
+      getAddedForeignKeys: () => this.readTableDiffList(diff, "getAddedForeignKeys"),
+      getAddedIndexes: () => this.readTableDiffList(diff, "getAddedIndexes"),
       getChangedColumns: () => [],
       getDroppedColumns: () => [],
+      getDroppedForeignKeys: () => this.readTableDiffList(diff, "getDroppedForeignKeys"),
+      getDroppedIndexes: () => this.readTableDiffList(diff, "getDroppedIndexes"),
+      getModifiedForeignKeys: () => this.readTableDiffList(diff, "getModifiedForeignKeys"),
+      getModifiedIndexes: () => this.readTableDiffList(diff, "getModifiedIndexes"),
+      getNewTable: () =>
+        this.readTableDiffValue<unknown>(diff, "getNewTable") ??
+        this.readTableDiffValue<unknown>(diff, "newTable"),
+      getOldTable: () => this.readTableDiffValue<unknown>(diff, "getOldTable"),
+      getRenamedIndexes: () =>
+        this.readTableDiffValue<Record<string, unknown>>(diff, "getRenamedIndexes") ?? {},
     });
   }
 

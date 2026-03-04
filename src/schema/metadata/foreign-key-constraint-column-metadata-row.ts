@@ -14,8 +14,8 @@ export class ForeignKeyConstraintColumnMetadataRow {
     private readonly matchType: MatchType,
     private readonly onUpdateAction: ReferentialAction,
     private readonly onDeleteAction: ReferentialAction,
-    private readonly deferrable: boolean,
-    private readonly deferred: boolean,
+    private readonly deferrable: boolean | null,
+    private readonly deferred: boolean | null,
     private readonly referencingColumnName: string,
     private readonly referencedColumnName: string,
   ) {
@@ -65,11 +65,15 @@ export class ForeignKeyConstraintColumnMetadataRow {
   }
 
   public isDeferrable(): boolean {
-    return this.deferrable;
+    return this.deferrable === true;
   }
 
   public isDeferred(): boolean {
-    return this.deferred;
+    return this.deferred === true;
+  }
+
+  public hasDeferrabilityInfo(): boolean {
+    return this.deferrable !== null || this.deferred !== null;
   }
 
   public getReferencingColumnName(): string {

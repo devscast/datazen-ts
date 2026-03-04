@@ -294,7 +294,7 @@ describe("Schema AbstractComparatorTestCase parity scaffold", () => {
 
     const tableB = new Table("foo");
     tableB.addColumn("ID", Types.INTEGER);
-    tableB.addForeignKeyConstraint("bar", ["ID"], ["id"], {}, "bar_constraint");
+    tableB.addForeignKeyConstraint("bar", ["id"], ["id"], {}, "bar_constraint");
 
     const tableDiff = new Comparator(
       new ComparatorConfig({ detectColumnRenames: true }),

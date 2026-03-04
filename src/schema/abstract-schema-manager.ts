@@ -2,14 +2,11 @@ import type { Connection } from "../connection";
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 import type { Column } from "./column";
 import { Comparator } from "./comparator";
+import { ComparatorConfig } from "./comparator-config";
 import { TableDoesNotExist } from "./exception/table-does-not-exist";
 import type { ForeignKeyConstraint } from "./foreign-key-constraint";
-import type { Index } from "./index";
-import { ForeignKeyConstraintColumnMetadataProcessor } from "./introspection/metadata-processor/foreign-key-constraint-column-metadata-processor";
-import { IndexColumnMetadataProcessor } from "./introspection/metadata-processor/index-column-metadata-processor";
-import { PrimaryKeyConstraintColumnMetadataProcessor } from "./introspection/metadata-processor/primary-key-constraint-column-metadata-processor";
+import { Index } from "./index";
 import { OptionallyQualifiedName } from "./name/optionally-qualified-name";
-import { Parsers } from "./name/parsers";
 import { UnqualifiedName } from "./name/unqualified-name";
 import type { PrimaryKeyConstraint } from "./primary-key-constraint";
 import { Schema } from "./schema";
@@ -49,13 +46,20 @@ export abstract class AbstractSchemaManager {
   }
 
   public async listTableColumns(table: string): Promise<Column[]> {
-    const introspected = await this.introspectTable(table);
-    return introspected.getColumns();
+    const database = this.getDatabase("listTableColumns");
+    return this._getPortableTableColumnList(
+      table,
+      database,
+      await this.fetchTableColumns(database, this.normalizeName(table)),
+    );
   }
 
   public async listTableIndexes(table: string): Promise<Index[]> {
-    const introspected = await this.introspectTable(table);
-    return introspected.getIndexes();
+    const database = this.getDatabase("listTableIndexes");
+    return this._getPortableTableIndexesList(
+      await this.fetchIndexColumns(database, this.normalizeName(table)),
+      this.normalizeName(table),
+    );
   }
 
   public async tablesExist(names: string[]): Promise<boolean> {
@@ -64,25 +68,51 @@ export abstract class AbstractSchemaManager {
   }
 
   public async listTableNames(): Promise<string[]> {
-    const names = await this.connection.fetchFirstColumn<unknown>(this.getListTableNamesSQL());
+    const database = this.getDatabase("listTableNames");
+    const rows = await this.selectTableNames(database);
     const filter = this.connection.getConfiguration().getSchemaAssetsFilter();
 
-    return names
-      .map((value) => normalizeName(value))
-      .filter((value): value is string => value !== null)
+    return rows
+      .map((row) => this._getPortableTableDefinition(row))
+      .filter((value): value is string => value.length > 0)
       .filter((value) => filter(value));
   }
 
   public async listTables(): Promise<Table[]> {
-    const names = await this.listTableNames();
-    return names.map((name) => new Table(name));
+    const database = this.getDatabase("listTables");
+    const tableColumnsByTable = await this.fetchTableColumnsByTable(database);
+    const indexColumnsByTable = await this.fetchIndexColumnsByTable(database);
+    const foreignKeyColumnsByTable = await this.fetchForeignKeyColumnsByTable(database);
+    const tableOptionsByTable = await this.fetchTableOptionsByTable(database);
+    const filter = this.connection.getConfiguration().getSchemaAssetsFilter();
+    const tables: Table[] = [];
+
+    for (const [tableName, tableColumns] of Object.entries(tableColumnsByTable)) {
+      if (!filter(tableName)) {
+        continue;
+      }
+
+      tables.push(
+        new Table(
+          tableName,
+          this._getPortableTableColumnList(tableName, database, tableColumns),
+          this._getPortableTableIndexesList(indexColumnsByTable[tableName] ?? [], tableName),
+          this._getPortableTableForeignKeysList(foreignKeyColumnsByTable[tableName] ?? []),
+          tableOptionsByTable[tableName] ?? {},
+        ),
+      );
+    }
+
+    return tables;
   }
 
   public async tableExists(tableName: string): Promise<boolean> {
     const names = await this.listTableNames();
-    const normalized = tableName.toLowerCase();
+    const normalized = normalizeTableLookupName(tableName, this.platform.supportsSchemas());
 
-    return names.some((name) => name.toLowerCase() === normalized);
+    return names.some(
+      (name) => normalizeTableLookupName(name, this.platform.supportsSchemas()) === normalized,
+    );
   }
 
   public async listViewNames(): Promise<string[]> {
@@ -106,64 +136,26 @@ export abstract class AbstractSchemaManager {
   }
 
   public async introspectTable(name: string): Promise<Table> {
-    if (!(await this.tableExists(name))) {
+    const columns = await this.listTableColumns(name);
+
+    if (columns.length === 0) {
       throw TableDoesNotExist.new(name);
     }
 
-    try {
-      const provider = this.platform.createMetadataProvider(this.connection);
-      const parsedName = Parsers.getOptionallyQualifiedNameParser().parse(name);
-      const schemaName = parsedName.getQualifier()?.getValue() ?? null;
-      const tableName = parsedName.getUnqualifiedName().getValue();
-
-      const columnRows = await provider.getTableColumnsForTable(schemaName, tableName);
-      const [indexRows, primaryKeyRows, foreignKeyRows, optionsRows] = await Promise.all([
-        provider.getIndexColumnsForTable(schemaName, tableName).catch(() => []),
-        provider.getPrimaryKeyConstraintColumnsForTable(schemaName, tableName).catch(() => []),
-        provider.getForeignKeyConstraintColumnsForTable(schemaName, tableName).catch(() => []),
-        provider.getTableOptionsForTable(schemaName, tableName).catch(() => []),
-      ]);
-
-      const editor = Table.editor()
-        .setUnquotedName(tableName, schemaName)
-        .setColumns(...columnRows.map((row) => row.getColumn()));
-
-      const options = optionsRows[0]?.getOptions();
-      if (options !== undefined) {
-        editor.setOptions(options);
-      }
-
-      const primaryKey = buildPrimaryKeyConstraint(primaryKeyRows);
-      if (primaryKey !== null) {
-        editor.setPrimaryKeyConstraint(primaryKey);
-      }
-
-      for (const index of buildIndexes(indexRows)) {
-        editor.addIndex(index);
-      }
-
-      for (const foreignKey of buildForeignKeys(
-        foreignKeyRows,
-        await this.getCurrentSchemaName(),
-      )) {
-        editor.addForeignKeyConstraint(foreignKey);
-      }
-
-      return editor.create();
-    } catch {
-      return new Table(name);
-    }
+    return new Table(
+      name,
+      columns,
+      await this.listTableIndexes(name),
+      await this.listTableForeignKeys(name),
+      await this.getTableOptions(name),
+    );
   }
 
   public async listTableForeignKeys(table: string): Promise<ForeignKeyConstraint[]> {
-    try {
-      const databaseName = this.getDatabase("listTableForeignKeys");
-      const rows = await this.fetchForeignKeyColumns(databaseName, table);
-      return this._getPortableTableForeignKeysList(rows);
-    } catch {
-      const introspected = await this.introspectTable(table);
-      return introspected.getForeignKeys();
-    }
+    const database = this.getDatabase("listTableForeignKeys");
+    return this._getPortableTableForeignKeysList(
+      await this.fetchForeignKeyColumns(database, this.normalizeName(table)),
+    );
   }
 
   public async introspectDatabaseNames(): Promise<UnqualifiedName[]> {
@@ -235,8 +227,16 @@ export abstract class AbstractSchemaManager {
   public async introspectTablePrimaryKeyConstraint(
     tableName: OptionallyQualifiedName,
   ): Promise<PrimaryKeyConstraint | null> {
-    const table = await this.introspectTable(tableName.toString());
-    return table.getPrimaryKeyConstraint();
+    try {
+      const table = await this.introspectTable(tableName.toString());
+      return table.getPrimaryKeyConstraint();
+    } catch (error) {
+      if (error instanceof TableDoesNotExist) {
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   public async introspectTableForeignKeyConstraints(
@@ -377,8 +377,8 @@ export abstract class AbstractSchemaManager {
     return new SchemaConfig();
   }
 
-  public createComparator(): Comparator {
-    return new Comparator(this.platform);
+  public createComparator(config: ComparatorConfig = new ComparatorConfig()): Comparator {
+    return new Comparator(this.platform, config);
   }
 
   public getConnection(): Connection {
@@ -402,7 +402,12 @@ export abstract class AbstractSchemaManager {
   }
 
   protected normalizeName(name: string): string {
-    return normalizeName(name) ?? name;
+    const normalized = normalizeName(name) ?? name;
+    if (!normalized.includes(".")) {
+      return stripPossiblyQuotedIdentifier(normalized);
+    }
+
+    return normalized;
   }
 
   protected async selectTableNames(_databaseName: string): Promise<Record<string, unknown>[]> {
@@ -509,10 +514,64 @@ export abstract class AbstractSchemaManager {
   }
 
   protected _getPortableTableIndexesList(
-    _rows: Record<string, unknown>[],
+    rows: Record<string, unknown>[],
     _tableName: string,
   ): Index[] {
-    return [];
+    const result = new Map<
+      string,
+      {
+        name: string;
+        columns: string[];
+        unique: boolean;
+        primary: boolean;
+        flags: string[];
+        options: { lengths: Array<number | null>; where?: string };
+      }
+    >();
+
+    for (const row of rows) {
+      const indexName =
+        pickString(row, "key_name", "KEY_NAME", "index_name", "INDEX_NAME", "name") ?? "";
+      if (indexName.length === 0) {
+        continue;
+      }
+
+      const isPrimary = pickBoolean(row, "primary", "PRIMARY", "is_primary", "IS_PRIMARY");
+      const keyName = (isPrimary ? "primary" : indexName).toLowerCase();
+
+      let data = result.get(keyName);
+      if (data === undefined) {
+        const nonUnique = pickBoolean(row, "non_unique", "NON_UNIQUE", "is_unique", "IS_UNIQUE");
+        const unique = nonUnique === null ? false : !nonUnique;
+        const primary = isPrimary === true;
+        const flags = normalizeIndexFlags(row.flags);
+        const where = pickString(row, "where", "WHERE", "predicate", "PREDICATE");
+
+        data = {
+          columns: [],
+          flags,
+          name: indexName,
+          options: where === null ? { lengths: [] } : { lengths: [], where },
+          primary,
+          unique: primary ? true : unique,
+        };
+        result.set(keyName, data);
+      }
+
+      const columnName = pickString(row, "column_name", "COLUMN_NAME", "attname", "ATTNAME");
+      if (columnName !== null) {
+        data.columns.push(columnName);
+      }
+
+      data.options.lengths.push(
+        pickNumber(row, "length", "LENGTH", "sub_part", "SUB_PART", "column_length"),
+      );
+    }
+
+    return [...result.values()].map(
+      (data) =>
+        new Index(data.name, data.columns, data.unique, data.primary, data.flags, data.options),
+    );
   }
 
   protected _getPortableTableDefinition(table: Record<string, unknown>): string {
@@ -524,9 +583,9 @@ export abstract class AbstractSchemaManager {
   }
 
   protected _getPortableTableForeignKeysList(
-    _rows: Record<string, unknown>[],
+    rows: Record<string, unknown>[],
   ): ForeignKeyConstraint[] {
-    return [];
+    return rows.map((row) => this._getPortableTableForeignKeyDefinition(row));
   }
 
   protected _getPortableTableForeignKeyDefinition(
@@ -587,90 +646,81 @@ export abstract class AbstractSchemaManager {
     const grouped: Record<string, Record<string, unknown>[]> = {};
 
     for (const row of rows) {
-      const tableName =
-        pickString(row, "table_name") ??
-        pickString(row, "TABLE_NAME") ??
-        pickString(row, "table") ??
-        pickString(row, "TABLE") ??
-        "";
+      const key = this._getPortableTableDefinition(row);
+      if (key.length === 0) {
+        continue;
+      }
 
-      const key = this.normalizeName(tableName);
       grouped[key] ??= [];
       grouped[key].push(row);
     }
 
     return grouped;
   }
+
+  private async getTableOptions(name: string): Promise<Record<string, unknown>> {
+    const normalizedName = this.normalizeName(name);
+    const optionsByTable = await this.fetchTableOptionsByTable(
+      this.getDatabase("getTableOptions"),
+      normalizedName,
+    );
+
+    return optionsByTable[normalizedName] ?? {};
+  }
 }
 
-function buildIndexes(
-  rows: Array<import("./metadata/index-column-metadata-row").IndexColumnMetadataRow>,
-): Index[] {
-  if (rows.length === 0) {
-    return [];
+function normalizeTableLookupName(name: string, supportsSchemas: boolean): string {
+  const trimmed = name.trim();
+  if (supportsSchemas) {
+    return trimmed.toLowerCase();
   }
 
-  const processor = new IndexColumnMetadataProcessor();
-  const editors = new Map<string, ReturnType<IndexColumnMetadataProcessor["initializeEditor"]>>();
+  return stripPossiblyQuotedIdentifier(trimmed).toLowerCase();
+}
 
-  for (const row of rows) {
-    const key = row.getIndexName().toLowerCase();
-    let editor = editors.get(key);
-    if (editor === undefined) {
-      editor = processor.initializeEditor(row);
-      editors.set(key, editor);
+function stripPossiblyQuotedIdentifier(identifier: string): string {
+  const trimmed = identifier.trim();
+  if (trimmed.length <= 1) {
+    return trimmed;
+  }
+
+  const pairs: Array<[string, string]> = [
+    ['"', '"'],
+    ["`", "`"],
+    ["[", "]"],
+  ];
+
+  for (const [start, end] of pairs) {
+    if (trimmed.startsWith(start) && trimmed.endsWith(end)) {
+      return unescapeWrappedIdentifier(trimmed.slice(1, -1), start, end);
     }
-
-    processor.applyRow(editor, row);
   }
 
-  return [...editors.values()].map((editor) => editor.create());
+  if (trimmed.startsWith('"') || trimmed.startsWith("`") || trimmed.startsWith("[")) {
+    return trimmed.slice(1);
+  }
+
+  if (trimmed.endsWith('"') || trimmed.endsWith("`") || trimmed.endsWith("]")) {
+    return trimmed.slice(0, -1);
+  }
+
+  return trimmed;
 }
 
-function buildPrimaryKeyConstraint(
-  rows: Array<import("./metadata/primary-key-constraint-column-row").PrimaryKeyConstraintColumnRow>,
-): PrimaryKeyConstraint | null {
-  if (rows.length === 0) {
-    return null;
+function unescapeWrappedIdentifier(identifier: string, start: string, end: string): string {
+  if (start === '"' && end === '"') {
+    return identifier.replaceAll('""', '"');
   }
 
-  const processor = new PrimaryKeyConstraintColumnMetadataProcessor();
-  const editor = processor.initializeEditor(rows[0]!);
-  for (const row of rows) {
-    processor.applyRow(editor, row);
+  if (start === "`" && end === "`") {
+    return identifier.replaceAll("``", "`");
   }
 
-  return editor.create();
-}
-
-function buildForeignKeys(
-  rows: Array<
-    import("./metadata/foreign-key-constraint-column-metadata-row").ForeignKeyConstraintColumnMetadataRow
-  >,
-  currentSchemaName: string | null,
-): ForeignKeyConstraint[] {
-  if (rows.length === 0) {
-    return [];
+  if (start === "[" && end === "]") {
+    return identifier.replaceAll("]]", "]");
   }
 
-  const processor = new ForeignKeyConstraintColumnMetadataProcessor(currentSchemaName);
-  const editors = new Map<
-    string,
-    ReturnType<ForeignKeyConstraintColumnMetadataProcessor["initializeEditor"]>
-  >();
-
-  for (const row of rows) {
-    const key = String(row.getId());
-    let editor = editors.get(key);
-    if (editor === undefined) {
-      editor = processor.initializeEditor(row);
-      editors.set(key, editor);
-    }
-
-    processor.applyRow(editor, row);
-  }
-
-  return [...editors.values()].map((editor) => editor.create());
+  return identifier;
 }
 
 function normalizeName(value: unknown): string | null {
@@ -707,6 +757,70 @@ function firstStringValue(row: Record<string, unknown>): string | null {
   return null;
 }
 
-function pickString(row: Record<string, unknown>, key: string): string | null {
-  return normalizeName(row[key]);
+function pickString(row: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = normalizeName(row[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function pickNumber(row: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+function pickBoolean(row: Record<string, unknown>, ...keys: string[]): boolean | null {
+  for (const key of keys) {
+    const value = row[key];
+
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (["1", "true", "yes", "y", "t"].includes(normalized)) {
+        return true;
+      }
+
+      if (["0", "false", "no", "n", "f"].includes(normalized)) {
+        return false;
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizeIndexFlags(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((flag) => String(flag));
+  }
+
+  if (typeof value === "string" && value.length > 0) {
+    return [value];
+  }
+
+  return [];
 }

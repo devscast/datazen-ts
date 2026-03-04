@@ -29,6 +29,7 @@ const vitestArgs = [
   "x",
   "vitest",
   "run",
+  "--fileParallelism=false",
   "src/__tests__/functional",
   "--exclude",
   "src/__tests__/functional/_helpers/**/*.test.ts",

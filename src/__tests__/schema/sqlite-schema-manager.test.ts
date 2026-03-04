@@ -8,13 +8,12 @@ import { SQLiteSchemaManager } from "../../schema/sqlite-schema-manager";
 class CapturingSQLiteSchemaManager extends SQLiteSchemaManager {
   public static passedDatabaseName = "";
 
-  protected override async selectForeignKeyColumns(
+  protected override async fetchForeignKeyColumns(
     databaseName: string,
-    tableName: string | null = null,
+    _tableName: string | null = null,
   ): Promise<Record<string, unknown>[]> {
     CapturingSQLiteSchemaManager.passedDatabaseName = databaseName;
-
-    return super.selectForeignKeyColumns(databaseName, tableName);
+    return [];
   }
 }
 

@@ -128,7 +128,12 @@ export function createColumnFromMetadataRow(
     "coltype",
     "COLTYPE",
   );
-  const dbType = normalizeDbType(rawDbType);
+  const domainType = pickString(row, "domain_type", "DOMAIN_TYPE");
+  let dbType = normalizeDbType(rawDbType);
+  if (domainType !== null && dbType.length > 0 && !platform.hasDatazenTypeMappingFor(dbType)) {
+    dbType = normalizeDbType(domainType);
+  }
+
   const typeName = resolveTypeName(platform, dbType);
 
   const nullable = readNullable(row);
@@ -153,7 +158,12 @@ export function createColumnFromMetadataRow(
   );
   const charset = pickString(row, "character_set_name", "CHARACTER_SET_NAME", "charset");
   const collation = pickString(row, "collation_name", "COLLATION_NAME", "collation");
-  const defaultValue = pickDefaultValue(platform, row);
+  const defaultConstraintName = pickString(
+    row,
+    "default_constraint_name",
+    "DEFAULT_CONSTRAINT_NAME",
+  );
+  const defaultValue = normalizeColumnDefaultForType(typeName, pickDefaultValue(platform, row));
 
   const options: Record<string, unknown> = {
     notnull: nullable === null ? true : !nullable,
@@ -200,6 +210,10 @@ export function createColumnFromMetadataRow(
 
   const column = new Column(columnName, typeName, options);
 
+  if (typeName === Types.JSON && dbType === "jsonb") {
+    column.setPlatformOption("jsonb", true);
+  }
+
   if (charset !== null) {
     column.setPlatformOption("charset", charset);
   }
@@ -208,7 +222,40 @@ export function createColumnFromMetadataRow(
     column.setPlatformOption("collation", collation);
   }
 
+  if (defaultConstraintName !== null) {
+    column.setPlatformOption("default_constraint_name", defaultConstraintName);
+  }
+
   return column;
+}
+
+function normalizeColumnDefaultForType(typeName: string, value: unknown): unknown {
+  if (value === undefined || value === null || typeof value !== "string") {
+    return value;
+  }
+
+  if (
+    (typeName === Types.INTEGER || typeName === Types.SMALLINT || typeName === Types.BIGINT) &&
+    /^-?\d+$/.test(value)
+  ) {
+    const parsed = Number(value);
+    if (Number.isSafeInteger(parsed)) {
+      return parsed;
+    }
+  }
+
+  if (typeName === Types.BOOLEAN) {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "1" || normalized === "true") {
+      return true;
+    }
+
+    if (normalized === "0" || normalized === "false") {
+      return false;
+    }
+  }
+
+  return value;
 }
 
 export function buildTableOptions(row: Record<string, unknown>): Record<string, unknown> {
@@ -741,10 +788,10 @@ function asBoolean(value: unknown): boolean | null {
 
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
-    if (["1", "true", "yes", "y"].includes(normalized)) {
+    if (["1", "true", "yes", "y", "t"].includes(normalized)) {
       return true;
     }
-    if (["0", "false", "no", "n"].includes(normalized)) {
+    if (["0", "false", "no", "n", "f"].includes(normalized)) {
       return false;
     }
   }

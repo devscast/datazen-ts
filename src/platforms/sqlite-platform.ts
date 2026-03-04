@@ -159,6 +159,10 @@ export class SQLitePlatform extends AbstractPlatform {
     return true;
   }
 
+  public override supportsColumnCollation(): boolean {
+    return true;
+  }
+
   public override getCreateTableSQL(table: {
     getColumns(): readonly unknown[];
     getName(): string;
@@ -168,6 +172,11 @@ export class SQLitePlatform extends AbstractPlatform {
 
   protected override getCreateTableWithoutForeignKeysSQL(table: unknown): string[] {
     return this.buildSQLiteCreateTableSQL(table, false);
+  }
+
+  public override getUnionSelectPartSQL(subQuery: string): string {
+    // Datazen parity: SQLite doesn't support wrapping each UNION sub-query in parentheses.
+    return subQuery;
   }
 
   public override getCreateTablesSQL(tables: Iterable<unknown>): string[] {
@@ -182,15 +191,34 @@ export class SQLitePlatform extends AbstractPlatform {
     return sql;
   }
 
+  public override getDropTablesSQL(tables: Iterable<unknown>): string[] {
+    const sql: string[] = [];
+
+    for (const table of tables) {
+      const quotedName = this.sqliteInvoke<string>(table, "getQuotedName", this);
+      if (quotedName !== undefined) {
+        sql.push(this.getDropTableSQL(quotedName));
+        continue;
+      }
+
+      const rawName = this.sqliteInvoke<string>(table, "getName");
+      if (rawName !== undefined) {
+        sql.push(this.getDropTableSQL(this.quoteIdentifier(rawName)));
+      }
+    }
+
+    return sql;
+  }
+
   public override getAlterTableSQL(diff: unknown): string[] {
+    const simpleSql = this.getSimpleAlterTableSQL(diff);
+    if (simpleSql !== false) {
+      return simpleSql;
+    }
+
     const addedColumns = this.sqliteInvoke<unknown[]>(diff, "getAddedColumns") ?? [];
     const changedColumns = this.sqliteInvoke<unknown[]>(diff, "getChangedColumns") ?? [];
     const droppedColumns = this.sqliteInvoke<unknown[]>(diff, "getDroppedColumns") ?? [];
-    const hasComplexColumnChanges = changedColumns.length > 0 || droppedColumns.length > 0;
-
-    if (!hasComplexColumnChanges) {
-      return super.getAlterTableSQL(diff);
-    }
 
     const oldTable = this.sqliteInvoke<unknown>(diff, "getOldTable");
     const newTable = this.sqliteInvoke<unknown>(diff, "getNewTable");
@@ -237,6 +265,82 @@ export class SQLitePlatform extends AbstractPlatform {
         `INSERT INTO ${newQuotedName} (${copyColumns.newQuotedColumns.join(", ")}) SELECT ${copyColumns.oldQuotedColumns.join(", ")} FROM ${tempTableName}`,
       );
       sql.push(this.getDropTableSQL(tempTableName));
+    }
+
+    return sql;
+  }
+
+  private getSimpleAlterTableSQL(diff: unknown): string[] | false {
+    const changedColumns = this.sqliteInvoke<unknown[]>(diff, "getChangedColumns") ?? [];
+    const droppedColumns = this.sqliteInvoke<unknown[]>(diff, "getDroppedColumns") ?? [];
+    const addedIndexes = this.sqliteInvoke<unknown[]>(diff, "getAddedIndexes") ?? [];
+    const modifiedIndexes = this.sqliteInvoke<unknown[]>(diff, "getModifiedIndexes") ?? [];
+    const droppedIndexes = this.sqliteInvoke<unknown[]>(diff, "getDroppedIndexes") ?? [];
+    const renamedIndexes =
+      this.sqliteInvoke<Record<string, unknown>>(diff, "getRenamedIndexes") ?? {};
+    const addedForeignKeys = this.sqliteInvoke<unknown[]>(diff, "getAddedForeignKeys") ?? [];
+    const modifiedForeignKeys = this.sqliteInvoke<unknown[]>(diff, "getModifiedForeignKeys") ?? [];
+    const droppedForeignKeys = this.sqliteInvoke<unknown[]>(diff, "getDroppedForeignKeys") ?? [];
+
+    if (
+      changedColumns.length > 0 ||
+      droppedColumns.length > 0 ||
+      addedIndexes.length > 0 ||
+      modifiedIndexes.length > 0 ||
+      droppedIndexes.length > 0 ||
+      Object.keys(renamedIndexes).length > 0 ||
+      addedForeignKeys.length > 0 ||
+      modifiedForeignKeys.length > 0 ||
+      droppedForeignKeys.length > 0
+    ) {
+      return false;
+    }
+
+    const table = this.sqliteInvoke<unknown>(diff, "getOldTable");
+    if (table === undefined) {
+      return false;
+    }
+
+    const sql: string[] = [];
+    const tableName = this.getSQLiteDynamicTableSQLName(table);
+    const addedColumns = this.sqliteInvoke<unknown[]>(diff, "getAddedColumns") ?? [];
+
+    for (const column of addedColumns) {
+      const definition =
+        this.sqliteInvoke<Record<string, unknown>>(column, "toArray") ??
+        (column !== null && typeof column === "object"
+          ? { ...(column as Record<string, unknown>) }
+          : {});
+
+      const type = definition.type;
+      const defaultValue = definition.default;
+
+      const requiresRebuild =
+        typeof definition.columnDefinition === "string" ||
+        definition.autoincrement === true ||
+        (this.sqliteTypeHasConstructorName(type, "DateTimeType") &&
+          defaultValue === this.getCurrentTimestampSQL()) ||
+        (this.sqliteTypeHasConstructorName(type, "DateType") &&
+          defaultValue === this.getCurrentDateSQL()) ||
+        (this.sqliteTypeHasConstructorName(type, "TimeType") &&
+          defaultValue === this.getCurrentTimeSQL());
+
+      if (requiresRebuild) {
+        return false;
+      }
+
+      const columnName =
+        this.sqliteInvoke<string>(column, "getQuotedName", this) ?? String(definition.name ?? "");
+      if (columnName.length === 0) {
+        return false;
+      }
+
+      sql.push(
+        `ALTER TABLE ${tableName} ADD COLUMN ${this.getColumnDeclarationSQL(columnName, {
+          ...definition,
+          name: columnName,
+        })}`,
+      );
     }
 
     return sql;
@@ -625,6 +729,14 @@ export class SQLitePlatform extends AbstractPlatform {
       type: typeIdentity,
       unsigned: definition.unsigned === true,
     };
+  }
+
+  private sqliteTypeHasConstructorName(type: unknown, constructorName: string): boolean {
+    if (type === null || typeof type !== "object") {
+      return false;
+    }
+
+    return (type as { constructor?: { name?: unknown } }).constructor?.name === constructorName;
   }
 }
 

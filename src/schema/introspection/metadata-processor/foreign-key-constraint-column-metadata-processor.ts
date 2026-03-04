@@ -3,6 +3,7 @@ import { Deferrability } from "../../foreign-key-constraint/deferrability";
 import { ForeignKeyConstraintEditor } from "../../foreign-key-constraint-editor";
 import { ForeignKeyConstraintColumnMetadataRow } from "../../metadata/foreign-key-constraint-column-metadata-row";
 import { OptionallyQualifiedName } from "../../name/optionally-qualified-name";
+import { Parsers } from "../../name/parsers";
 import { UnqualifiedName } from "../../name/unqualified-name";
 
 export class ForeignKeyConstraintColumnMetadataProcessor {
@@ -29,10 +30,12 @@ export class ForeignKeyConstraintColumnMetadataProcessor {
       .setOnUpdateAction(row.getOnUpdateAction())
       .setOnDeleteAction(row.getOnDeleteAction());
 
-    if (row.isDeferred()) {
-      editor.setDeferrability(Deferrability.DEFERRED);
-    } else if (row.isDeferrable()) {
-      editor.setDeferrability(Deferrability.DEFERRABLE);
+    if (row.hasDeferrabilityInfo()) {
+      if (row.isDeferred()) {
+        editor.setDeferrability(Deferrability.DEFERRED);
+      } else if (row.isDeferrable()) {
+        editor.setDeferrability(Deferrability.DEFERRABLE);
+      }
     }
 
     return editor;
@@ -42,8 +45,10 @@ export class ForeignKeyConstraintColumnMetadataProcessor {
     editor: ForeignKeyConstraintEditor,
     row: ForeignKeyConstraintColumnMetadataRow,
   ): void {
+    const parser = Parsers.getUnqualifiedNameParser();
+
     editor
-      .addReferencingColumnName(UnqualifiedName.quoted(row.getReferencingColumnName()))
-      .addReferencedColumnName(UnqualifiedName.quoted(row.getReferencedColumnName()));
+      .addReferencingColumnName(parser.parse(row.getReferencingColumnName()))
+      .addReferencedColumnName(parser.parse(row.getReferencedColumnName()));
   }
 }

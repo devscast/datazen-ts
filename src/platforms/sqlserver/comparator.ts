@@ -2,13 +2,15 @@ import { Comparator as BaseComparator } from "../../schema/comparator";
 import type { ComparatorConfig } from "../../schema/comparator-config";
 import { Table } from "../../schema/table";
 import type { TableDiff } from "../../schema/table-diff";
+import type { AbstractPlatform } from "../abstract-platform";
 
 export class Comparator extends BaseComparator {
   public constructor(
+    platform: AbstractPlatform,
     private readonly databaseCollation: string,
     config?: ComparatorConfig,
   ) {
-    super(config);
+    super(platform, config);
   }
 
   public override compareTables(oldTable: Table, newTable: Table): TableDiff | null {
@@ -47,5 +49,10 @@ function cloneTable(table: Table): Table {
     editor.setPrimaryKeyConstraint(primaryKeyConstraint.edit().create());
   }
 
-  return editor.create();
+  const cloned = editor.create();
+  (cloned as unknown as { renamedColumns: Record<string, string> }).renamedColumns = {
+    ...table.getRenamedColumns(),
+  };
+
+  return cloned;
 }

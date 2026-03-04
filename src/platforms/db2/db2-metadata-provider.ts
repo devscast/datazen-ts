@@ -271,8 +271,8 @@ ORDER BY r.TABNAME, r.CONSTNAME, k.COLSEQ`;
         mapMatchType(null),
         mapReferentialAction(pickString(row, "update_rule")),
         mapReferentialAction(pickString(row, "delete_rule")),
-        false,
-        false,
+        null,
+        null,
         pickString(row, "column_name") ?? "",
         pickString(row, "referenced_column_name") ?? "",
       );

@@ -198,17 +198,11 @@ export class Schema extends AbstractAsset {
   public toDropSql(platform: AbstractPlatform): string[] {
     const sql: string[] = [];
 
-    sql.push(...platform.getDropTablesSQL(this.getTables()));
-
     for (const sequence of this.getSequences()) {
       sql.push(platform.getDropSequenceSQL(sequence.getQuotedName(platform)));
     }
 
-    if (platform.supportsSchemas()) {
-      for (const namespace of [...this.getNamespaces()].reverse()) {
-        sql.push(platform.getDropSchemaSQL(namespace));
-      }
-    }
+    sql.push(...platform.getDropTablesSQL(this.getTables()));
 
     return sql;
   }

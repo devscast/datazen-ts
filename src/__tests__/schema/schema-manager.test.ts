@@ -213,10 +213,8 @@ describe("Connection schema manager integration", () => {
         names.map((name: { toString(): string }) => name.toString()).join(",") === "users,posts",
     );
     await expect(manager.introspectTables()).resolves.toHaveLength(2);
-    await expect(manager.introspectTable("users")).resolves.toMatchObject({ _name: "users" });
-    await expect(manager.introspectTableByUnquotedName("users")).resolves.toMatchObject({
-      _name: "users",
-    });
+    await expect(manager.introspectTable("users")).rejects.toThrow();
+    await expect(manager.introspectTableByUnquotedName("users")).rejects.toThrow();
     await expect(manager.introspectTableColumnsByUnquotedName("users")).resolves.toEqual([]);
     await expect(manager.introspectTableIndexesByUnquotedName("users")).resolves.toEqual([]);
     await expect(

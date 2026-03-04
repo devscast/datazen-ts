@@ -1,3 +1,4 @@
+import { NotSupported } from "../platforms/exception/not-supported";
 import { AbstractSchemaManager } from "./abstract-schema-manager";
 import type { Column } from "./column";
 import type { ForeignKeyConstraint } from "./foreign-key-constraint";
@@ -11,6 +12,10 @@ export class DB2SchemaManager extends AbstractSchemaManager {
 
   protected getListViewNamesSQL(): string {
     return "SELECT VIEWNAME FROM SYSCAT.VIEWS WHERE VIEWSCHEMA = CURRENT SCHEMA ORDER BY VIEWNAME";
+  }
+
+  public override async listDatabases(): Promise<string[]> {
+    throw NotSupported.new("DB2SchemaManager.listDatabases");
   }
 
   protected override normalizeName(name: string): string {

@@ -217,12 +217,40 @@ export class Comparator {
     const modifiedIndexes: Index[] = [];
 
     for (const [newIndexName, newIndex] of newIndexesByName) {
-      if (!oldIndexesByName.has(newIndexName)) {
-        addedIndexesByName.set(newIndexName, newIndex);
+      if ((newIndex.isPrimary() && oldTable.hasPrimaryKey()) || oldTable.hasIndex(newIndexName)) {
+        continue;
       }
+
+      addedIndexesByName.set(newIndexName, newIndex);
     }
 
     for (const [oldIndexName, oldIndex] of oldIndexesByName) {
+      if (oldIndex.isPrimary()) {
+        if (!newTable.hasPrimaryKey()) {
+          droppedIndexesByName.set(oldIndexName, oldIndex);
+          continue;
+        }
+
+        const newPrimary = newTable.getPrimaryKey();
+        if (!this.diffIndex(oldIndex, newPrimary)) {
+          continue;
+        }
+
+        if (this.config.getReportModifiedIndexes()) {
+          modifiedIndexes.push(newPrimary);
+        } else {
+          droppedIndexesByName.set(oldIndexName, oldIndex);
+          addedIndexesByName.set(normalizeAssetKey(newPrimary.getName()), newPrimary);
+        }
+
+        continue;
+      }
+
+      if (!newTable.hasIndex(oldIndexName)) {
+        droppedIndexesByName.set(oldIndexName, oldIndex);
+        continue;
+      }
+
       const newIndex = newIndexesByName.get(oldIndexName);
       if (newIndex === undefined) {
         droppedIndexesByName.set(oldIndexName, oldIndex);
@@ -358,6 +386,13 @@ export class Comparator {
 
     if (oldColumn.getComment() !== newColumn.getComment()) {
       changedProperties.push("comment");
+    }
+
+    if (
+      JSON.stringify(normalizePlatformOptionsForComparison(oldColumn.getPlatformOptions())) !==
+      JSON.stringify(normalizePlatformOptionsForComparison(newColumn.getPlatformOptions()))
+    ) {
+      changedProperties.push("platformOptions");
     }
 
     if (changedProperties.length === 0) {
@@ -496,6 +531,22 @@ export class Comparator {
 
 function normalizeAssetKey(name: string): string {
   return name.replaceAll(/[`"[\]]/g, "").toLowerCase();
+}
+
+function normalizePlatformOptionsForComparison(
+  options: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized = { ...options };
+  delete normalized.default_constraint_name;
+  delete normalized.DEFAULT_CONSTRAINT_NAME;
+
+  for (const [key, value] of Object.entries(normalized)) {
+    if (value === null || value === undefined) {
+      delete normalized[key];
+    }
+  }
+
+  return normalized;
 }
 
 function nonEmptyOrNull(value: string): string | null {

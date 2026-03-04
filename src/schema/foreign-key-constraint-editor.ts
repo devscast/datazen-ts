@@ -157,6 +157,9 @@ export class ForeignKeyConstraintEditor {
     } else if (deferrability === Deferrability.DEFERRED) {
       this.options.deferrable = true;
       this.options.deferred = true;
+    } else if (deferrability === Deferrability.NOT_DEFERRABLE) {
+      this.options.deferrable = false;
+      this.options.deferred = false;
     }
 
     return this;
