@@ -14,6 +14,7 @@ import { SQLitePlatform } from "../../platforms/sqlite-platform";
 import { Column } from "../../schema/column";
 import { PrimaryKeyConstraint } from "../../schema/primary-key-constraint";
 import { Table } from "../../schema/table";
+import { createFunctionalDriverManagerParams } from "./_helpers/functional-connection-factory";
 import { useFunctionalTestCase } from "./_helpers/functional-test-case";
 
 describe("Functional/ConnectionTest", () => {
@@ -213,12 +214,52 @@ describe("Functional/ConnectionTest", () => {
     }
   });
 
-  it.skip("connects without an explicit database name", async () => {
-    // Doctrine exercises params-based DriverManager bootstrapping. This harness injects native clients/pools.
+  it("connects without an explicit database name", async ({ skip }) => {
+    const platform = connection.getDatabasePlatform();
+    const params = { ...(await createFunctionalDriverManagerParams("default", "pool")) };
+
+    if (
+      platform.constructor.name === "OraclePlatform" ||
+      platform.constructor.name === "DB2Platform"
+    ) {
+      skip();
+    }
+
+    delete (params as Record<string, unknown>).dbname;
+    delete (params as Record<string, unknown>).database;
+
+    const dbalConnection = DriverManager.getConnection(params, connection.getConfiguration());
+
+    try {
+      expect(Number(await dbalConnection.fetchOne(platform.getDummySelectSQL()))).toBe(1);
+    } finally {
+      await dbalConnection.close();
+    }
   });
 
-  it.skip("determines platform when connecting to a non-existent database", async () => {
-    // Doctrine params-based platform bootstrapping scenario is not exercised by the injected client/pool harness.
+  it("determines platform when connecting to a non-existent database", async ({ skip }) => {
+    const platform = connection.getDatabasePlatform();
+    const params = { ...(await createFunctionalDriverManagerParams("default", "pool")) };
+
+    if (
+      platform.constructor.name === "OraclePlatform" ||
+      platform.constructor.name === "DB2Platform"
+    ) {
+      skip();
+    }
+
+    (params as Record<string, unknown>).dbname = "foo_bar";
+    (params as Record<string, unknown>).database = "foo_bar";
+
+    const dbalConnection = DriverManager.getConnection(params, connection.getConfiguration());
+
+    try {
+      expect(dbalConnection.isConnected()).toBe(false);
+      expect(dbalConnection.getParams().dbname).toBe("foo_bar");
+      expect(dbalConnection.getParams().database).toBe("foo_bar");
+    } finally {
+      await dbalConnection.close();
+    }
   });
 
   it.skip("persistent connection semantics", async () => {

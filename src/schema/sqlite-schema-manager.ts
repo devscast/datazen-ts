@@ -578,7 +578,7 @@ function stripPossiblyQuotedSQLiteIdentifier(identifier: string): string {
   return identifier;
 }
 
-function isFullyWrappedIdentifier(identifier: string, start: string, end: string): boolean {
+function isFullyWrappedIdentifier(identifier: string, _start: string, end: string): boolean {
   for (let index = 1; index < identifier.length - 1; index += 1) {
     if (identifier[index] !== end) {
       continue;
