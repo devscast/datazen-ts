@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Connection } from "../../../connection";
 import { LockMode } from "../../../lock-mode";
-import { SQLServerPlatform } from "../../../platforms/sql-server-platform";
 import { SQLitePlatform } from "../../../platforms/sqlite-platform";
+import { SQLServerPlatform } from "../../../platforms/sqlserver-platform";
 import { Column } from "../../../schema/column";
 import { PrimaryKeyConstraint } from "../../../schema/primary-key-constraint";
 import { Table } from "../../../schema/table";

@@ -7,13 +7,13 @@ import { NotSupported } from "../../platforms/exception/not-supported";
 import { MariaDBPlatform } from "../../platforms/mariadb-platform";
 import { MySQLMetadataProvider } from "../../platforms/mysql/mysql-metadata-provider";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import { PostgreSQLPlatform } from "../../platforms/postgre-sql-platform";
-import { PostgreSQLMetadataProvider } from "../../platforms/postgresql/postgre-sql-metadata-provider";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { PostgreSQLMetadataProvider } from "../../platforms/postgresql/postgresql-metadata-provider";
+import { PostgreSQLPlatform } from "../../platforms/postgresql-platform";
 import { SQLiteMetadataProvider } from "../../platforms/sqlite/sqlite-metadata-provider";
 import { ForeignKeyConstraintDetails } from "../../platforms/sqlite/sqlite-metadata-provider/foreign-key-constraint-details";
 import { SQLitePlatform } from "../../platforms/sqlite-platform";
-import { SQLServerMetadataProvider } from "../../platforms/sqlserver/sql-server-metadata-provider";
+import { SQLServerMetadataProvider } from "../../platforms/sqlserver/sqlserver-metadata-provider";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { ReferentialAction } from "../../schema/foreign-key-constraint/referential-action";
 import { IndexType } from "../../schema/index/index-type";
 

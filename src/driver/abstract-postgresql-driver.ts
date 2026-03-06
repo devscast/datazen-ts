@@ -1,10 +1,10 @@
 import type { Driver } from "../driver";
 import { InvalidPlatformVersion } from "../platforms/exception/invalid-platform-version";
-import { PostgreSQLPlatform } from "../platforms/postgre-sql-platform";
-import { PostgreSQL120Platform } from "../platforms/postgre-sql120-platform";
+import { PostgreSQLPlatform } from "../platforms/postgresql-platform";
+import { PostgreSQL120Platform } from "../platforms/postgresql120-platform";
 import type { ServerVersionProvider } from "../server-version-provider";
 import type { ExceptionConverter as DriverExceptionConverter } from "./api/exception-converter";
-import { ExceptionConverter } from "./api/pgsql/exception-converter";
+import { ExceptionConverter } from "./api/postgresql/exception-converter";
 
 export abstract class AbstractPostgreSQLDriver implements Driver {
   public async getDatabasePlatform(

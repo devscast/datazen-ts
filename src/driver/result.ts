@@ -1,8 +1,5 @@
 type AssociativeRow = Record<string, unknown>;
 
-/**
- * Driver-level statement execution result.
- */
 export interface Result {
   fetchNumeric<T = unknown>(): T[] | false;
   fetchAssociative<T extends AssociativeRow = AssociativeRow>(): T | false;

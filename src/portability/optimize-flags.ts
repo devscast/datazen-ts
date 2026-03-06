@@ -1,7 +1,7 @@
 import { AbstractPlatform } from "../platforms/abstract-platform";
 import { DB2Platform } from "../platforms/db2-platform";
 import { OraclePlatform } from "../platforms/oracle-platform";
-import { SQLServerPlatform } from "../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../platforms/sqlserver-platform";
 import { Connection } from "./connection";
 
 export class OptimizeFlags {

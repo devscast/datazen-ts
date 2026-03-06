@@ -13,7 +13,7 @@ import type { Connection as DriverConnection } from "../../driver/connection";
 import { DriverManager } from "../../driver-manager";
 import { DriverException } from "../../exception/driver-exception";
 import { OraclePlatform } from "../../platforms/oracle-platform";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { Connection } from "../../portability/connection";
 import { Middleware } from "../../portability/middleware";
 

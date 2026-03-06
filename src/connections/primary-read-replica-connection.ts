@@ -15,22 +15,12 @@ export interface PrimaryReadReplicaConnectionParams extends Record<string, unkno
 
 type NamedConnection = "primary" | "replica";
 
-/**
- * Primary-replica DBAL connection wrapper (Doctrine-style).
- */
 export class PrimaryReadReplicaConnection extends Connection {
-  /**
-   * rimary and Replica connection (one of the randomly picked replicas).
-   */
   protected connections: Record<NamedConnection, DriverConnection | null> = {
     primary: null,
     replica: null,
   };
 
-  /**
-   * You can keep the replica connection and then switch back to it
-   * during the request if you know what you are doing.
-   */
   protected keepReplica = false;
 
   constructor(
@@ -66,9 +56,6 @@ export class PrimaryReadReplicaConnection extends Connection {
     this.keepReplica = Boolean(params.keepReplica);
   }
 
-  /**
-   * Checks if the connection is currently towards the primary or not.
-   */
   public isConnectedToPrimary(): boolean {
     const current = this.getWrappedDriverConnection();
 

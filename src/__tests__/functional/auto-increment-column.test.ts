@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Connection } from "../../connection";
 import { DB2Platform } from "../../platforms/db2-platform";
-import { PostgreSQLPlatform } from "../../platforms/postgre-sql-platform";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { PostgreSQLPlatform } from "../../platforms/postgresql-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { Column } from "../../schema/column";
 import { PrimaryKeyConstraint } from "../../schema/primary-key-constraint";
 import { Table } from "../../schema/table";

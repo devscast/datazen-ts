@@ -15,7 +15,8 @@ import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { DateIntervalUnit } from "./date-interval-unit";
 import { NoColumnsSpecifiedForTable } from "./exception/no-columns-specified-for-table";
 import { NotSupported } from "./exception/not-supported";
-import { EmptyKeywords, KeywordList } from "./keywords";
+import { EmptyKeywords } from "./keywords/empty-keywords";
+import { KeywordList } from "./keywords/keyword-list";
 import { TrimMode } from "./trim-mode";
 
 export abstract class AbstractPlatform {
@@ -768,7 +769,7 @@ export abstract class AbstractPlatform {
     const droppedColumns = this.invokeMethod<unknown[]>(diff, "getDroppedColumns") ?? [];
 
     // Column alter SQL differs substantially per platform; keep the implementation
-    // explicit until platform-specific column alteration support is ported.
+    //explicit until platform-specific column alteration support is ported.
     if (changedColumns.length > 0 || droppedColumns.length > 0) {
       throw NotSupported.new("getAlterTableSQL");
     }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ForeignKeyConstraintViolationException } from "../../exception/foreign-key-constraint-violation-exception";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { Column } from "../../schema/column";
 import { ForeignKeyConstraint } from "../../schema/foreign-key-constraint";
 import { PrimaryKeyConstraint } from "../../schema/primary-key-constraint";

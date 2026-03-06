@@ -14,7 +14,7 @@ import { ParseError } from "../../exception/parse-error";
 import { SchemaDoesNotExist } from "../../exception/schema-does-not-exist";
 import { ServerException } from "../../exception/server-exception";
 import { UnknownDriver } from "../../exception/unknown-driver";
-import { ParserException } from "../../sql/parser";
+import { Exception as ParserException } from "../../sql/parser/exception";
 
 describe("Top-level Doctrine exception parity", () => {
   it("provides doctrine-style argument exception names and factories", () => {

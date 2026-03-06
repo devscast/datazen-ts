@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ExceptionConverter as SQLServerExceptionConverter } from "../../driver/api/sql-server/exception-converter";
+import { ExceptionConverter as SQLServerExceptionConverter } from "../../driver/api/sqlserver/exception-converter";
 import { MSSQLDriver } from "../../driver/mssql/driver";
 
 describe("MSSQLDriver", () => {

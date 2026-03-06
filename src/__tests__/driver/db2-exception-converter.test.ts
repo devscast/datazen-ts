@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ExceptionConverter as IBMDB2ExceptionConverter } from "../../driver/api/ibmdb2/exception-converter";
+import { ExceptionConverter as DB2ExceptionConverter } from "../../driver/api/db2/exception-converter";
 import { ConnectionException } from "../../exception/connection-exception";
 import { DriverException } from "../../exception/driver-exception";
 import { ForeignKeyConstraintViolationException } from "../../exception/foreign-key-constraint-violation-exception";
@@ -13,7 +13,7 @@ import { TableNotFoundException } from "../../exception/table-not-found-exceptio
 import { UniqueConstraintViolationException } from "../../exception/unique-constraint-violation-exception";
 import { Query } from "../../query";
 
-describe("IBMDB2 ExceptionConverter", () => {
+describe("DB2 ExceptionConverter", () => {
   it.each([
     [-104, SyntaxErrorException],
     [-203, NonUniqueFieldNameException],
@@ -29,7 +29,7 @@ describe("IBMDB2 ExceptionConverter", () => {
     [-1336, ConnectionException],
     [-30082, ConnectionException],
   ])("maps DB2 SQLCODE %s to %p", (sqlcode, expectedClass) => {
-    const converter = new IBMDB2ExceptionConverter();
+    const converter = new DB2ExceptionConverter();
     const converted = converter.convert(
       Object.assign(new Error(`DB2 SQLCODE ${sqlcode}`), { sqlcode }),
       {
@@ -42,7 +42,7 @@ describe("IBMDB2 ExceptionConverter", () => {
   });
 
   it("captures query metadata and sqlstate", () => {
-    const converter = new IBMDB2ExceptionConverter();
+    const converter = new DB2ExceptionConverter();
     const query = new Query("SELECT * FROM users WHERE id = ?", [7]);
     const error = Object.assign(new Error("SQL0204N USERS not found. SQLSTATE=42704"), {
       sqlcode: "-204",
@@ -55,11 +55,11 @@ describe("IBMDB2 ExceptionConverter", () => {
     expect(converted.sqlState).toBe("42704");
     expect(converted.sql).toBe("SELECT * FROM users WHERE id = ?");
     expect(converted.parameters).toEqual([7]);
-    expect(converted.driverName).toBe("ibmdb2");
+    expect(converted.driverName).toBe("db2");
   });
 
   it("falls back to DriverException for unknown codes", () => {
-    const converter = new IBMDB2ExceptionConverter();
+    const converter = new DB2ExceptionConverter();
     const error = Object.assign(new Error("Unknown DB2 driver failure"), { code: "SOMETHING" });
 
     const converted = converter.convert(error, { operation: "executeQuery" });

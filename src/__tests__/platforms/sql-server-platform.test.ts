@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LockMode } from "../../lock-mode";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { assertCommonPlatformSurface } from "./_helpers/platform-parity-scaffold";
 
 describe("SQLServerPlatform parity", () => {

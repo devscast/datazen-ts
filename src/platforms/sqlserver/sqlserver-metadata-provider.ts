@@ -18,7 +18,7 @@ import {
   pickNumber,
   pickString,
 } from "../_internal/metadata-provider-utils";
-import type { SQLServerPlatform } from "../sql-server-platform";
+import type { SQLServerPlatform } from "../sqlserver-platform";
 
 type MetadataQueryConnection = Pick<
   Connection,

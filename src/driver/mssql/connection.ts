@@ -1,7 +1,8 @@
 import { createRequire } from "node:module";
 
 import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
-import { Parser, type Visitor } from "../../sql/parser";
+import { Parser } from "../../sql/parser";
+import type { Visitor } from "../../sql/parser/visitor";
 import type { Connection as DriverConnection } from "../connection";
 import { IdentityColumnsNotSupported } from "../exception/identity-columns-not-supported";
 import type { Result as DriverResult } from "../result";

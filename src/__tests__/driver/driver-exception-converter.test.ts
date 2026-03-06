@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { ExceptionConverter as MySQLExceptionConverter } from "../../driver/api/mysql/exception-converter";
-import { ExceptionConverter as PgSQLExceptionConverter } from "../../driver/api/pgsql/exception-converter";
-import { ExceptionConverter as SQLSrvExceptionConverter } from "../../driver/api/sql-server/exception-converter";
+import { ExceptionConverter as PostgreSQLExceptionConverter } from "../../driver/api/postgresql/exception-converter";
 import { ExceptionConverter as SQLiteExceptionConverter } from "../../driver/api/sqlite/exception-converter";
+import { ExceptionConverter as SQLServerExceptionConverter } from "../../driver/api/sqlserver/exception-converter";
 import { ConnectionException } from "../../exception/connection-exception";
 import { ConnectionLost } from "../../exception/connection-lost";
 import { DatabaseDoesNotExist } from "../../exception/database-does-not-exist";
@@ -104,7 +104,7 @@ describe("Driver exception converters", () => {
     ["42P07", TableExistsException],
     ["08006", ConnectionException],
   ])("maps pg SQLSTATE %s to %p", (sqlState, expectedClass) => {
-    const converter = new PgSQLExceptionConverter();
+    const converter = new PostgreSQLExceptionConverter();
     const error = Object.assign(new Error(`pg error ${sqlState}`), { code: sqlState });
 
     const converted = converter.convert(error, { operation: "executeQuery" });
@@ -114,7 +114,7 @@ describe("Driver exception converters", () => {
   });
 
   it("maps pg 0A000 TRUNCATE feature-not-supported errors to foreign key violations", () => {
-    const converter = new PgSQLExceptionConverter();
+    const converter = new PostgreSQLExceptionConverter();
     const error = Object.assign(
       new Error("cannot truncate a table referenced in a foreign key constraint"),
       { code: "0A000" },
@@ -127,7 +127,7 @@ describe("Driver exception converters", () => {
   });
 
   it("maps pg terminating connection messages to ConnectionLost", () => {
-    const converter = new PgSQLExceptionConverter();
+    const converter = new PostgreSQLExceptionConverter();
     const error = Object.assign(new Error("terminating connection due to administrator command"), {
       code: "57P01",
     });
@@ -171,7 +171,7 @@ describe("Driver exception converters", () => {
   });
 
   it("maps mssql not null constraint violations", () => {
-    const converter = new SQLSrvExceptionConverter();
+    const converter = new SQLServerExceptionConverter();
     const error = Object.assign(new Error("Cannot insert the value NULL"), {
       code: "EREQUEST",
       number: 515,
@@ -199,7 +199,7 @@ describe("Driver exception converters", () => {
     [11001, ConnectionException],
     [18456, ConnectionException],
   ])("maps mssql code %s to %p", (number, expectedClass) => {
-    const converter = new SQLSrvExceptionConverter();
+    const converter = new SQLServerExceptionConverter();
     const error = Object.assign(new Error(`mssql error ${number}`), { number });
 
     const converted = converter.convert(error, { operation: "executeQuery" });
@@ -209,7 +209,7 @@ describe("Driver exception converters", () => {
   });
 
   it("maps mssql foreign key violations", () => {
-    const converter = new SQLSrvExceptionConverter();
+    const converter = new SQLServerExceptionConverter();
     const error = Object.assign(new Error("The DELETE statement conflicted with the REFERENCE"), {
       number: 547,
     });
@@ -220,7 +220,7 @@ describe("Driver exception converters", () => {
   });
 
   it("maps mssql syntax and unique violations", () => {
-    const converter = new SQLSrvExceptionConverter();
+    const converter = new SQLServerExceptionConverter();
     const syntaxError = Object.assign(new Error("Incorrect syntax near 'FROM'"), { number: 102 });
     const uniqueError = Object.assign(new Error("Violation of UNIQUE KEY constraint"), {
       number: 2627,
@@ -235,7 +235,7 @@ describe("Driver exception converters", () => {
   });
 
   it("falls back to DriverException for unmapped driver exceptions", () => {
-    const converter = new SQLSrvExceptionConverter();
+    const converter = new SQLServerExceptionConverter();
     const error = Object.assign(new Error("Unknown driver failure"), { code: "EREQUEST" });
 
     const converted = converter.convert(error, { operation: "executeQuery" });

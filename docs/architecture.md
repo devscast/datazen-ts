@@ -112,7 +112,7 @@ Exceptions
 Exceptions are normalized in `@devscast/datazen/exception`. Driver-specific errors are
 translated through per-driver exception converters:
 
-- `MySQLExceptionConverter`, `SQLSrvExceptionConverter`, `PgSQLExceptionConverter`, and `SQLiteExceptionConverter` from `@devscast/datazen/driver`
+- `MySQLExceptionConverter`, `SQLServerExceptionConverter`, `PostgreSQLExceptionConverter`, and `SQLiteExceptionConverter` from `@devscast/datazen/driver`
 
 Tools
 -----

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { AbstractSQLServerDriver } from "../../driver/abstract-sql-server-driver";
-import { PortWithoutHost } from "../../driver/abstract-sql-server-driver/exception/port-without-host";
+import { AbstractSQLServerDriver } from "../../driver/abstract-sqlserver-driver";
+import { PortWithoutHost } from "../../driver/abstract-sqlserver-driver/exception/port-without-host";
 import type { Connection as DriverConnection } from "../../driver/connection";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 
 class TestSQLServerDriver extends AbstractSQLServerDriver {
   public async connect(params: Record<string, unknown>): Promise<DriverConnection> {

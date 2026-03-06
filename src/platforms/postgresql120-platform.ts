@@ -1,4 +1,4 @@
-import { PostgreSQLPlatform } from "./postgre-sql-platform";
+import { PostgreSQLPlatform } from "./postgresql-platform";
 
 export class PostgreSQL120Platform extends PostgreSQLPlatform {
   public getDefaultColumnValueSQLSnippet(): string {

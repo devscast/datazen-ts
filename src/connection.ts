@@ -30,7 +30,9 @@ import type { AbstractSchemaManager } from "./schema/abstract-schema-manager";
 import { DefaultSchemaManagerFactory } from "./schema/default-schema-manager-factory";
 import type { SchemaManagerFactory } from "./schema/schema-manager-factory";
 import type { ServerVersionProvider } from "./server-version-provider";
-import { Parser, type SQLParser, type Visitor } from "./sql/parser";
+import { Parser } from "./sql/parser";
+import type { SQLParser } from "./sql/parser/sql-parser";
+import type { Visitor } from "./sql/parser/visitor";
 import { Statement } from "./statement";
 import { TransactionIsolationLevel } from "./transaction-isolation-level";
 import { Type } from "./types/type";
@@ -178,21 +180,6 @@ export class Connection {
     }
   }
 
-  public async executeQueryObject(query: Query): Promise<Result>;
-  public async executeQueryObject<T extends AssociativeRow>(query: Query): Promise<Result<T>>;
-  public async executeQueryObject(query: Query): Promise<Result> {
-    await this.connect();
-    const [boundParams, boundTypes] = this.normalizeParameters(query.parameters, query.types);
-    const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
-
-    try {
-      const result = await this.executeDriverQuery(compiledQuery);
-      return new Result(result, this);
-    } catch (error) {
-      throw this.convertException(error, "executeQuery", query);
-    }
-  }
-
   public async executeStatement(
     sql: string,
     params: QueryParameters = [],
@@ -202,18 +189,6 @@ export class Connection {
     const [boundParams, boundTypes] = this.normalizeParameters(params, types);
     const compiledQuery = this.compileQuery(sql, boundParams, boundTypes);
     const query = new Query(sql, params, types);
-
-    try {
-      return await this.executeDriverStatement(compiledQuery);
-    } catch (error) {
-      throw this.convertException(error, "executeStatement", query);
-    }
-  }
-
-  public async executeStatementObject(query: Query): Promise<number> {
-    await this.connect();
-    const [boundParams, boundTypes] = this.normalizeParameters(query.parameters, query.types);
-    const compiledQuery = this.compileQuery(query.sql, boundParams, boundTypes);
 
     try {
       return await this.executeDriverStatement(compiledQuery);

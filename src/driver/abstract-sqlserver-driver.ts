@@ -1,8 +1,8 @@
 import type { Driver } from "../driver";
-import { SQLServerPlatform } from "../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../platforms/sqlserver-platform";
 import type { ServerVersionProvider } from "../server-version-provider";
 import type { ExceptionConverter as DriverExceptionConverter } from "./api/exception-converter";
-import { ExceptionConverter } from "./api/sql-server/exception-converter";
+import { ExceptionConverter } from "./api/sqlserver/exception-converter";
 
 export abstract class AbstractSQLServerDriver implements Driver {
   public getDatabasePlatform(_versionProvider: ServerVersionProvider): SQLServerPlatform {

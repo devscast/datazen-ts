@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SQLServerPlatform } from "../../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../../platforms/sqlserver-platform";
 import { Column } from "../../../schema/column";
 import type { ColumnEditor } from "../../../schema/column-editor";
 import { PrimaryKeyConstraint } from "../../../schema/primary-key-constraint";
@@ -54,9 +54,9 @@ describe("Functional/Schema/SQLServerSchemaManagerTest", () => {
     }
 
     const schemaManager = await connection.createSchemaManager();
-    await functional.dropTableIfExists("sqlsrv_default_constraints");
+    await functional.dropTableIfExists("sqlserver_default_constraints");
     const oldTable = Table.editor()
-      .setUnquotedName("sqlsrv_default_constraints")
+      .setUnquotedName("sqlserver_default_constraints")
       .setColumns(
         Column.editor()
           .setUnquotedName("no_default")
@@ -102,7 +102,7 @@ describe("Functional/Schema/SQLServerSchemaManagerTest", () => {
 
     await schemaManager.createTable(oldTable);
     let columns = await schemaManager.introspectTableColumnsByUnquotedName(
-      "sqlsrv_default_constraints",
+      "sqlserver_default_constraints",
     );
     expect(columns).toHaveLength(7);
     let columnsByName = new Map(columns.map((column) => [column.getName(), column]));
@@ -140,7 +140,7 @@ describe("Functional/Schema/SQLServerSchemaManagerTest", () => {
     const diff = schemaManager
       .createComparator()
       .compareTables(
-        await schemaManager.introspectTableByUnquotedName("sqlsrv_default_constraints"),
+        await schemaManager.introspectTableByUnquotedName("sqlserver_default_constraints"),
         newTable,
       );
 
@@ -151,7 +151,7 @@ describe("Functional/Schema/SQLServerSchemaManagerTest", () => {
 
     await schemaManager.alterTable(diff);
     columns = await schemaManager.introspectTableColumnsByUnquotedName(
-      "sqlsrv_default_constraints",
+      "sqlserver_default_constraints",
     );
 
     expect(columns).toHaveLength(6);
@@ -171,7 +171,7 @@ describe("Functional/Schema/SQLServerSchemaManagerTest", () => {
     }
 
     const table = Table.editor()
-      .setUnquotedName("sqlsrv_pk_ordering")
+      .setUnquotedName("sqlserver_pk_ordering")
       .setColumns(
         Column.editor().setUnquotedName("colA").setTypeName(Types.INTEGER).create(),
         Column.editor().setUnquotedName("colB").setTypeName(Types.INTEGER).create(),
@@ -182,10 +182,10 @@ describe("Functional/Schema/SQLServerSchemaManagerTest", () => {
       .create();
 
     const schemaManager = await connection.createSchemaManager();
-    await functional.dropTableIfExists("sqlsrv_pk_ordering");
+    await functional.dropTableIfExists("sqlserver_pk_ordering");
     await schemaManager.createTable(table);
 
-    const indexes = await schemaManager.listTableIndexes("sqlsrv_pk_ordering");
+    const indexes = await schemaManager.listTableIndexes("sqlserver_pk_ordering");
     expect(indexes).toHaveLength(1);
     expect(indexes[0]?.getColumns()).toEqual(["colB", "colA"]);
   });

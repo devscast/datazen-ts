@@ -1,7 +1,7 @@
-import type { AbstractPlatform } from "../../platforms/abstract-platform";
-import { ConflictResolutionMode } from "../../query/for-update/conflict-resolution-mode";
-import { SelectQuery } from "../../query/select-query";
-import { SelectSQLBuilder } from "./select-sql-builder";
+import { ConflictResolutionMode } from "../../../../query/for-update/conflict-resolution-mode";
+import { SelectQuery } from "../../../../query/select-query";
+import { SelectSQLBuilder } from "../../../../sql/builder/select-sql-builder";
+import type { AbstractPlatform } from "../../../abstract-platform";
 
 export class SQLServerSelectSQLBuilder implements SelectSQLBuilder {
   public constructor(private readonly platform: AbstractPlatform) {}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { OraclePlatform } from "../../platforms/oracle-platform";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { Identifier } from "../../schema/identifier";
 
 describe("Platform keyword lists", () => {

@@ -22,7 +22,6 @@ const targets = [
     env: {
       DATAZEN_FUNCTIONAL_PLATFORM: "mariadb",
       DATAZEN_FUNCTIONAL_CONFIG_FILE: "ci/github/vitest/mariadb.json",
-      // Local compose.yaml exposes MariaDB on 3307.
       DATAZEN_FUNCTIONAL_MARIADB_PORT: "3307",
       DATAZEN_FUNCTIONAL_MARIADB_PRIVILEGED_PORT: "3307",
     },
@@ -44,7 +43,7 @@ const targets = [
 ];
 
 for (const target of targets) {
-  // eslint-disable-next-line no-await-in-loop
+  //eslint-disable-next-line no-await-in-loop
   await runTarget(target.name, target.env, forwardedArgs);
 }
 
@@ -52,7 +51,7 @@ async function runTarget(name, targetEnv, args) {
   console.log(`\n=== Functional tests (${name}) ===`);
 
   const command = process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "node";
-  const nodeArgs = ["scripts/run-functional-tests.mjs", ...args];
+  const nodeArgs = ["scripts/test-functional.mjs", ...args];
   const commandArgs = process.platform === "win32" ? ["/d", "/s", "/c", "node", ...nodeArgs] : nodeArgs;
 
   const code = await new Promise((resolve) => {
