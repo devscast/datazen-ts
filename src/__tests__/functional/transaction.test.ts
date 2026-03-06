@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Connection } from "../../connection";
 import { ConnectionLost } from "../../exception/connection-lost";
 import { AbstractMySQLPlatform } from "../../platforms/abstract-mysql-platform";
-import { PostgreSQLPlatform } from "../../platforms/postgre-sql-platform";
+import { PostgreSQLPlatform } from "../../platforms/postgresql-platform";
 import { Column } from "../../schema/column";
 import { PrimaryKeyConstraint } from "../../schema/primary-key-constraint";
 import { Table } from "../../schema/table";

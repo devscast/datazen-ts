@@ -319,7 +319,7 @@ async function createFileBackedSQLiteConnection(
       client: client as Record<string, unknown>,
       driver: "sqlite3",
       // Keep the underlying file DB open across Connection.close() calls so the wrapper can
-      // exercise Doctrine's transaction-nesting-reset-on-reconnect behavior on the same object.
+      //exercise Doctrine's transaction-nesting-reset-on-reconnect behavior on the same object.
       ownsClient: false,
     },
     sourceConnection.getConfiguration(),

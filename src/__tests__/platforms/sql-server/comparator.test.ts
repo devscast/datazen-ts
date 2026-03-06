@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { SQLServerPlatform } from "../../../platforms/sql-server-platform";
 import { Comparator } from "../../../platforms/sqlserver/comparator";
+import { SQLServerPlatform } from "../../../platforms/sqlserver-platform";
 import { Table } from "../../../schema/table";
 import { Types } from "../../../types/types";
 

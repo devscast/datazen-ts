@@ -1,4 +1,4 @@
-import type { ParserException } from "../sql/parser";
+import type { Exception as ParserException } from "../sql/parser/exception";
 import { initializeException } from "./_internal";
 
 export class ParseError extends Error {

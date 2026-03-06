@@ -8,9 +8,6 @@ export enum ArrayParameterType {
 }
 
 export namespace ArrayParameterType {
-  /**
-   * Maps ArrayParameterType to corresponding ParameterType.
-   */
   export function toElementParameterType(type: ArrayParameterType): ParameterType {
     switch (type) {
       case ArrayParameterType.INTEGER:

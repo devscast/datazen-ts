@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ParameterType } from "../../../parameter-type";
-import { SQLServerPlatform } from "../../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../../platforms/sqlserver-platform";
 import { useFunctionalTestCase } from "../_helpers/functional-test-case";
 
 describe("Functional/ParameterTypes/AsciiTest", () => {

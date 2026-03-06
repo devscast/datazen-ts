@@ -18,12 +18,6 @@ import type { TableDiff } from "./table-diff";
 import type { UniqueConstraint } from "./unique-constraint";
 import { View } from "./view";
 
-/**
- * Base class for schema managers.
- *
- * This initial port exposes object-name introspection and schema assembly,
- * with room for deeper table-definition introspection in follow-up steps.
- */
 export abstract class AbstractSchemaManager {
   constructor(
     protected readonly connection: Connection,

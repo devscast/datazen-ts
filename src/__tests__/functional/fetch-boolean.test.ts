@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Connection } from "../../connection";
-import { PostgreSQLPlatform } from "../../platforms/postgre-sql-platform";
+import { PostgreSQLPlatform } from "../../platforms/postgresql-platform";
 import { useFunctionalTestCase } from "./_helpers/functional-test-case";
 
 describe("Functional/FetchBooleanTest", () => {

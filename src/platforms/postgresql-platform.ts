@@ -1,5 +1,5 @@
 import type { Connection } from "../connection";
-import { PostgreSQLSchemaManager } from "../schema/postgre-sql-schema-manager";
+import { PostgreSQLSchemaManager } from "../schema/postgresql-schema-manager";
 import type { Sequence } from "../schema/sequence";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Type } from "../types/type";
@@ -8,13 +8,14 @@ import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
 import type { KeywordList } from "./keywords/keyword-list";
 import { PostgreSQLKeywords } from "./keywords/postgresql-keywords";
-import { PostgreSQLMetadataProvider } from "./postgresql/postgre-sql-metadata-provider";
+import { PostgreSQLMetadataProvider } from "./postgresql/postgresql-metadata-provider";
 
 export class PostgreSQLPlatform extends AbstractPlatform {
   protected useBooleanTrueFalseStrings = true;
 
   private readonly booleanLiterals = {
     false: ["f", "false", "n", "no", "off", "0"],
+    true: ["t", "true", "y", "yes", "on", "1"],
   };
 
   protected override _getCreateTableSQL(
@@ -474,7 +475,7 @@ export class PostgreSQLPlatform extends AbstractPlatform {
         return callback(false);
       }
 
-      if (["t", "true", "y", "yes", "on", "1"].includes(normalized)) {
+      if (this.booleanLiterals.true.includes(normalized)) {
         return callback(true);
       }
     }

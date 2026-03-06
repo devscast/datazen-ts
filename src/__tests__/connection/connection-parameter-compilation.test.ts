@@ -120,7 +120,7 @@ class NamedSpyDriver implements Driver {
 }
 
 describe("Connection parameter compilation", () => {
-  it("compiles named placeholders to sqlsrv style named bindings", async () => {
+  it("compiles named placeholders to sqlserver style named bindings", async () => {
     const capture = new CaptureConnection();
     const connection = new Connection({}, new NamedSpyDriver(capture));
 
@@ -143,7 +143,7 @@ describe("Connection parameter compilation", () => {
     });
   });
 
-  it("compiles positional placeholders to sqlsrv style named bindings", async () => {
+  it("compiles positional placeholders to sqlserver style named bindings", async () => {
     const capture = new CaptureConnection();
     const connection = new Connection({}, new NamedSpyDriver(capture));
 

@@ -47,7 +47,7 @@ describe("Functional/Types/EnumTypeTest", () => {
 
     if (!(connection.getDatabasePlatform() instanceof AbstractMySQLPlatform)) {
       // Doctrine preserves enum type identity cross-platform via comment hints. Datazen's generic
-      // enum fallback is deployed everywhere, but enum-vs-string introspection hints are not yet.
+      //enum fallback is deployed everywhere, but enum-vs-string introspection hints are not yet.
       skip();
     }
 

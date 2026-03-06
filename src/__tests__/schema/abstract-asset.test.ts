@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { OraclePlatform } from "../../platforms/oracle-platform";
-import { PostgreSQLPlatform } from "../../platforms/postgre-sql-platform";
+import { PostgreSQLPlatform } from "../../platforms/postgresql-platform";
 import { Identifier } from "../../schema/identifier";
 
 describe("Schema/AbstractAsset (Doctrine parity, adapted)", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ExceptionConverter as PgSQLExceptionConverter } from "../../driver/api/pgsql/exception-converter";
+import { ExceptionConverter as PostgreSQLExceptionConverter } from "../../driver/api/postgresql/exception-converter";
 import { PgDriver } from "../../driver/pg/driver";
 
 describe("PgDriver", () => {
@@ -45,6 +45,6 @@ describe("PgDriver", () => {
 
   it("returns the Doctrine PostgreSQL exception converter", () => {
     const driver = new PgDriver();
-    expect(driver.getExceptionConverter()).toBeInstanceOf(PgSQLExceptionConverter);
+    expect(driver.getExceptionConverter()).toBeInstanceOf(PostgreSQLExceptionConverter);
   });
 });

@@ -1,4 +1,4 @@
-import { SQLServerPlatform } from "../../../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../../../platforms/sqlserver-platform";
 import { registerAbstractColumnTestCase } from "./abstract-column-test-case";
 
 registerAbstractColumnTestCase({

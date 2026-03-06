@@ -7,8 +7,8 @@ import { NoColumnsSpecifiedForTable } from "../../platforms/exception/no-columns
 import { NotSupported } from "../../platforms/exception/not-supported";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { OraclePlatform } from "../../platforms/oracle-platform";
-import { PostgreSQL120Platform } from "../../platforms/postgre-sql120-platform";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { PostgreSQL120Platform } from "../../platforms/postgresql120-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { TrimMode } from "../../platforms/trim-mode";
 import { Table } from "../../schema/table";
 import { Parser } from "../../sql/parser";

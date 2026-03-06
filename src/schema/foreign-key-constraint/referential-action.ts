@@ -6,10 +6,6 @@ export enum ReferentialAction {
   RESTRICT = "RESTRICT",
 }
 
-export function referentialActionToSQL(referentialAction: ReferentialAction): string {
-  return referentialAction;
-}
-
 export namespace ReferentialAction {
   export function toSQL(referentialAction: ReferentialAction): string {
     return referentialAction;

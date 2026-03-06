@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PostgreSQLPlatform } from "../../../../platforms/postgre-sql-platform";
+import { PostgreSQLPlatform } from "../../../../platforms/postgresql-platform";
 import { Column } from "../../../../schema/column";
 import type { DefaultExpression } from "../../../../schema/default-expression";
 import { Schema } from "../../../../schema/schema";

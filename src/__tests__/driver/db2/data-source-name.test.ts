@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { DataSourceName } from "../../../driver/ibm-db2/data-source-name";
+import { DataSourceName } from "../../../driver/db2/data-source-name";
 
-describe("IBMDB2 DataSourceName (Doctrine parity)", () => {
+describe("DB2 DataSourceName (Doctrine parity)", () => {
   it.each([
     [[], ""],
     [

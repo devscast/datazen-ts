@@ -4,8 +4,8 @@ import { AbstractMySQLPlatform } from "../../../platforms/abstract-mysql-platfor
 import type { AbstractPlatform } from "../../../platforms/abstract-platform";
 import { DB2Platform } from "../../../platforms/db2-platform";
 import { OraclePlatform } from "../../../platforms/oracle-platform";
-import { SQLServerPlatform } from "../../../platforms/sql-server-platform";
 import { SQLitePlatform } from "../../../platforms/sqlite-platform";
+import { SQLServerPlatform } from "../../../platforms/sqlserver-platform";
 import { Column } from "../../../schema/column";
 import { ComparatorConfig } from "../../../schema/comparator-config";
 import { ForeignKeyConstraint } from "../../../schema/foreign-key-constraint";

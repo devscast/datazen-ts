@@ -18,7 +18,7 @@ import {
   pickNumber,
   pickString,
 } from "../_internal/metadata-provider-utils";
-import type { PostgreSQLPlatform } from "../postgre-sql-platform";
+import type { PostgreSQLPlatform } from "../postgresql-platform";
 
 type MetadataQueryConnection = Pick<
   Connection,

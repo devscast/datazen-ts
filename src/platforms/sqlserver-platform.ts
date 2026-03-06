@@ -1,17 +1,17 @@
 import type { Connection } from "../connection";
 import { ColumnLengthRequired } from "../exception/invalid-column-type/column-length-required";
 import { LockMode } from "../lock-mode";
-import { SQLServerSchemaManager } from "../schema/sql-server-schema-manager";
+import { SQLServerSchemaManager } from "../schema/sqlserver-schema-manager";
 import type { SelectSQLBuilder } from "../sql/builder/select-sql-builder";
-import { SQLServerSelectSQLBuilder } from "../sql/builder/sql-server-select-sql-builder";
 import { TransactionIsolationLevel } from "../transaction-isolation-level";
 import { Types } from "../types/types";
 import { AbstractPlatform } from "./abstract-platform";
 import { DateIntervalUnit } from "./date-interval-unit";
 import { NotSupported } from "./exception/not-supported";
 import type { KeywordList } from "./keywords/keyword-list";
-import { SQLServerKeywords } from "./keywords/sql-server-keywords";
-import { SQLServerMetadataProvider } from "./sqlserver/sql-server-metadata-provider";
+import { SQLServerKeywords } from "./keywords/sqlserver-keywords";
+import { SQLServerSelectSQLBuilder } from "./sqlserver/sql/builder/sqlserver-select-sql-builder";
+import { SQLServerMetadataProvider } from "./sqlserver/sqlserver-metadata-provider";
 import { TrimMode } from "./trim-mode";
 
 export class SQLServerPlatform extends AbstractPlatform {
@@ -587,7 +587,7 @@ export class SQLServerPlatform extends AbstractPlatform {
     }
 
     // ORDER BY instance may be in a subquery after ORDER BY
-    // e.g. SELECT col1 FROM test ORDER BY (SELECT col2 from test ORDER BY col2)
+    //e.g. SELECT col1 FROM test ORDER BY (SELECT col2 from test ORDER BY col2)
     // if in the searched query ORDER BY clause was found where
     // number of open parentheses after the occurrence of the clause is equal to
     // number of closed brackets after the occurrence of the clause,

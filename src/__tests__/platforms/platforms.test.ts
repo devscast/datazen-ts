@@ -4,7 +4,7 @@ import { LockMode } from "../../lock-mode";
 import { DB2Platform } from "../../platforms/db2-platform";
 import { MySQLPlatform } from "../../platforms/mysql-platform";
 import { OraclePlatform } from "../../platforms/oracle-platform";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { TransactionIsolationLevel } from "../../transaction-isolation-level";
 
 describe("Platform parity", () => {

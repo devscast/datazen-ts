@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PostgreSQLPlatform } from "../../platforms/postgre-sql-platform";
+import { PostgreSQLPlatform } from "../../platforms/postgresql-platform";
 import { assertCommonPlatformSurface } from "./_helpers/platform-parity-scaffold";
 
 describe("PostgreSQLPlatform parity", () => {

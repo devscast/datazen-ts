@@ -1,8 +1,5 @@
 import type { AbstractPlatform } from "../platforms/abstract-platform";
 
-/**
- * Datazen base class for schema assets (table, column, index, sequence...).
- */
 export abstract class AbstractAsset {
   protected _name = "";
   protected _namespace: string | null = null;

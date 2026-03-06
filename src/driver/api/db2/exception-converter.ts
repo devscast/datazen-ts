@@ -68,7 +68,7 @@ export class ExceptionConverter implements ExceptionConverterInterface {
     return {
       cause: error,
       code: this.extractCode(record),
-      driverName: "ibmdb2",
+      driverName: "db2",
       message,
       operation: context.operation,
       parameters: context.query?.parameters,
@@ -125,7 +125,7 @@ export class ExceptionConverter implements ExceptionConverterInterface {
       return error.message;
     }
 
-    return "ibmdb2 driver error.";
+    return "db2 driver error.";
   }
 
   private asRecord(value: unknown): Record<string, unknown> {

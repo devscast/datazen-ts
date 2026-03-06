@@ -3,9 +3,6 @@ import { GenericName } from "./name/generic-name";
 import type { GenericNameParser } from "./name/parser/generic-name-parser";
 import { Parsers } from "./name/parsers";
 
-/**
- * Wrapper around raw SQL identifiers (table names, column names, etc.).
- */
 export class Identifier extends AbstractAsset {
   constructor(identifier: string, quote = false) {
     super(identifier);

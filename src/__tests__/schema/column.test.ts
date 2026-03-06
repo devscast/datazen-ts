@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { MySQLPlatform } from "../../platforms/mysql-platform";
-import { SQLServerPlatform } from "../../platforms/sql-server-platform";
 import { SQLitePlatform } from "../../platforms/sqlite-platform";
+import { SQLServerPlatform } from "../../platforms/sqlserver-platform";
 import { Column } from "../../schema/column";
 import { UnknownColumnOption } from "../../schema/exception/unknown-column-option";
 import { Identifier as NameIdentifier } from "../../schema/name/identifier";

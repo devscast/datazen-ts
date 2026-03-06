@@ -7,7 +7,7 @@ import type {
   QueryParameters,
   QueryScalarParameterType,
 } from "./query";
-import type { Visitor } from "./sql/parser";
+import type { Visitor } from "./sql/parser/visitor";
 
 export class ExpandArrayParameters implements Visitor {
   private originalParameterIndex: number = 0;

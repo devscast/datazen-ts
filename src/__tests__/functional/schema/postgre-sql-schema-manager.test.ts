@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { PostgreSQLPlatform } from "../../../platforms/postgre-sql-platform";
-import { PostgreSQL120Platform } from "../../../platforms/postgre-sql120-platform";
+import { PostgreSQLPlatform } from "../../../platforms/postgresql-platform";
+import { PostgreSQL120Platform } from "../../../platforms/postgresql120-platform";
 import { Column } from "../../../schema/column";
 import { Index } from "../../../schema/index";
 import { IndexType } from "../../../schema/index/index-type";

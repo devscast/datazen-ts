@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { SQLServerPlatform } from "../../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../../platforms/sqlserver-platform";
 import { useFunctionalTestCase } from "../_helpers/functional-test-case";
 
 describe("Functional/Platform/LengthExpressionTest", () => {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Connection } from "../../../connection";
 import { NoKeyValue } from "../../../exception/no-key-value";
-import { SQLServerPlatform } from "../../../platforms/sql-server-platform";
+import { SQLServerPlatform } from "../../../platforms/sqlserver-platform";
 import { TestUtil } from "../../test-util";
 import { useFunctionalTestCase } from "../_helpers/functional-test-case";
 

@@ -99,8 +99,3 @@ export class Parser implements SQLParser {
     return new RegularExpressionException("Regular expression parser failure.", 0);
   }
 }
-
-export { Exception as ParserException } from "./parser/exception";
-export { RegularExpressionException } from "./parser/exception/regular-expression-exception";
-export type { SQLParser } from "./parser/sql-parser";
-export type { Visitor } from "./parser/visitor";
