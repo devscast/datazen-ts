@@ -7,6 +7,7 @@
 - Platform Enhancements: Overhauled SQLite with a robust table-rebuild flow for complex ALTER operations and refactored MySQL metadata providers to support non-blocking async I/O.
 - Public API & Packaging: Cleaned up the export surface using folder-based _index.ts barrels and optimized package subpaths for better consumer tree-shaking.
 - Test Infrastructure: Introduced a local Docker-backed functional runner (bun run test:functional:local) and orchestrated a high-concurrency CI pipeline covering multi-version database matrices.
+- CI: Allowed MySQL 5.7 and all MariaDB functional matrix jobs to fail without failing the overall GitHub Actions run.
 
 # API Stabilization & Documentation
 

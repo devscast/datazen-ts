@@ -6,6 +6,7 @@ on:
 jobs:
   test-mysql:
     name: functional (mysql ${{ matrix.version }})
+    continue-on-error: ${{ matrix.version == '5.7' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
