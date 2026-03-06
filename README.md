@@ -4,6 +4,7 @@
 ![npm](https://img.shields.io/npm/dt/@devscast/datazen?style=flat-square)
 [![Lint](https://github.com/devscast/datazen-ts/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/devscast/datazen-ts/actions/workflows/lint.yml)
 [![Tests](https://github.com/devscast/datazen-ts/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/devscast/datazen-ts/actions/workflows/test.yml)
+[![ci](https://github.com/devscast/datazen-ts/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/devscast/datazen-ts/actions/workflows/ci.yml)
 ![GitHub](https://img.shields.io/github/license/devscast/datazen-ts?style=flat-square)
 
 DataZen is a TypeScript-first DBAL (Database Abstraction Layer) inspired by Doctrine DBAL.
