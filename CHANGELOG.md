@@ -2,6 +2,12 @@
 
 # Final Doctrine Parity & Production-Ready Release
 
+# 1.1.1
+
+- Added package subpath entry points like `@devscast/datazen/logging` that resolve directly from published `dist/*` artifacts, including compatibility for older TypeScript `moduleResolution: "node"` projects without shipping extra root wrapper folders.
+- Fixed the bundled CommonJS MSSQL driver so requiring `@devscast/datazen` no longer fails with `createRequire()` receiving an undefined filename.
+- Removed the internal `mssql` runtime module load and now bind MSSQL typed parameters less precisely via plain `request.input()` values.
+
 ## 1.1.0
 - Doctrine/Datazen Alignment: Achieved deep functional parity across all major drivers (SQLite, MySQL, MariaDB, PostgreSQL, MSSQL) by porting hundreds of tests for schema management, data types, and platform-specific SQL expressions.
 - Platform Enhancements: Overhauled SQLite with a robust table-rebuild flow for complex ALTER operations and refactored MySQL metadata providers to support non-blocking async I/O.

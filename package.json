@@ -1,6 +1,6 @@
 {
   "name": "@devscast/datazen",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "type": "module",
   "source": "./src/_index.ts",
   "main": "./dist/index.cjs",
@@ -16,51 +16,94 @@
     "./connections": {
       "types": "./dist/connections.d.ts",
       "import": "./dist/connections.js",
-      "require": "./dist/connections.cjs"
+      "require": "./dist/connections.cjs",
+      "default": "./dist/connections.js"
     },
     "./driver": {
       "types": "./dist/driver.d.ts",
       "import": "./dist/driver.js",
-      "require": "./dist/driver.cjs"
+      "require": "./dist/driver.cjs",
+      "default": "./dist/driver.js"
     },
     "./exception": {
-      "types": "./dist/exception.d.ts"
+      "types": "./dist/exception.d.ts",
+      "import": "./dist/exception.js",
+      "require": "./dist/exception.cjs",
+      "default": "./dist/exception.js"
     },
     "./logging": {
       "types": "./dist/logging.d.ts",
       "import": "./dist/logging.js",
-      "require": "./dist/logging.cjs"
+      "require": "./dist/logging.cjs",
+      "default": "./dist/logging.js"
     },
     "./platforms": {
       "types": "./dist/platforms.d.ts",
       "import": "./dist/platforms.js",
-      "require": "./dist/platforms.cjs"
+      "require": "./dist/platforms.cjs",
+      "default": "./dist/platforms.js"
     },
     "./portability": {
       "types": "./dist/portability.d.ts",
       "import": "./dist/portability.js",
-      "require": "./dist/portability.cjs"
+      "require": "./dist/portability.cjs",
+      "default": "./dist/portability.js"
     },
     "./query": {
       "types": "./dist/query.d.ts",
       "import": "./dist/query.js",
-      "require": "./dist/query.cjs"
+      "require": "./dist/query.cjs",
+      "default": "./dist/query.js"
     },
     "./tools": {
       "types": "./dist/tools.d.ts",
       "import": "./dist/tools.js",
-      "require": "./dist/tools.cjs"
+      "require": "./dist/tools.cjs",
+      "default": "./dist/tools.js"
     },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js",
-      "require": "./dist/types.cjs"
+      "require": "./dist/types.cjs",
+      "default": "./dist/types.js"
     },
     "./package.json": "./package.json"
   },
+  "typesVersions": {
+    "*": {
+      "connections": [
+        "./dist/connections.d.ts"
+      ],
+      "driver": [
+        "./dist/driver.d.ts"
+      ],
+      "exception": [
+        "./dist/exception.d.ts"
+      ],
+      "logging": [
+        "./dist/logging.d.ts"
+      ],
+      "platforms": [
+        "./dist/platforms.d.ts"
+      ],
+      "portability": [
+        "./dist/portability.d.ts"
+      ],
+      "query": [
+        "./dist/query.d.ts"
+      ],
+      "tools": [
+        "./dist/tools.d.ts"
+      ],
+      "types": [
+        "./dist/types.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "package.json"
   ],
   "devDependencies": {
     "@biomejs/biome": "^2.4.2",

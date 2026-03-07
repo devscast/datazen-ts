@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MSSQLConnection } from "../../driver/mssql/connection";
+import { ParameterType } from "../../parameter-type";
 
 interface QueryPayload {
   recordset?: Array<Record<string, unknown>>;
@@ -157,6 +158,29 @@ describe("MSSQLConnection", () => {
 
     await connection.commit();
     expect(pool.transactionInstance.commitCalls).toBe(1);
+  });
+
+  it("casts ascii and large object parameters in generated SQL", async () => {
+    const pool = new FakePool(async () => ({
+      recordset: [{ typeName: "ok" }],
+      rowsAffected: [1],
+    }));
+    const connection = new MSSQLConnection(pool, false);
+    const statement = await connection.prepare(
+      "SELECT sql_variant_property(?, 'BaseType'), ? AS payload",
+    );
+
+    statement.bindValue(1, "test", ParameterType.ASCII);
+    statement.bindValue(2, null, ParameterType.LARGE_OBJECT);
+    await statement.execute();
+
+    expect(pool.requestInstance.inputs).toEqual([
+      { name: "p1", value: "test" },
+      { name: "p2", value: null },
+    ]);
+    expect(pool.requestInstance.queries).toEqual([
+      "SELECT sql_variant_property(CAST(@p1 AS VARCHAR(4)), 'BaseType'), CAST(@p2 AS VARBINARY(MAX)) AS payload",
+    ]);
   });
 
   it("supports rollback inside transactions", async () => {

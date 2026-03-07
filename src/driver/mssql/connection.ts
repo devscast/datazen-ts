@@ -1,5 +1,3 @@
-import { createRequire } from "node:module";
-
 import { InvalidParameterException } from "../../exception/invalid-parameter-exception";
 import { Parser } from "../../sql/parser";
 import type { Visitor } from "../../sql/parser/visitor";
@@ -10,9 +8,6 @@ import type { Statement as DriverStatement } from "../statement";
 import { Result as MSSQLResult } from "./result";
 import { MSSQLStatement } from "./statement";
 import type { MSSQLPoolLike, MSSQLRequestLike, MSSQLTransactionLike } from "./types";
-
-const require = createRequire(import.meta.url);
-const mssqlModule = require("mssql") as unknown;
 
 type MSSQLTypedParameter = {
   typeHint: "varbinary" | "varchar";
@@ -117,7 +112,7 @@ export class MSSQLConnection implements DriverConnection {
   ): Promise<DriverResult> {
     return this.runSerial(async () => {
       const request = this.createRequest();
-      const convertedSql = this.convertPlaceholders(sql);
+      const convertedSql = this.applyTypedParameterCasts(this.convertPlaceholders(sql), parameters);
       this.bindNamedParameters(request, parameters);
       const payload = await request.query(convertedSql);
 
@@ -152,48 +147,7 @@ export class MSSQLConnection implements DriverConnection {
     name: string,
     parameter: MSSQLTypedParameter,
   ): void {
-    switch (parameter.typeHint) {
-      case "varbinary": {
-        const sql = (mssqlModule as unknown as { default?: unknown })?.default ?? mssqlModule;
-        const max = (sql as { MAX?: unknown }).MAX;
-        const varBinaryFactory = (sql as { VarBinary?: unknown }).VarBinary;
-
-        if (typeof varBinaryFactory === "function" && max !== undefined) {
-          request.input(
-            name,
-            (varBinaryFactory as (length: unknown) => unknown)(max),
-            parameter.value,
-          );
-          return;
-        }
-
-        request.input(name, parameter.value);
-        return;
-      }
-      case "varchar": {
-        const sql = (mssqlModule as { default?: unknown })?.default ?? mssqlModule;
-        const varCharFactory = (sql as { VarChar?: unknown }).VarChar;
-
-        if (typeof varCharFactory === "function") {
-          const max = (sql as { MAX?: unknown }).MAX;
-          const length = parameter.length ?? max;
-          if (length !== undefined) {
-            request.input(
-              name,
-              (varCharFactory as (declaredLength: unknown) => unknown)(length),
-              parameter.value,
-            );
-            return;
-          }
-
-          request.input(name, parameter.value);
-          return;
-        }
-
-        request.input(name, parameter.value);
-        return;
-      }
-    }
+    request.input(name, parameter.value);
   }
 
   private isTypedParameter(value: unknown): value is MSSQLTypedParameter {
@@ -239,6 +193,32 @@ export class MSSQLConnection implements DriverConnection {
     this.parser.parse(sql, visitor);
 
     return parts.join("");
+  }
+
+  private applyTypedParameterCasts(sql: string, parameters: Record<string, unknown>): string {
+    let castedSql = sql;
+
+    for (const [name, value] of Object.entries(parameters)) {
+      if (!this.isTypedParameter(value)) {
+        continue;
+      }
+
+      const replacement =
+        value.typeHint === "varbinary"
+          ? `CAST(@${name} AS VARBINARY(MAX))`
+          : `CAST(@${name} AS VARCHAR(${value.length ?? "MAX"}))`;
+
+      castedSql = castedSql.replaceAll(
+        new RegExp(`@${this.escapeRegExp(name)}\\b`, "g"),
+        replacement,
+      );
+    }
+
+    return castedSql;
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private toDriverResult(payload: unknown): DriverResult {
