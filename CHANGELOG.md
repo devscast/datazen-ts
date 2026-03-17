@@ -6,6 +6,7 @@
 
 - Refactored `fetchNumeric()`, `fetchAssociative()`, and `fetchOne()` across `Result`, `Connection`, `QueryBuilder`, portability wrappers, and all bundled drivers to return `undefined` instead of `false` when no row is available, and aligned unit tests and metadata-provider integrations with the new contract.
 - Normalized bound query parameter values so `undefined` is treated as SQL `NULL` (`null`) before hitting driver statements, preventing mysql2 bind errors and aligning positional and named parameter flows.
+- Updated remaining functional tests to assert `undefined` (instead of `false`) for empty single-row `fetch*` results and no-row guards.
 
 # 1.1.1
 

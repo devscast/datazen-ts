@@ -67,8 +67,8 @@ async function assertDefaultExpression(
   const row = await connection.fetchNumeric<[unknown, unknown]>(
     "SELECT default_value, actual_value FROM default_expr_test",
   );
-  expect(row).not.toBe(false);
-  if (row === false) {
+  expect(row).toBeDefined();
+  if (row === undefined) {
     return;
   }
 

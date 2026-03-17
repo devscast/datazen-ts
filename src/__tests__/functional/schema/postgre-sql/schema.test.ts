@@ -44,8 +44,8 @@ describe("Functional/Schema/PostgreSQL/SchemaTest", () => {
       ["my_table"],
     );
 
-    expect(row).not.toBe(false);
-    if (row === false) {
+    expect(row).toBeDefined();
+    if (row === undefined) {
       return;
     }
 

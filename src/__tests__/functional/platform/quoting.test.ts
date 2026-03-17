@@ -28,8 +28,8 @@ describe("Functional/Platform/QuotingTest", () => {
       );
       const row = await functional.connection().fetchAssociative(query);
 
-      expect(row).not.toBe(false);
-      if (row === false) {
+      expect(row).toBeDefined();
+      if (row === undefined) {
         return;
       }
 

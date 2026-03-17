@@ -148,7 +148,7 @@ describe("Functional/BlobTest", () => {
     const blobs = await functional
       .connection()
       .fetchNumeric("SELECT blobcolumn1, blobcolumn2 FROM blob_table");
-    expect(blobs).not.toBe(false);
+    expect(blobs).toBeDefined();
 
     const actual = (blobs ?? []).map((blob) => toText(blob));
     expect(actual).toEqual(["test1", "test2"]);

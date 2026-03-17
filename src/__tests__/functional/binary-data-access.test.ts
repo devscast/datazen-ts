@@ -54,7 +54,7 @@ describe("Functional/BinaryDataAccessTest", () => {
     stmt.bindValue(2, Buffer.from("c0def00d", "hex"), ParameterType.BINARY);
 
     const row = lowerCaseKeys((await stmt.executeQuery()).fetchAssociative());
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     expect(Object.keys(row as Record<string, unknown>)).toEqual(["test_int", "test_binary"]);
     expect((row as Record<string, unknown>).test_int).toBe(1);
     expect(toBinaryBuffer((row as Record<string, unknown>).test_binary)).toEqual(
@@ -130,7 +130,7 @@ describe("Functional/BinaryDataAccessTest", () => {
         { 1: ParameterType.BINARY },
       );
 
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     const normalized = lowerCaseKeys(row);
     expect(normalized.test_int).toBe(1);
     expect(toBinaryBuffer(normalized.test_binary)).toEqual(Buffer.from("c0def00d", "hex"));
@@ -145,7 +145,7 @@ describe("Functional/BinaryDataAccessTest", () => {
         [ParameterType.STRING, Types.BINARY],
       );
 
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     const normalized = lowerCaseKeys(row);
     expect(normalized.test_int).toBe(1);
     expect(toBinaryBuffer(normalized.test_binary)).toEqual(Buffer.from("c0def00d", "hex"));
@@ -160,7 +160,7 @@ describe("Functional/BinaryDataAccessTest", () => {
         { 1: ParameterType.BINARY },
       );
 
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     expect(row?.[0]).toBe(1);
     expect(toBinaryBuffer(row?.[1])).toEqual(Buffer.from("c0def00d", "hex"));
   });
@@ -174,7 +174,7 @@ describe("Functional/BinaryDataAccessTest", () => {
         [ParameterType.STRING, Types.BINARY],
       );
 
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     expect(row?.[0]).toBe(1);
     expect(toBinaryBuffer(row?.[1])).toEqual(Buffer.from("c0def00d", "hex"));
   });
@@ -255,8 +255,8 @@ describe("Functional/BinaryDataAccessTest", () => {
   });
 });
 
-function lowerCaseKeys(row: false | Record<string, unknown> | undefined): Record<string, unknown> {
-  if (row === false || row === undefined) {
+function lowerCaseKeys(row: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (row === undefined) {
     throw new Error("Expected a row.");
   }
 

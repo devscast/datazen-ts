@@ -64,7 +64,7 @@ describe("Functional/AutoIncrementColumnTest", () => {
 
 async function maxId(connection: Connection): Promise<number> {
   const value = await connection.fetchOne("SELECT MAX(id) FROM auto_increment_table");
-  expect(value).not.toBe(false);
+  expect(value).toBeDefined();
 
   return Number(value);
 }

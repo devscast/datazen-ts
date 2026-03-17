@@ -15,17 +15,17 @@ describe("Functional/ResultTest", () => {
     [
       "fetchNumeric",
       (result: Awaited<ReturnType<typeof connection.executeQuery>>) => result.fetchNumeric(),
-      false,
+      undefined,
     ],
     [
       "fetchAssociative",
       (result: Awaited<ReturnType<typeof connection.executeQuery>>) => result.fetchAssociative(),
-      false,
+      undefined,
     ],
     [
       "fetchOne",
       (result: Awaited<ReturnType<typeof connection.executeQuery>>) => result.fetchOne(),
-      false,
+      undefined,
     ],
     [
       "fetchAllNumeric",

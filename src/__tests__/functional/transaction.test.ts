@@ -135,8 +135,8 @@ async function killCurrentSession(
   }
 
   const currentProcessId = await connection.fetchOne(currentProcessQuery);
-  expect(currentProcessId).not.toBe(false);
-  if (currentProcessId === false) {
+  expect(currentProcessId).toBeDefined();
+  if (currentProcessId === undefined) {
     return;
   }
 
