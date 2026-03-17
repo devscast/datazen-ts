@@ -14,6 +14,6 @@ WHERE CHARACTER_SET_NAME = ?;`,
       [charset],
     );
 
-    return collation === false ? null : collation;
+    return collation === undefined ? null : collation;
   }
 }

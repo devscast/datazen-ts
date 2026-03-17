@@ -7,17 +7,17 @@ type ResultWithColumnName = DriverResult & {
 export abstract class AbstractResultMiddleware implements DriverResult {
   constructor(private readonly wrappedResult: DriverResult) {}
 
-  public fetchNumeric<T = unknown>(): T[] | false {
+  public fetchNumeric<T = unknown>(): T[] | undefined {
     return this.wrappedResult.fetchNumeric<T>();
   }
 
   public fetchAssociative<T extends Record<string, unknown> = Record<string, unknown>>():
     | T
-    | false {
+    | undefined {
     return this.wrappedResult.fetchAssociative<T>();
   }
 
-  public fetchOne<T = unknown>(): T | false {
+  public fetchOne<T = unknown>(): T | undefined {
     return this.wrappedResult.fetchOne<T>();
   }
 

@@ -82,7 +82,7 @@ class StaticRowsDriver implements Driver {
   }
 }
 
-function expectUserRow(_row: { id: number; name: string } | false): void {}
+function expectUserRow(_row: { id: number; name: string } | undefined): void {}
 
 describe("Connection typed fetch", () => {
   it("propagates row type through executeQuery<T>() and Result<T>", async () => {

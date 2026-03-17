@@ -101,7 +101,7 @@ export class PgConnection implements DriverConnection {
     result.free();
 
     const version =
-      row !== false
+      row !== undefined
         ? (row.server_version ?? row.serverVersion ?? row.version ?? "unknown")
         : "unknown";
     return typeof version === "string" ? version : String(version);

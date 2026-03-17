@@ -7,8 +7,10 @@ type ConvertibleRow = AssociativeRow | NumericRow;
 type ValueConverter = (value: unknown) => unknown;
 
 export class Converter {
-  private readonly convertNumericFn: (row: NumericRow | false) => NumericRow | false;
-  private readonly convertAssociativeFn: (row: AssociativeRow | false) => AssociativeRow | false;
+  private readonly convertNumericFn: (row: NumericRow | undefined) => NumericRow | undefined;
+  private readonly convertAssociativeFn: (
+    row: AssociativeRow | undefined,
+  ) => AssociativeRow | undefined;
   private readonly convertOneFn: (value: unknown) => unknown;
   private readonly convertAllNumericFn: (rows: NumericRow[]) => NumericRow[];
   private readonly convertAllAssociativeFn: (rows: AssociativeRow[]) => AssociativeRow[];
@@ -46,12 +48,14 @@ export class Converter {
           : (name) => name;
   }
 
-  public convertNumeric<T = unknown>(row: T[] | false): T[] | false {
-    return this.convertNumericFn(row as NumericRow | false) as T[] | false;
+  public convertNumeric<T = unknown>(row: T[] | undefined): T[] | undefined {
+    return this.convertNumericFn(row as NumericRow | undefined) as T[] | undefined;
   }
 
-  public convertAssociative<T extends AssociativeRow = AssociativeRow>(row: T | false): T | false {
-    return this.convertAssociativeFn(row as AssociativeRow | false) as T | false;
+  public convertAssociative<T extends AssociativeRow = AssociativeRow>(
+    row: T | undefined,
+  ): T | undefined {
+    return this.convertAssociativeFn(row as AssociativeRow | undefined) as T | undefined;
   }
 
   public convertOne<T = unknown>(value: T): T {
@@ -156,14 +160,16 @@ export class Converter {
     return this.compose<ConvertibleRow>(...functions) as ((row: T) => T) | null;
   }
 
-  private createConvert<T>(function_: ((value: T) => T) | null): (value: T | false) => T | false {
+  private createConvert<T>(
+    function_: ((value: T) => T) | null,
+  ): (value: T | undefined) => T | undefined {
     if (function_ === null) {
-      return Converter.id as (value: T | false) => T | false;
+      return Converter.id as (value: T | undefined) => T | undefined;
     }
 
-    return (value: T | false): T | false => {
-      if (value === false) {
-        return false;
+    return (value: T | undefined): T | undefined => {
+      if (value === undefined) {
+        return undefined;
       }
 
       return function_(value as T);

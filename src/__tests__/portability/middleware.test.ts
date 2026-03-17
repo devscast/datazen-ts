@@ -143,7 +143,7 @@ describe("Portability Middleware", () => {
       id: "A",
       name: " Bob",
     });
-    expect(result.fetchNumeric()).toBe(false);
+    expect(result.fetchNumeric()).toBeUndefined();
     expect(result.getColumnName(0)).toBe("id");
     expect(result.getColumnName(1)).toBe("empty");
   });

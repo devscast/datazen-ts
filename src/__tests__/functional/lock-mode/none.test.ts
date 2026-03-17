@@ -78,7 +78,7 @@ describe("Functional/LockMode/NoneTest", () => {
       let query = "SELECT id FROM users";
       query = connection2.getDatabasePlatform().appendLockHint(query, LockMode.NONE);
 
-      expect(await connection2.fetchOne(query)).toBe(false);
+      expect(await connection2.fetchOne(query)).toBeUndefined();
     } finally {
       while (connection2.isTransactionActive()) {
         await connection2.rollBack();

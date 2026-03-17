@@ -18,11 +18,11 @@ describe("Portability Converter parity", () => {
     expect(converter.convertOne(false)).toBe(false);
   });
 
-  it("preserves false sentinel for single-row fetch conversions", () => {
+  it("preserves undefined sentinel for single-row fetch conversions", () => {
     const converter = new Converter(true, true, ColumnCase.UPPER);
 
-    expect(converter.convertNumeric(false)).toBe(false);
-    expect(converter.convertAssociative(false)).toBe(false);
+    expect(converter.convertNumeric(undefined)).toBeUndefined();
+    expect(converter.convertAssociative(undefined)).toBeUndefined();
   });
 
   it("converts fetch-all style arrays and first-column values", () => {

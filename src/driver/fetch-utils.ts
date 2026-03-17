@@ -1,10 +1,10 @@
 import { Result } from "./result";
 
 export class FetchUtils {
-  public static fetchOne<T = unknown>(result: Result): T | false {
+  public static fetchOne<T = unknown>(result: Result): T | undefined {
     const row = result.fetchNumeric();
-    if (row === false) {
-      return false;
+    if (row === undefined) {
+      return undefined;
     }
     return row[0] as T;
   }
@@ -13,7 +13,7 @@ export class FetchUtils {
     const rows: T[][] = [];
 
     let row = result.fetchNumeric<T>();
-    while (row !== false) {
+    while (row !== undefined) {
       rows.push(row as T[]);
       row = result.fetchNumeric<T>();
     }
@@ -27,7 +27,7 @@ export class FetchUtils {
     const rows: T[] = [];
 
     let row = result.fetchAssociative<T>();
-    while (row !== false) {
+    while (row !== undefined) {
       rows.push(row);
       row = result.fetchAssociative<T>();
     }
@@ -39,7 +39,7 @@ export class FetchUtils {
     const rows: T[] = [];
 
     let value = result.fetchOne<T>();
-    while (value !== false) {
+    while (value !== undefined) {
       rows.push(value);
       value = result.fetchOne<T>();
     }

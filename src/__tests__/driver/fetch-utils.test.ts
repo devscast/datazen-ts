@@ -22,6 +22,6 @@ describe("FetchUtils parity helpers", () => {
       10, 20,
     ]);
     expect(FetchUtils.fetchOne(new ArrayResult([{ id: 99 }]))).toBe(99);
-    expect(FetchUtils.fetchOne(new ArrayResult([]))).toBe(false);
+    expect(FetchUtils.fetchOne(new ArrayResult([]))).toBeUndefined();
   });
 });

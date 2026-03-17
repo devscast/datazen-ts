@@ -15,19 +15,19 @@ export class Result implements DriverResult {
     this.rows = [...rows];
   }
 
-  public fetchNumeric<T = unknown>(): T[] | false {
+  public fetchNumeric<T = unknown>(): T[] | undefined {
     const row = this.fetchAssociative();
-    if (row === false) {
-      return false;
+    if (row === undefined) {
+      return undefined;
     }
 
     return this.getColumnsFromRow(row).map((column) => row[column]) as T[];
   }
 
-  public fetchAssociative<T extends AssociativeRow = AssociativeRow>(): T | false {
+  public fetchAssociative<T extends AssociativeRow = AssociativeRow>(): T | undefined {
     const row = this.rows[this.cursor];
     if (row === undefined) {
-      return false;
+      return undefined;
     }
 
     this.cursor += 1;
@@ -35,7 +35,7 @@ export class Result implements DriverResult {
     return { ...row } as T;
   }
 
-  public fetchOne<T = unknown>(): T | false {
+  public fetchOne<T = unknown>(): T | undefined {
     return FetchUtils.fetchOne<T>(this);
   }
 
@@ -47,7 +47,7 @@ export class Result implements DriverResult {
     const rows: T[] = [];
     let row = this.fetchAssociative<T>();
 
-    while (row !== false) {
+    while (row !== undefined) {
       rows.push(row);
       row = this.fetchAssociative<T>();
     }

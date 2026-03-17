@@ -35,12 +35,12 @@ describe("Functional/PortabilityTest", () => {
     assertFetchResultRows(rows);
 
     let result = await connection.executeQuery("SELECT * FROM portability_table");
-    for (let row = result.fetchAssociative(); row !== false; row = result.fetchAssociative()) {
+    for (let row = result.fetchAssociative(); row !== undefined; row = result.fetchAssociative()) {
       assertFetchResultRow(row);
     }
 
     result = await (await connection.prepare("SELECT * FROM portability_table")).executeQuery();
-    for (let row = result.fetchAssociative(); row !== false; row = result.fetchAssociative()) {
+    for (let row = result.fetchAssociative(); row !== undefined; row = result.fetchAssociative()) {
       assertFetchResultRow(row);
     }
   });
@@ -58,8 +58,8 @@ describe("Functional/PortabilityTest", () => {
     await createPortabilityTable(connection);
 
     const row = await connection.fetchAssociative("SELECT * FROM portability_table");
-    expect(row).not.toBe(false);
-    if (row === false) {
+    expect(row).toBeDefined();
+    if (row === undefined) {
       return;
     }
 

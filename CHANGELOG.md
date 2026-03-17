@@ -2,6 +2,10 @@
 
 # Final Doctrine Parity & Production-Ready Release
 
+## 1.1.2
+
+- Refactored `fetchNumeric()`, `fetchAssociative()`, and `fetchOne()` across `Result`, `Connection`, `QueryBuilder`, portability wrappers, and all bundled drivers to return `undefined` instead of `false` when no row is available, and aligned unit tests and metadata-provider integrations with the new contract.
+
 # 1.1.1
 
 - Added package subpath entry points like `@devscast/datazen/logging` that resolve directly from published `dist/*` artifacts, including compatibility for older TypeScript `moduleResolution: "node"` projects without shipping extra root wrapper folders.
