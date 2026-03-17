@@ -120,6 +120,27 @@ class NamedSpyDriver implements Driver {
 }
 
 describe("Connection parameter compilation", () => {
+  it("treats undefined named parameters as SQL NULL", async () => {
+    const capture = new CaptureConnection();
+    const connection = new Connection({}, new NamedSpyDriver(capture));
+
+    await connection.executeQuery(
+      "SELECT * FROM users WHERE deleted_at = :deletedAt",
+      { deletedAt: undefined },
+      { deletedAt: ParameterType.STRING },
+    );
+
+    expect(capture.latestQuery).toEqual({
+      parameters: {
+        p1: null,
+      },
+      sql: "SELECT * FROM users WHERE deleted_at = @p1",
+      types: {
+        p1: ParameterType.STRING,
+      },
+    });
+  });
+
   it("compiles named placeholders to sqlserver style named bindings", async () => {
     const capture = new CaptureConnection();
     const connection = new Connection({}, new NamedSpyDriver(capture));

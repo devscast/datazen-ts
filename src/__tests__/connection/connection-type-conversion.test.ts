@@ -132,6 +132,16 @@ class SpyDriver implements Driver {
 describe("Connection type conversion", () => {
   registerBuiltInTypes();
 
+  it("treats undefined positional parameters as SQL NULL", async () => {
+    const capture = new CaptureConnection();
+    const connection = new Connection({}, new SpyDriver(capture));
+
+    await connection.executeQuery("SELECT ? AS maybe", [undefined], [ParameterType.STRING]);
+
+    expect(capture.latestQuery?.parameters).toEqual([null]);
+    expect(capture.latestQuery?.types).toEqual([ParameterType.STRING]);
+  });
+
   it("converts Datazen Type names to driver values and binding types", async () => {
     const capture = new CaptureConnection();
     const connection = new Connection({}, new SpyDriver(capture));

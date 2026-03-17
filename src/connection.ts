@@ -705,7 +705,7 @@ export class Connection {
     if (Array.isArray(parameters) && Array.isArray(types)) {
       for (let index = 0; index < parameters.length; index += 1) {
         const type = (types[index] ?? ParameterType.STRING) as ParameterType;
-        statement.bindValue(index + 1, parameters[index], type);
+        statement.bindValue(index + 1, this.normalizeBoundParameterValue(parameters[index]), type);
       }
 
       return;
@@ -713,11 +713,19 @@ export class Connection {
 
     if (!Array.isArray(parameters) && !Array.isArray(types)) {
       for (const [name, value] of Object.entries(parameters)) {
-        statement.bindValue(name, value, (types[name] ?? ParameterType.STRING) as ParameterType);
+        statement.bindValue(
+          name,
+          this.normalizeBoundParameterValue(value),
+          (types[name] ?? ParameterType.STRING) as ParameterType,
+        );
       }
 
       return;
     }
+  }
+
+  private normalizeBoundParameterValue(value: unknown): unknown {
+    return value === undefined ? null : value;
   }
 
   private hasBoundParameters(parameters: Query["parameters"]): boolean {
