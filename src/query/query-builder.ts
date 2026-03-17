@@ -70,15 +70,17 @@ export class QueryBuilder {
     return this.connection.executeStatement(this.getSQL(), this.params, this.types);
   }
 
-  public async fetchAssociative<T extends AssociativeRow = AssociativeRow>(): Promise<T | false> {
+  public async fetchAssociative<T extends AssociativeRow = AssociativeRow>(): Promise<
+    T | undefined
+  > {
     return (await this.executeQuery()).fetchAssociative<T>();
   }
 
-  public async fetchNumeric<T extends unknown[] = unknown[]>(): Promise<T | false> {
+  public async fetchNumeric<T extends unknown[] = unknown[]>(): Promise<T | undefined> {
     return (await this.executeQuery()).fetchNumeric<T>();
   }
 
-  public async fetchOne<T = unknown>(): Promise<T | false> {
+  public async fetchOne<T = unknown>(): Promise<T | undefined> {
     return (await this.executeQuery()).fetchOne<T>();
   }
 

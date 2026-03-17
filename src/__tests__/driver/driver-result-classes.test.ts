@@ -32,7 +32,7 @@ describe("driver result classes", () => {
 
     expect(result.fetchOne<number>()).toBe(1);
     expect(result.fetchNumeric<[number, string]>()).toEqual([2, "Bob"]);
-    expect(result.fetchAssociative()).toBe(false);
+    expect(result.fetchAssociative()).toBeUndefined();
     expect(result.rowCount()).toBe(2);
     expect(result.columnCount()).toBe(2);
     expect(

@@ -7,7 +7,7 @@ import { InvalidColumnIndex } from "../../exception/invalid-column-index";
 import { NoKeyValue } from "../../exception/no-key-value";
 import { Result } from "../../result";
 
-function expectUserRow(_row: { id: number; name: string } | false): void {}
+function expectUserRow(_row: { id: number; name: string } | undefined): void {}
 
 const passthroughConnection = {
   convertException(error: unknown): never {
@@ -42,7 +42,7 @@ describe("Result", () => {
 
     expect(result.fetchAssociative()).toEqual({ id: 1, name: "Alice" });
     expect(result.fetchAssociative()).toEqual({ id: 2, name: "Bob" });
-    expect(result.fetchAssociative()).toBe(false);
+    expect(result.fetchAssociative()).toBeUndefined();
   });
 
   it("returns a clone when fetching associative rows", () => {
@@ -50,11 +50,11 @@ describe("Result", () => {
 
     const row = result.fetchAssociative<{ id: number; name: string }>();
     expect(row).toEqual({ id: 1, name: "Alice" });
-    if (row !== false) {
+    if (row !== undefined) {
       row.name = "Changed";
     }
 
-    expect(result.fetchAssociative()).toBe(false);
+    expect(result.fetchAssociative()).toBeUndefined();
   });
 
   it("fetches numeric rows using explicit column order", () => {
@@ -147,7 +147,7 @@ describe("Result", () => {
     const result = createResult(new ArrayResult([{ id: 1 }]));
 
     result.free();
-    expect(result.fetchAssociative()).toBe(false);
+    expect(result.fetchAssociative()).toBeUndefined();
     expect(result.rowCount()).toBe(0);
   });
 
@@ -221,8 +221,8 @@ describe("Result", () => {
       fetchNumeric: () => {
         throw driverError;
       },
-      fetchAssociative: () => false,
-      fetchOne: () => false,
+      fetchAssociative: () => undefined,
+      fetchOne: () => undefined,
       fetchAllNumeric: () => [],
       fetchAllAssociative: () => [],
       fetchFirstColumn: () => [],

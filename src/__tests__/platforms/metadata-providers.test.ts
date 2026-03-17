@@ -22,11 +22,14 @@ class StubAsyncQueryConnection {
     private readonly columns: Record<string, unknown[]> = {},
     private readonly numerics: Record<string, unknown[][]> = {},
     private readonly associatives: Record<string, Record<string, unknown>[]> = {},
-    private readonly fetchOneValue: unknown = false,
+    private readonly fetchOneValue: unknown = undefined,
   ) {}
 
-  public async fetchOne<T = unknown>(_sql: string, _params: unknown[] = []): Promise<T | false> {
-    return this.fetchOneValue as T | false;
+  public async fetchOne<T = unknown>(
+    _sql: string,
+    _params: unknown[] = [],
+  ): Promise<T | undefined> {
+    return this.fetchOneValue as T | undefined;
   }
 
   public async fetchFirstColumn<T = unknown>(sql: string, _params: unknown[] = []): Promise<T[]> {

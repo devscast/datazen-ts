@@ -11,10 +11,10 @@ export class Result implements DriverResult {
     private readonly converter: Converter,
   ) {}
 
-  public fetchNumeric<T = unknown>(): T[] | false {
+  public fetchNumeric<T = unknown>(): T[] | undefined {
     const row = this.result.fetchNumeric<T>();
-    if (row === false) {
-      return false;
+    if (row === undefined) {
+      return undefined;
     }
 
     return row.map((value) => this.converter.convertValue(value)) as T[];
@@ -22,19 +22,19 @@ export class Result implements DriverResult {
 
   public fetchAssociative<T extends Record<string, unknown> = Record<string, unknown>>():
     | T
-    | false {
+    | undefined {
     const row = this.result.fetchAssociative<Record<string, unknown>>();
-    if (row === false) {
-      return false;
+    if (row === undefined) {
+      return undefined;
     }
 
     return this.converter.convertRow(row) as T;
   }
 
-  public fetchOne<T = unknown>(): T | false {
+  public fetchOne<T = unknown>(): T | undefined {
     const value = this.result.fetchOne<T>();
-    if (value === false) {
-      return false;
+    if (value === undefined) {
+      return undefined;
     }
 
     return this.converter.convertValue(value) as T;

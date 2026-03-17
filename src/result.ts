@@ -16,18 +16,18 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
     private readonly connection: Connection,
   ) {}
 
-  public fetchNumeric<T extends NumericRow = NumericRow>(): T | false {
+  public fetchNumeric<T extends NumericRow = NumericRow>(): T | undefined {
     return this.convertDriverException(
       "fetchNumeric",
-      () => this.result.fetchNumeric<unknown>() as T | false,
+      () => this.result.fetchNumeric<unknown>() as T | undefined,
     );
   }
 
-  public fetchAssociative<T extends AssociativeRow = TRow>(): T | false {
+  public fetchAssociative<T extends AssociativeRow = TRow>(): T | undefined {
     return this.convertDriverException("fetchAssociative", () => this.result.fetchAssociative<T>());
   }
 
-  public fetchOne<T = unknown>(): T | false {
+  public fetchOne<T = unknown>(): T | undefined {
     return this.convertDriverException("fetchOne", () => this.result.fetchOne<T>());
   }
 
@@ -87,7 +87,7 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
   public *iterateNumeric<T extends NumericRow = NumericRow>(): IterableIterator<T> {
     try {
       let row = this.fetchNumeric<T>();
-      while (row !== false) {
+      while (row !== undefined) {
         yield row;
         row = this.fetchNumeric<T>();
       }
@@ -99,7 +99,7 @@ export class Result<TRow extends AssociativeRow = AssociativeRow> {
   public *iterateAssociative<T extends AssociativeRow = TRow>(): IterableIterator<T> {
     try {
       let row = this.fetchAssociative<T>();
-      while (row !== false) {
+      while (row !== undefined) {
         yield row;
         row = this.fetchAssociative<T>();
       }

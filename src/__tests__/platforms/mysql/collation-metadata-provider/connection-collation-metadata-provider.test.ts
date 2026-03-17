@@ -18,7 +18,7 @@ describe("MySQL ConnectionCollationMetadataProvider", () => {
 
   it("returns null when the collation is not found", async () => {
     const provider = new ConnectionCollationMetadataProvider({
-      fetchOne: async () => false,
+      fetchOne: async () => undefined,
     });
 
     await expect(provider.getCollationCharset("missing")).resolves.toBeNull();

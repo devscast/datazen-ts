@@ -269,7 +269,7 @@ WHERE type = 'table'
       [tableName],
     );
 
-    return sql === false ? "" : String(sql);
+    return sql === undefined ? "" : String(sql);
   }
 
   private parseColumnCollationFromSQL(columnName: string, tableSql: string): string | null {

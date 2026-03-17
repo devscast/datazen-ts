@@ -13,16 +13,16 @@ describe("Functional/Connection/FetchEmptyTest", () => {
     query = `SELECT * FROM (${connection.getDatabasePlatform().getDummySelectSQL("1 c")}) t WHERE 1 = 0`;
   });
 
-  it("returns false for fetchAssociative()", async () => {
-    expect(await connection.fetchAssociative(query)).toBe(false);
+  it("returns undefined for fetchAssociative()", async () => {
+    expect(await connection.fetchAssociative(query)).toBeUndefined();
   });
 
-  it("returns false for fetchNumeric()", async () => {
-    expect(await connection.fetchNumeric(query)).toBe(false);
+  it("returns undefined for fetchNumeric()", async () => {
+    expect(await connection.fetchNumeric(query)).toBeUndefined();
   });
 
-  it("returns false for fetchOne()", async () => {
-    expect(await connection.fetchOne(query)).toBe(false);
+  it("returns undefined for fetchOne()", async () => {
+    expect(await connection.fetchOne(query)).toBeUndefined();
   });
 
   it("returns an empty array for fetchAllAssociative()", async () => {

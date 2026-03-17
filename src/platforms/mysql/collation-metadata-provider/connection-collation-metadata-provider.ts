@@ -14,6 +14,6 @@ WHERE COLLATION_NAME = ?;`,
       [collation],
     );
 
-    return charset === false ? null : charset;
+    return charset === undefined ? null : charset;
   }
 }

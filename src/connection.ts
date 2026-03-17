@@ -201,7 +201,7 @@ export class Connection {
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<T | false> {
+  ): Promise<T | undefined> {
     return (await this.executeQuery<T>(sql, params, types)).fetchAssociative<T>();
   }
 
@@ -209,7 +209,7 @@ export class Connection {
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<T | false> {
+  ): Promise<T | undefined> {
     return (await this.executeQuery(sql, params, types)).fetchNumeric<T>();
   }
 
@@ -217,7 +217,7 @@ export class Connection {
     sql: string,
     params: QueryParameters = [],
     types: QueryParameterTypes = [],
-  ): Promise<T | false> {
+  ): Promise<T | undefined> {
     return (await this.executeQuery(sql, params, types)).fetchOne<T>();
   }
 

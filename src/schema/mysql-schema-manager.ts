@@ -545,7 +545,7 @@ FROM information_schema.COLLATIONS`,
         this.charsetByCollation.set(collation, charset);
       }
 
-      if (databaseDefaultsRow !== false) {
+      if (databaseDefaultsRow !== undefined) {
         this.databaseDefaultCharset = readString(
           databaseDefaultsRow,
           "character_set_database",

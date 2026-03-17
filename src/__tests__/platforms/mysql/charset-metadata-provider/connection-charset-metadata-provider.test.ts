@@ -20,7 +20,7 @@ describe("MySQL ConnectionCharsetMetadataProvider", () => {
 
   it("returns null when the charset is not found", async () => {
     const provider = new ConnectionCharsetMetadataProvider({
-      fetchOne: async () => false,
+      fetchOne: async () => undefined,
     });
 
     await expect(provider.getDefaultCharsetCollation("missing")).resolves.toBeNull();

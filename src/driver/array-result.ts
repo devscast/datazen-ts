@@ -18,40 +18,40 @@ export class ArrayResult implements DriverResult {
     this.rows = [...rows];
   }
 
-  public fetchNumeric<T = unknown>(): T[] | false {
+  public fetchNumeric<T = unknown>(): T[] | undefined {
     const row = this.fetchAssociative();
-    if (row === false) {
-      return false;
+    if (row === undefined) {
+      return undefined;
     }
 
     return this.getColumnsFromRow(row).map((column) => row[column]) as T[];
   }
 
-  public fetchAssociative<T extends AssociativeRow = AssociativeRow>(): T | false {
+  public fetchAssociative<T extends AssociativeRow = AssociativeRow>(): T | undefined {
     const row = this.rows[this.cursor];
     if (row === undefined) {
-      return false;
+      return undefined;
     }
 
     this.cursor += 1;
     return { ...row } as T;
   }
 
-  public fetchOne<T = unknown>(): T | false {
+  public fetchOne<T = unknown>(): T | undefined {
     const row = this.fetchNumeric();
-    if (row === false) {
-      return false;
+    if (row === undefined) {
+      return undefined;
     }
 
     const value = row[0];
-    return value === undefined ? false : (value as T);
+    return value as T | undefined;
   }
 
   public fetchAllNumeric<T = unknown>(): T[][] {
     const rows: T[][] = [];
     let row = this.fetchNumeric<T>();
 
-    while (row !== false) {
+    while (row !== undefined) {
       rows.push(row);
       row = this.fetchNumeric<T>();
     }
@@ -63,7 +63,7 @@ export class ArrayResult implements DriverResult {
     const rows: T[] = [];
     let row = this.fetchAssociative<T>();
 
-    while (row !== false) {
+    while (row !== undefined) {
       rows.push(row);
       row = this.fetchAssociative<T>();
     }
@@ -75,7 +75,7 @@ export class ArrayResult implements DriverResult {
     const values: T[] = [];
     let value = this.fetchOne<T>();
 
-    while (value !== false) {
+    while (value !== undefined) {
       values.push(value);
       value = this.fetchOne<T>();
     }

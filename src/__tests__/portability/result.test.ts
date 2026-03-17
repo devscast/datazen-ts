@@ -17,9 +17,9 @@ class SpyDriverResult implements DriverResult {
 
   public constructor(
     private readonly values: {
-      numeric?: unknown[] | false;
-      associative?: Record<string, unknown> | false;
-      one?: unknown | false;
+      numeric?: unknown[] | undefined;
+      associative?: Record<string, unknown> | undefined;
+      one?: unknown | undefined;
       allNumeric?: unknown[][];
       allAssociative?: Array<Record<string, unknown>>;
       firstColumn?: unknown[];
@@ -28,21 +28,21 @@ class SpyDriverResult implements DriverResult {
     } = {},
   ) {}
 
-  public fetchNumeric<T = unknown>(): T[] | false {
+  public fetchNumeric<T = unknown>(): T[] | undefined {
     this.fetchNumericCalls += 1;
-    return (this.values.numeric ?? false) as T[] | false;
+    return this.values.numeric as T[] | undefined;
   }
 
   public fetchAssociative<T extends Record<string, unknown> = Record<string, unknown>>():
     | T
-    | false {
+    | undefined {
     this.fetchAssociativeCalls += 1;
-    return (this.values.associative ?? false) as T | false;
+    return this.values.associative as T | undefined;
   }
 
-  public fetchOne<T = unknown>(): T | false {
+  public fetchOne<T = unknown>(): T | undefined {
     this.fetchOneCalls += 1;
-    return (this.values.one ?? false) as T | false;
+    return this.values.one as T | undefined;
   }
 
   public fetchAllNumeric<T = unknown>(): T[][] {

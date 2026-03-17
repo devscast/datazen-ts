@@ -8,18 +8,18 @@ import { Result as PortabilityResult } from "../../portability/result";
 import { DriverStatementWrapper } from "../../portability/statement";
 
 class DummyDriverResult implements DriverResult {
-  public fetchNumeric<T = unknown>(): T[] | false {
-    return false;
+  public fetchNumeric<T = unknown>(): T[] | undefined {
+    return undefined;
   }
 
   public fetchAssociative<T extends Record<string, unknown> = Record<string, unknown>>():
     | T
-    | false {
-    return false;
+    | undefined {
+    return undefined;
   }
 
-  public fetchOne<T = unknown>(): T | false {
-    return false;
+  public fetchOne<T = unknown>(): T | undefined {
+    return undefined;
   }
 
   public fetchAllNumeric<T = unknown>(): T[][] {
