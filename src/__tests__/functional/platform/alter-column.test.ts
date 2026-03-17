@@ -81,7 +81,7 @@ describe("Functional/Platform/AlterColumnTest", () => {
     const hasIcuCollations =
       (await functional
         .connection()
-        .fetchOne("SELECT 1 FROM pg_collation WHERE collprovider = 'icu'")) !== false;
+        .fetchOne("SELECT 1 FROM pg_collation WHERE collprovider = 'icu'")) !== undefined;
     if (!hasIcuCollations) {
       skip();
     }

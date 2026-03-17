@@ -206,7 +206,7 @@ describe("Functional/WriteTest", () => {
 
     expect(
       await connection.fetchOne("SELECT test_string FROM write_table WHERE test_int = 30"),
-    ).toBe(false);
+    ).toBeUndefined();
   });
 
   it("supports empty identity insert SQL", async () => {

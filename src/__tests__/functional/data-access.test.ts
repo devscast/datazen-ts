@@ -129,7 +129,7 @@ describe("Functional/DataAccessTest", () => {
         [1, "foo"],
       );
 
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     const normalized = lowerCaseKeys(row);
     expect(normalized.test_int).toBe(1);
     expect(normalized.test_string).toBe("foo");
@@ -146,7 +146,7 @@ describe("Functional/DataAccessTest", () => {
         [ParameterType.STRING, Types.DATETIME_MUTABLE],
       );
 
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     const normalized = lowerCaseKeys(row);
     expect(normalized.test_int).toBe(1);
     expect(normalizeDateTimeSecondPrecision(normalized.test_datetime)).toBe("2010-01-01 10:10:10");
@@ -160,7 +160,7 @@ describe("Functional/DataAccessTest", () => {
         [1, "foo"],
       );
 
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     expect(row?.[0]).toBe(1);
     expect(row?.[1]).toBe("foo");
   });
@@ -176,7 +176,7 @@ describe("Functional/DataAccessTest", () => {
         [ParameterType.STRING, Types.DATETIME_MUTABLE],
       );
 
-    expect(row).not.toBe(false);
+    expect(row).toBeDefined();
     expect(row?.[0]).toBe(1);
     expect(normalizeDateTimeSecondPrecision(row?.[1])).toBe("2010-01-01 10:10:10");
   });
@@ -420,12 +420,12 @@ async function assertDateExpression(
   bindParams(stmt, interval);
 
   const date = (await stmt.executeQuery()).fetchOne();
-  expect(date).not.toBe(false);
+  expect(date).toBeDefined();
   expect(normalizeDateTimeSecondPrecision(date)).toBe(expected);
 }
 
-function lowerCaseKeys(row: false | Record<string, unknown> | undefined): Record<string, unknown> {
-  if (row === false || row === undefined) {
+function lowerCaseKeys(row: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (row === undefined) {
     throw new Error("Expected a row.");
   }
 
