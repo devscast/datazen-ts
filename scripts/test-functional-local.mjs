@@ -15,6 +15,8 @@ const targets = [
     env: {
       DATAZEN_FUNCTIONAL_PLATFORM: "mysql",
       DATAZEN_FUNCTIONAL_CONFIG_FILE: "ci/github/vitest/mysql.json",
+      DATAZEN_FUNCTIONAL_MARIADB_PORT: "3308",
+      DATAZEN_FUNCTIONAL_MARIADB_PRIVILEGED_PORT: "3308",
     },
   },
   {

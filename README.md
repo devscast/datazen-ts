@@ -27,8 +27,9 @@ bun add @devscast/datazen mssql
 
 Other supported runtime drivers include `pg` and `sqlite3`.
 
-`mysql2`, `mssql`, `pg`, and `sqlite3` are peer dependencies so applications
-control driver versions.
+`mysql2`, `mssql`, `pg`, and `sqlite3` are optional peer dependencies so
+applications control driver versions and only install the runtime adapters they
+actually use.
 
 ## Documentation
 

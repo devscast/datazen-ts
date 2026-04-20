@@ -2,6 +2,10 @@
 
 # Final Doctrine Parity & Production-Ready Release
 
+## 1.1.4
+
+- Removed the unused `typescript` peer dependency and marked the runtime database adapters (`mysql2`, `mssql`, `pg`, `sqlite3`) as optional peers so consumers only need to install the drivers they actually use.
+
 ## 1.1.2
 
 - Refactored `fetchNumeric()`, `fetchAssociative()`, and `fetchOne()` across `Result`, `Connection`, `QueryBuilder`, portability wrappers, and all bundled drivers to return `undefined` instead of `false` when no row is available, and aligned unit tests and metadata-provider integrations with the new contract.

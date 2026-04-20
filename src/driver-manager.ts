@@ -39,13 +39,8 @@ export class DriverManager {
   ): Connection {
     const driver = DriverManager.createDriver(params);
 
-    let wrappedDriver = driver;
-    for (const middleware of configuration.getMiddlewares()) {
-      wrappedDriver = middleware.wrap(wrappedDriver);
-    }
-
     const WrapperClass = params.wrapperClass ?? Connection;
-    return new WrapperClass(params, wrappedDriver, configuration);
+    return new WrapperClass(params, driver, configuration);
   }
 
   public static getPrimaryReadReplicaConnection(
@@ -54,12 +49,7 @@ export class DriverManager {
   ): PrimaryReadReplicaConnection {
     const driver = DriverManager.createDriver(params);
 
-    let wrappedDriver = driver;
-    for (const middleware of configuration.getMiddlewares()) {
-      wrappedDriver = middleware.wrap(wrappedDriver);
-    }
-
-    return new PrimaryReadReplicaConnection(params, wrappedDriver, configuration);
+    return new PrimaryReadReplicaConnection(params, driver, configuration);
   }
 
   public static getAvailableDrivers(): DriverName[] {

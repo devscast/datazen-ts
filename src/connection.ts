@@ -54,6 +54,7 @@ interface CompiledQuery {
 export class Connection {
   private autoCommit: boolean;
   private driverConnection: DriverConnection | null = null;
+  private readonly driver: Driver;
   private transactionNestingLevel = 0;
   private rollbackOnly = false;
   private exceptionConverter: ExceptionConverter | null = null;
@@ -67,10 +68,11 @@ export class Connection {
 
   constructor(
     private readonly params: AssociativeRow,
-    private readonly driver: Driver,
+    driver: Driver,
     private readonly configuration: Configuration = new Configuration(),
   ) {
     this.autoCommit = this.configuration.getAutoCommit();
+    this.driver = this.wrapDriverWithMiddlewares(driver);
     this.schemaManagerFactory =
       this.configuration.getSchemaManagerFactory() ?? new DefaultSchemaManagerFactory();
   }
@@ -1094,6 +1096,16 @@ export class Connection {
     }
 
     return [params, types];
+  }
+
+  private wrapDriverWithMiddlewares(driver: Driver): Driver {
+    let wrappedDriver = driver;
+
+    for (const middleware of this.configuration.getMiddlewares()) {
+      wrappedDriver = middleware.wrap(wrappedDriver);
+    }
+
+    return wrappedDriver;
   }
 
   private getBindingInfo(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { Configuration } from "../../configuration";
+import { Connection } from "../../connection";
 import { type Driver } from "../../driver";
 import { ParameterBindingStyle } from "../../driver/_internal";
 import type {
@@ -235,6 +236,27 @@ describe("Logging Middleware", () => {
       params: ["alice", 1],
       sql: "UPDATE users SET name = ? WHERE id = ?",
       types: [ParameterType.STRING, ParameterType.INTEGER],
+    });
+  });
+
+  it("applies logging middleware when Connection is constructed directly", async () => {
+    const logger = new RecordingLogger();
+    const nativeConnection = new SpyConnection();
+    const connection = new Connection(
+      {
+        driver: "mysql2",
+      },
+      new SpyDriver(nativeConnection),
+      new Configuration({ middlewares: [new Middleware(logger)] }),
+    );
+
+    await connection.executeQuery("SELECT 1");
+
+    expect(nativeConnection.queriedSql).toEqual(["SELECT 1"]);
+    expect(logger.entries).toContainEqual({
+      context: { sql: "SELECT 1" },
+      level: "debug",
+      message: "Executing query: {sql}",
     });
   });
 
