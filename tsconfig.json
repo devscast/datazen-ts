@@ -6,6 +6,8 @@
     "target": "esnext",
     "lib": ["esnext"],
     "declaration": true,
+    "ignoreDeprecations": "6.0",
+    "types": ["node"],
     "strict": true,
     "moduleResolution": "bundler",
     "skipLibCheck": true,

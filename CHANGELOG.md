@@ -4,6 +4,7 @@
 
 ## 1.1.4
 
+- Added `compilerOptions.ignoreDeprecations = "6.0"` to silence the TypeScript 6 `baseUrl` deprecation surfaced by `tsup` during DTS generation, restoring `bun run build`.
 - Removed the unused `typescript` peer dependency and marked the runtime database adapters (`mysql2`, `mssql`, `pg`, `sqlite3`) as optional peers so consumers only need to install the drivers they actually use.
 
 ## 1.1.2
